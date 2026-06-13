@@ -1,0 +1,24 @@
+# Configuração da conta atual (mono-tenant operacional)
+# Usado como referência/documentação — a configuração viva fica no MongoDB
+# (coleção `contas`), criada via `npm run configurar-conta`.
+
+identificador: victor-pessoal
+nome: "Victor — BM pessoal"
+
+metaConfig:
+  bmId: "" # preencher com META_BM_ID
+  contasAnuncioIds: [] # ex: ["act_123456789"]
+
+notificacao:
+  canalPrimario: whatsapp
+  whatsappJid: "" # preencher com NOTIFICACAO_WHATSAPP_JID
+  horarioPermitidoInicio: "08:00"
+  horarioPermitidoFim: "22:00"
+  diasUteis: [0, 1, 2, 3, 4, 5, 6]
+
+configuracoes:
+  intervaloColetaMinutos: 60
+  sensibilidadePadrao: 2.5
+  limiteCustoDiarioUsd: 3
+  diasHistoricoBaseline: 21
+  googleSheetsId: ""

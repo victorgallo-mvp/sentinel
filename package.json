@@ -1,0 +1,40 @@
+{
+  "name": "sentinela-ads",
+  "version": "0.1.0",
+  "description": "Monitoramento inteligente de campanhas Meta Ads com pipeline determinístico de detecção de anomalias e agente de IA investigador (tool use)",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "descobrir-recursos": "node scripts/descobrir-recursos.js",
+    "configurar-conta": "node scripts/configurar-conta.js",
+    "popular-historico": "node scripts/popular-historico.js",
+    "simular-anomalia": "node scripts/simular-anomalia.js",
+    "testar-agente": "node scripts/testar-agente.js",
+    "enviar-relatorio-manual": "node scripts/enviar-relatorio-manual.js",
+    "migrate": "node scripts/executar-migrations.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "bullmq": "^5.21.2",
+    "express": "^4.21.2",
+    "facebook-nodejs-business-sdk": "^21.0.5",
+    "googleapis": "^144.0.0",
+    "ioredis": "^5.4.1",
+    "mongoose": "^8.8.3",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "winston": "^3.17.0",
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}
