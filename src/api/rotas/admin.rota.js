@@ -81,6 +81,38 @@ rotaAdmin.post('/contas', async (req, res, next) => {
   }
 });
 
+const esquemaPatchConta = z.object({
+  configuracoes: z.object({
+    intervaloColetaMinutos: z.number().optional(),
+    sensibilidadePadrao: z.number().optional(),
+    limiteCustoDiarioUsd: z.number().optional(),
+    diasHistoricoBaseline: z.number().optional(),
+    googleSheetsId: z.string().optional(),
+  }),
+});
+
+/** PATCH /admin/contas/:id — atualiza configurações gerais da conta */
+rotaAdmin.patch('/contas/:id', async (req, res, next) => {
+  try {
+    const dados = esquemaPatchConta.parse(req.body);
+    const atualizacoes = {};
+    for (const [chave, valor] of Object.entries(dados.configuracoes)) {
+      atualizacoes[`configuracoes.${chave}`] = valor;
+    }
+
+    const conta = await Conta.findByIdAndUpdate(req.params.id, { $set: atualizacoes }, { new: true }).select(CAMPOS_SENSIVEIS_CONTA);
+    if (!conta) throw new ErroNaoEncontrado(`Conta ${req.params.id} não encontrada`);
+
+    logger.info({ msg: 'Conta atualizada via API admin', contaId: req.params.id, atualizacoes });
+    res.json({ conta });
+  } catch (erro) {
+    if (erro instanceof z.ZodError) {
+      return next(new ErroValidacao('Dados inválidos para atualização de conta', erro.flatten()));
+    }
+    next(erro);
+  }
+});
+
 // ===== Entidades =====
 
 const esquemaPatchEntidade = z.object({

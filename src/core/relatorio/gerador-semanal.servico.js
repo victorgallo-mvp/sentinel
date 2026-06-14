@@ -39,7 +39,7 @@ export async function gerarRelatorioSemanal(contaId, periodo = null) {
 
   const { resumoTexto, custoUsd, modelo } = await analisarPortfolio(conta, dadosPortfolio, resumoOperacional, periodoInicio, periodoFim);
 
-  const html = renderizarRelatorioHtml({ conta, periodoInicio, periodoFim, dadosPortfolio, resumoOperacional, resumoTexto });
+  const html = await renderizarRelatorioHtml({ conta, periodoInicio, periodoFim, dadosPortfolio, resumoOperacional, resumoTexto });
 
   const relatorio = await Relatorio.create({
     contaId,
