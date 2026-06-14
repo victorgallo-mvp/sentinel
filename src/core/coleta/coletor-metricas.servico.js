@@ -70,8 +70,10 @@ export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new 
     await persistirMetricas(conta, entidade, normalizarLinhaInsight(agregado6h), 6, coletadaEm);
   }
 
-  // Janela 24h: agregação correta (com dedup de reach) vem direto da Meta
-  const linhas24h = await obterInsights(entidade.tipo, entidade.metaId, { datePreset: 'last_24h', timeIncrement: 1 });
+  // Janela 24h: agregação correta (com dedup de reach) vem direto da Meta.
+  // `last_24h` não existe como date_preset na Graph API — `today` é o
+  // equivalente válido mais próximo (acumulado desde 00h no fuso do anunciante).
+  const linhas24h = await obterInsights(entidade.tipo, entidade.metaId, { datePreset: 'today', timeIncrement: 1 });
   if (linhas24h.length > 0) {
     await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas24h[0]), 24, coletadaEm);
   }

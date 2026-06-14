@@ -195,7 +195,7 @@ export async function obterInsights(tipo, metaId, opcoes = {}) {
   if (!Classe) throw new ErroMetaApi(`Tipo de entidade inválido para insights: ${tipo}`);
 
   const {
-    datePreset = 'last_24h',
+    datePreset = 'today',
     timeIncrement = 1,
     breakdowns = undefined,
     campos = CAMPOS_INSIGHTS_BASE,
