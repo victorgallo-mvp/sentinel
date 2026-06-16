@@ -7,6 +7,7 @@ import { rotaSaude } from './rotas/saude.rota.js';
 import { rotaAdmin } from './rotas/admin.rota.js';
 import { rotaFeedback } from './rotas/feedback.rota.js';
 import { rotaRelatorio } from './rotas/relatorio.rota.js';
+import { rotaDashboard } from './rotas/dashboard.rota.js';
 import { receberWebhookEvolution } from './webhooks/evolution.controller.js';
 import { autenticarAdmin } from './middlewares/autenticacao-admin.js';
 import { logger } from '../infra/logger.js';
@@ -31,6 +32,7 @@ export function criarServidor() {
     next();
   });
 
+  app.use('/dashboard', rotaDashboard);
   app.use('/saude', rotaSaude);
   app.post('/webhooks/evolution', receberWebhookEvolution);
   app.use('/relatorios', rotaRelatorio);

@@ -45,6 +45,7 @@ const esquemaEnv = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
   ADMIN_TOKEN: z.string().optional().default(''),
+  DASHBOARD_TOKEN: z.string().optional().default(''),
 });
 
 const resultado = esquemaEnv.safeParse(process.env);
@@ -63,6 +64,7 @@ export const config = {
   porta: env.PORT,
   logLevel: env.LOG_LEVEL,
   adminToken: env.ADMIN_TOKEN,
+  dashboardToken: env.DASHBOARD_TOKEN,
 
   contaIdPadrao: env.CONTA_ID,
 

@@ -1,0 +1,37 @@
+.entity-section {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.entity-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.entity-nome { font-weight: 600; font-size: 15px; color: #e6edf3; }
+
+.entity-tipo {
+  font-size: 11px;
+  background: #21262d;
+  color: #8b949e;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.entity-sinc { font-size: 11px; color: #484f58; margin-left: auto; }
+
+.entity-vazia { color: #484f58; font-size: 13px; font-style: italic; }
+
+.metricas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
