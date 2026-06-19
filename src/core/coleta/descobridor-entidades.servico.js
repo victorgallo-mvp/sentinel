@@ -14,16 +14,16 @@ import { logger } from '../../infra/logger.js';
  * Retorna a árvore completa (campanhas > adsets > ads) de uma conta de anúncio,
  * sem persistir nada — usado para exibição em `descobrir-recursos.js`.
  */
-export async function descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos = true } = {}) {
-  const campanhas = await listarCampanhas(contaAnuncioId, { apenasAtivas: apenasAtivos });
+export async function descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos = true, token } = {}) {
+  const campanhas = await listarCampanhas(contaAnuncioId, { apenasAtivas: apenasAtivos, token });
 
   const arvore = [];
   for (const campanha of campanhas) {
-    const adsets = await listarAdsets(campanha.id, { apenasAtivos });
+    const adsets = await listarAdsets(campanha.id, { apenasAtivos, token });
     const adsetsComAds = [];
 
     for (const adset of adsets) {
-      const ads = await listarAds(adset.id, { apenasAtivos });
+      const ads = await listarAds(adset.id, { apenasAtivos, token });
       adsetsComAds.push({ ...adset, ads });
     }
 
@@ -34,8 +34,8 @@ export async function descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos = 
 }
 
 /** Lista as contas de anúncio acessíveis na BM configurada. */
-export async function descobrirContasAnuncio(bmId) {
-  return listarContasAnuncio(bmId);
+export async function descobrirContasAnuncio(bmId, token) {
+  return listarContasAnuncio(bmId, token);
 }
 
 /**
@@ -48,8 +48,8 @@ export async function descobrirContasAnuncio(bmId) {
  * @param {string} contaAnuncioId - `act_<id>`
  * @returns {Promise<{criadas: number, atualizadas: number, total: number}>}
  */
-export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apenasAtivos = true } = {}) {
-  const arvore = await descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos });
+export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apenasAtivos = true, token } = {}) {
+  const arvore = await descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos, token });
 
   let criadas = 0;
   let atualizadas = 0;

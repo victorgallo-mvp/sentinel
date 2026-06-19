@@ -3,6 +3,10 @@
  * Centraliza todas as chamadas à Meta Marketing API: descoberta de
  * contas/campanhas/adsets/ads e coleta de insights (métricas).
  *
+ * Todas as funções aceitam um `token` opcional — quando fornecido, usa
+ * esse token em vez do token global do .env. Isso permite suportar
+ * múltiplas BMs com tokens distintos.
+ *
  * Aplica retry com backoff exponencial em todas as chamadas externas
  * e registra avisos quando a resposta indica proximidade do rate limit.
  */
@@ -15,11 +19,6 @@ import { ErroMetaApi } from '../../shared/erros.js';
 
 const { AdAccount, Campaign, AdSet, Ad, Business } = bizSdk;
 
-/**
- * Campos solicitados em toda chamada de insights. `actions` e
- * `action_values` cobrem conversões/receita de qualquer evento
- * configurado (purchase, lead, etc) — o normalizador extrai o que precisa.
- */
 export const CAMPOS_INSIGHTS_BASE = [
   'impressions',
   'reach',
@@ -45,7 +44,6 @@ export const CAMPOS_INSIGHTS_BASE = [
 
 const CLASSES_POR_TIPO = { campaign: Campaign, adset: AdSet, ad: Ad };
 
-/** Verifica o header de uso de rate limit da Meta e loga aviso se próximo do limite. */
 function verificarRateLimit(respostaCrua) {
   try {
     const headers = respostaCrua?.headers ?? {};
@@ -62,25 +60,20 @@ function verificarRateLimit(respostaCrua) {
       }
     }
   } catch {
-    // header malformado/ausente — não é crítico, apenas não loga
+    // header malformado/ausente — não é crítico
   }
 }
 
-/** Converte um cursor do SDK em array simples de objetos planos. */
 function paraArrayPlano(cursor) {
   return Array.from(cursor).map((item) => (typeof item.export_all_data === 'function' ? item.export_all_data() : item));
 }
 
 /**
- * Lista as contas de anúncio acessíveis por uma Business Manager —
- * tanto as que ela possui diretamente (`owned_ad_accounts`) quanto as
- * compartilhadas com ela como cliente (`client_ad_accounts`), já que é
- * comum a conta de anúncio pertencer a outra BM e ter sido apenas
- * compartilhada com a BM configurada.
- * @param {string} bmId - ID da BM (default: META_BM_ID)
+ * @param {string} [bmId]
+ * @param {string} [token]
  */
-export async function listarContasAnuncio(bmId = config.meta.bmId) {
-  obterApiMeta();
+export async function listarContasAnuncio(bmId = config.meta.bmId, token) {
+  obterApiMeta(token);
   if (!bmId) throw new ErroMetaApi('META_BM_ID não configurado');
 
   const campos = ['id', 'name', 'account_status', 'currency', 'timezone_name'];
@@ -112,12 +105,11 @@ export async function listarContasAnuncio(bmId = config.meta.bmId) {
 }
 
 /**
- * Lista campanhas de uma conta de anúncio.
- * @param {string} contaAnuncioId - formato `act_<id>`
- * @param {Object} opcoes - { apenasAtivas }
+ * @param {string} contaAnuncioId
+ * @param {{ apenasAtivas?: boolean, token?: string }} [opcoes]
  */
-export async function listarCampanhas(contaAnuncioId, { apenasAtivas = false } = {}) {
-  obterApiMeta();
+export async function listarCampanhas(contaAnuncioId, { apenasAtivas = false, token } = {}) {
+  obterApiMeta(token);
 
   return comRetry(async () => {
     const conta = new AdAccount(contaAnuncioId);
@@ -137,9 +129,12 @@ export async function listarCampanhas(contaAnuncioId, { apenasAtivas = false } =
   });
 }
 
-/** Lista adsets de uma campanha. */
-export async function listarAdsets(campanhaId, { apenasAtivos = false } = {}) {
-  obterApiMeta();
+/**
+ * @param {string} campanhaId
+ * @param {{ apenasAtivos?: boolean, token?: string }} [opcoes]
+ */
+export async function listarAdsets(campanhaId, { apenasAtivos = false, token } = {}) {
+  obterApiMeta(token);
 
   return comRetry(async () => {
     const campanha = new Campaign(campanhaId);
@@ -160,9 +155,12 @@ export async function listarAdsets(campanhaId, { apenasAtivos = false } = {}) {
   });
 }
 
-/** Lista ads de um adset. */
-export async function listarAds(adsetId, { apenasAtivos = false } = {}) {
-  obterApiMeta();
+/**
+ * @param {string} adsetId
+ * @param {{ apenasAtivos?: boolean, token?: string }} [opcoes]
+ */
+export async function listarAds(adsetId, { apenasAtivos = false, token } = {}) {
+  obterApiMeta(token);
 
   return comRetry(async () => {
     const adset = new AdSet(adsetId);
@@ -183,14 +181,11 @@ export async function listarAds(adsetId, { apenasAtivos = false } = {}) {
 }
 
 /**
- * Obtém insights "crus" de uma entidade (campaign/adset/ad).
  * @param {'campaign'|'adset'|'ad'} tipo
  * @param {string} metaId
- * @param {Object} opcoes - { datePreset, timeIncrement, breakdowns, campos }
+ * @param {{ datePreset?: string, timeIncrement?: number, breakdowns?: string[], campos?: string[], timeRange?: object, token?: string }} [opcoes]
  */
 export async function obterInsights(tipo, metaId, opcoes = {}) {
-  obterApiMeta();
-
   const Classe = CLASSES_POR_TIPO[tipo];
   if (!Classe) throw new ErroMetaApi(`Tipo de entidade inválido para insights: ${tipo}`);
 
@@ -200,15 +195,16 @@ export async function obterInsights(tipo, metaId, opcoes = {}) {
     breakdowns = undefined,
     campos = CAMPOS_INSIGHTS_BASE,
     timeRange = undefined,
+    token,
   } = opcoes;
+
+  obterApiMeta(token);
 
   return comRetry(
     async () => {
       const objeto = new Classe(metaId);
       const params = { time_increment: timeIncrement };
 
-      // `timeRange` ({since, until} no formato AAAA-MM-DD) tem prioridade
-      // sobre `datePreset` — usado pelo backfill de histórico.
       if (timeRange) {
         params.time_range = timeRange;
       } else {
@@ -226,23 +222,25 @@ export async function obterInsights(tipo, metaId, opcoes = {}) {
 }
 
 /**
- * Obtém insights com breakdown horário do dia atual (timezone do anunciante).
- * Usado para compor as janelas de 1h e 6h.
+ * @param {'campaign'|'adset'|'ad'} tipo
+ * @param {string} metaId
+ * @param {string} [token]
  */
-export async function obterInsightsHorarios(tipo, metaId) {
+export async function obterInsightsHorarios(tipo, metaId, token) {
   return obterInsights(tipo, metaId, {
     datePreset: 'today',
     timeIncrement: 1,
     breakdowns: ['hourly_stats_aggregated_by_advertiser_time_zone'],
+    token,
   });
 }
 
 /**
- * Lê configuração de um adset: orçamento, estratégia de lance e segmentação.
- * Usado pelas tools `verificar_orcamento` e `consultar_audiencia`.
+ * @param {string} adsetMetaId
+ * @param {string} [token]
  */
-export async function obterConfiguracaoAdset(adsetMetaId) {
-  obterApiMeta();
+export async function obterConfiguracaoAdset(adsetMetaId, token) {
+  obterApiMeta(token);
 
   return comRetry(async () => {
     const adset = new AdSet(adsetMetaId);
@@ -262,11 +260,11 @@ export async function obterConfiguracaoAdset(adsetMetaId) {
 }
 
 /**
- * Lê configuração de orçamento de uma campanha (usado quando o adset
- * está em modo CBO — Campaign Budget Optimization — e não tem orçamento próprio).
+ * @param {string} campanhaMetaId
+ * @param {string} [token]
  */
-export async function obterConfiguracaoCampanha(campanhaMetaId) {
-  obterApiMeta();
+export async function obterConfiguracaoCampanha(campanhaMetaId, token) {
+  obterApiMeta(token);
 
   return comRetry(async () => {
     const campanha = new Campaign(campanhaMetaId);

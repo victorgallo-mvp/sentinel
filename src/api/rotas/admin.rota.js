@@ -301,7 +301,7 @@ rotaAdmin.post('/disparar/sincronizar-entidades', async (req, res, next) => {
 
       for (const contaAnuncioId of conta.metaConfig.contasAnuncioIds) {
         try {
-          const resultado = await sincronizarEntidades(contaId, conta.metaConfig.bmId, contaAnuncioId);
+          const resultado = await sincronizarEntidades(contaId, conta.metaConfig.bmId, contaAnuncioId, { token: conta.metaConfig.systemUserToken });
           logger.info({ msg: 'Sincronização de entidades concluída (disparo manual)', contaId, contaAnuncioId, ...resultado });
         } catch (erro) {
           logger.error({ msg: 'Erro ao disparar sincronização de entidades manualmente via API admin', contaId, contaAnuncioId, erro: erro.message });

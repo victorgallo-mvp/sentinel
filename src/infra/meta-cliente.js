@@ -6,33 +6,23 @@
  */
 import bizSdk from 'facebook-nodejs-business-sdk';
 import { config } from '../config/index.js';
-import { logger } from './logger.js';
 
 const { FacebookAdsApi } = bizSdk;
 
-let apiInicializada = null;
-
 /**
- * Retorna a instância da Meta Marketing API configurada com o token do
- * System User. Idempotente — inicializa apenas uma vez.
+ * Inicializa a Meta Marketing API com o token fornecido.
+ * Sempre reinicializa — sem singleton — pra suportar múltiplas contas
+ * com tokens distintos. Workers BullMQ rodam com concurrency=1, então
+ * não há race condition no estado global do SDK.
+ *
+ * @param {string} [token] - token da conta; usa META_SYSTEM_USER_TOKEN do .env se omitido
  */
-export function obterApiMeta() {
-  if (!apiInicializada) {
-    if (!config.meta.systemUserToken) {
-      throw new Error('META_SYSTEM_USER_TOKEN não configurado');
-    }
-
-    apiInicializada = FacebookAdsApi.init(config.meta.systemUserToken);
-
-    // Em desenvolvimento, habilita modo debug pra ver requests/responses
-    if (config.ambiente === 'development') {
-      apiInicializada.setDebug(true);
-    }
-
-    logger.info({ msg: 'Meta Marketing API inicializada', versao: config.meta.apiVersion });
-  }
-
-  return apiInicializada;
+export function obterApiMeta(token) {
+  const accessToken = token || config.meta.systemUserToken;
+  if (!accessToken) throw new Error('Token Meta não configurado');
+  const api = FacebookAdsApi.init(accessToken);
+  if (config.ambiente === 'development') api.setDebug(true);
+  return api;
 }
 
 export { bizSdk };

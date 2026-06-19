@@ -4,6 +4,7 @@
  * últimas 24h/6h/1h, ritmo de consumo e projeção até o fim do dia.
  */
 import { Entidade } from '../../dominio/entidade.modelo.js';
+import { Conta } from '../../dominio/conta.modelo.js';
 import { obterConfiguracaoAdset, obterConfiguracaoCampanha } from '../coleta/meta-api.cliente.js';
 import { obterValorMaisRecente } from './_consultas.js';
 import { arredondar } from '../../shared/utils.js';
@@ -23,8 +24,12 @@ export const tool = {
 export async function executar(_parametros, contexto) {
   const { contaId, entidadeId } = contexto;
 
-  const entidadeAtual = await Entidade.findById(entidadeId);
+  const [entidadeAtual, conta] = await Promise.all([
+    Entidade.findById(entidadeId),
+    Conta.findById(contaId).select('metaConfig.systemUserToken').lean(),
+  ]);
   if (!entidadeAtual) return { erro: 'Entidade não encontrada' };
+  const token = conta?.metaConfig?.systemUserToken || undefined;
 
   const [gasto1h, gasto6h, gasto24h] = await Promise.all([
     obterValorMaisRecente(entidadeId, 'spend', 1),
@@ -38,7 +43,7 @@ export async function executar(_parametros, contexto) {
   try {
     if (entidadeAtual.tipo !== 'campaign') {
       const adsetMetaId = entidadeAtual.tipo === 'ad' ? entidadeAtual.hierarquia.adsetId : entidadeAtual.metaId;
-      const configAdset = await obterConfiguracaoAdset(adsetMetaId);
+      const configAdset = await obterConfiguracaoAdset(adsetMetaId, token);
       if (configAdset.daily_budget || configAdset.lifetime_budget) {
         orcamento = { diario: configAdset.daily_budget ?? null, total: configAdset.lifetime_budget ?? null };
         origemOrcamento = 'adset';
@@ -47,7 +52,7 @@ export async function executar(_parametros, contexto) {
 
     if (!orcamento) {
       const campanhaMetaId = entidadeAtual.hierarquia.campanhaId ?? entidadeAtual.metaId;
-      const configCampanha = await obterConfiguracaoCampanha(campanhaMetaId);
+      const configCampanha = await obterConfiguracaoCampanha(campanhaMetaId, token);
       orcamento = { diario: configCampanha.daily_budget ?? null, total: configCampanha.lifetime_budget ?? null };
       origemOrcamento = 'campaign (CBO)';
     }

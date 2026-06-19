@@ -7,6 +7,7 @@
  * Resolve o adset a partir do contexto (mesma lógica de `analisar_criativos`).
  */
 import { Entidade } from '../../dominio/entidade.modelo.js';
+import { Conta } from '../../dominio/conta.modelo.js';
 import { obterConfiguracaoAdset } from '../coleta/meta-api.cliente.js';
 import { obterValorMaisRecente } from './_consultas.js';
 import { arredondar } from '../../shared/utils.js';
@@ -25,6 +26,9 @@ export const tool = {
 
 export async function executar(_parametros, contexto) {
   const { contaId, entidadeId } = contexto;
+
+  const contaDoc = await Conta.findById(contaId).select('metaConfig.systemUserToken').lean();
+  const token = contaDoc?.metaConfig?.systemUserToken || undefined;
 
   const entidadeAtual = await Entidade.findById(entidadeId);
   if (!entidadeAtual) return { erro: 'Entidade não encontrada' };
@@ -46,7 +50,7 @@ export async function executar(_parametros, contexto) {
   let targeting = null;
   let orcamento = null;
   try {
-    const config = await obterConfiguracaoAdset(entidadeAdset.metaId);
+    const config = await obterConfiguracaoAdset(entidadeAdset.metaId, token);
     targeting = config.targeting ?? null;
     orcamento = {
       diario: config.daily_budget ?? null,

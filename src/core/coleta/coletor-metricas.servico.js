@@ -55,7 +55,9 @@ export async function coletarMetricasConta(contaId) {
 
 /** Coleta e persiste as três janelas (1h, 6h, 24h) de uma única entidade. */
 export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new Date()) {
-  const linhasHorarias = await obterInsightsHorarios(entidade.tipo, entidade.metaId);
+  const token = conta.metaConfig?.systemUserToken || undefined;
+
+  const linhasHorarias = await obterInsightsHorarios(entidade.tipo, entidade.metaId, token);
 
   // Janela 1h: última linha horária disponível (hora corrente ou anterior)
   if (linhasHorarias.length > 0) {
@@ -73,7 +75,7 @@ export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new 
   // Janela 24h: agregação correta (com dedup de reach) vem direto da Meta.
   // `last_24h` não existe como date_preset na Graph API — `today` é o
   // equivalente válido mais próximo (acumulado desde 00h no fuso do anunciante).
-  const linhas24h = await obterInsights(entidade.tipo, entidade.metaId, { datePreset: 'today', timeIncrement: 1 });
+  const linhas24h = await obterInsights(entidade.tipo, entidade.metaId, { datePreset: 'today', timeIncrement: 1, token });
   if (linhas24h.length > 0) {
     await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas24h[0]), 24, coletadaEm);
   }
