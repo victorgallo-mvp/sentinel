@@ -1,0 +1,147 @@
+/**
+ * Verificador de saldo de orçamento — roda a cada hora, sem depender de
+ * baseline. Consulta `budget_remaining` diretamente na Meta API e envia
+ * alerta WhatsApp quando o saldo está abaixo do limiar configurado.
+ *
+ * Throttle: não reavisa o mesmo adset em menos de 4h.
+ */
+import { Conta } from '../../dominio/conta.modelo.js';
+import { Entidade } from '../../dominio/entidade.modelo.js';
+import { Notificacao } from '../../dominio/notificacao.modelo.js';
+import { obterConfiguracaoAdset, obterConfiguracaoCampanha } from '../coleta/meta-api.cliente.js';
+import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
+import { config } from '../../config/index.js';
+import { logger } from '../../infra/logger.js';
+
+const LIMIAR_PCT_PADRAO = 0.20;   // 20% restante do orçamento diário
+const LIMIAR_REAIS_PADRAO = 30;   // R$30 restante (em qualquer cenário)
+const JANELA_RENOTIFICACAO_HORAS = 4;
+
+export async function verificarOrcamentosContas() {
+  const contas = await Conta.find({ ativo: true });
+
+  for (const conta of contas) {
+    try {
+      await verificarOrcamentosConta(conta);
+    } catch (erro) {
+      logger.error({ msg: 'Falha ao verificar orçamentos da conta', contaId: String(conta._id), erro: erro.message });
+    }
+  }
+}
+
+async function verificarOrcamentosConta(conta) {
+  const token = conta.metaConfig?.systemUserToken || undefined;
+
+  const adsets = await Entidade.find({
+    contaId: conta._id,
+    tipo: 'adset',
+    status: 'ACTIVE',
+    'configuracoes.monitorada': true,
+  });
+
+  for (const adset of adsets) {
+    try {
+      await avaliarSaldoAdset(conta, adset, token);
+    } catch (erro) {
+      logger.warn({ msg: 'Falha ao verificar saldo do adset', adsetId: String(adset._id), nome: adset.nome, erro: erro.message });
+    }
+  }
+}
+
+async function avaliarSaldoAdset(conta, adset, token) {
+  const { budgetRemaining, budgetTotal, origemOrcamento } = await obterSaldo(adset, token);
+
+  if (budgetRemaining === null || budgetTotal === null || budgetTotal === 0) return;
+
+  const limiarPct = conta.configuracoes?.limiarAlertaOrcamentoPct ?? LIMIAR_PCT_PADRAO;
+  const limiarReais = conta.configuracoes?.limiarAlertaOrcamentoReais ?? LIMIAR_REAIS_PADRAO;
+  const pctRestante = budgetRemaining / budgetTotal;
+
+  if (pctRestante >= limiarPct && budgetRemaining >= limiarReais) return;
+
+  // Throttle — não reavisa em menos de JANELA_RENOTIFICACAO_HORAS
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    entidadeId: adset._id,
+    enviadaEm: { $gte: desde },
+    status: 'enviada',
+  });
+  if (jaAvisou) return;
+
+  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
+  if (!destinatario) {
+    logger.warn({ msg: 'Alerta de saldo sem destinatário configurado', contaId: String(conta._id) });
+    return;
+  }
+
+  const pctStr = (pctRestante * 100).toFixed(0);
+  const restanteStr = `R$ ${budgetRemaining.toFixed(2)}`;
+  const totalStr = `R$ ${budgetTotal.toFixed(2)}`;
+
+  const mensagem = [
+    `⚠️ *Saldo baixo — ${conta.nome}*`,
+    ``,
+    `Adset: *${adset.nome}*`,
+    `Saldo restante: *${restanteStr}* de ${totalStr} (${pctStr}%)`,
+    `Orçamento: ${origemOrcamento}`,
+    ``,
+    `Recarregue o orçamento para evitar interrupção da entrega.`,
+  ].join('\n');
+
+  let status = 'enviada';
+  try {
+    await enviarMensagemWhatsapp(destinatario, mensagem);
+  } catch (erro) {
+    status = 'erro';
+    logger.error({ msg: 'Falha ao enviar alerta de saldo WhatsApp', adsetId: String(adset._id), erro: erro.message });
+  }
+
+  await Notificacao.create({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    entidadeId: adset._id,
+    canal: 'whatsapp',
+    destinatario,
+    conteudo: mensagem,
+    enviadaEm: new Date(),
+    status,
+  });
+
+  logger.info({
+    msg: 'Alerta de saldo enviado',
+    conta: conta.nome,
+    adset: adset.nome,
+    budgetRemaining,
+    pctRestante: pctStr + '%',
+    status,
+  });
+}
+
+async function obterSaldo(adset, token) {
+  // Tenta orçamento próprio do adset
+  const cfgAdset = await obterConfiguracaoAdset(adset.metaId, token);
+  const temOrcamentoAdset = cfgAdset.daily_budget || cfgAdset.lifetime_budget;
+
+  if (temOrcamentoAdset && cfgAdset.budget_remaining != null) {
+    return {
+      budgetRemaining: Number(cfgAdset.budget_remaining) / 100,
+      budgetTotal: Number(cfgAdset.daily_budget || cfgAdset.lifetime_budget) / 100,
+      origemOrcamento: cfgAdset.daily_budget ? 'diário (adset)' : 'total (adset)',
+    };
+  }
+
+  // CBO — orçamento está na campanha
+  const campanhaId = adset.hierarquia?.campanhaId;
+  if (!campanhaId) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null };
+
+  const cfgCampanha = await obterConfiguracaoCampanha(campanhaId, token);
+  if (cfgCampanha.budget_remaining == null) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null };
+
+  return {
+    budgetRemaining: Number(cfgCampanha.budget_remaining) / 100,
+    budgetTotal: Number(cfgCampanha.daily_budget || cfgCampanha.lifetime_budget) / 100,
+    origemOrcamento: cfgCampanha.daily_budget ? 'diário (campanha CBO)' : 'total (campanha CBO)',
+  };
+}

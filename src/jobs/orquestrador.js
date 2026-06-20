@@ -4,6 +4,7 @@
  *
  * Cron (horário do servidor):
  * - Coleta de métricas: a cada hora, no minuto 5
+ * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Detecção de anomalias: a cada hora, no minuto 20 (após a coleta)
  * - Sincronização de entidades: diariamente às 01:00 (antes dos baselines)
  * - Atualização de baselines: diariamente às 02:00
@@ -17,11 +18,13 @@ import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
 import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
 import { enfileirarRelatoriosSemanais, criarWorkerRelatorio } from './relatorio-semanal.job.js';
 import { executarLimpezaDadosAntigos } from './limpeza-dados-antigos.job.js';
+import { executarAlertaOrcamento } from './alerta-orcamento.job.js';
 import { criarWorkersInvestigacao } from './investigacao.job.js';
 import { logger } from '../infra/logger.js';
 
 const TAREFAS_CRON = [
   { nome: 'coleta-metricas', expressao: '5 * * * *', executar: executarColetaMetricas },
+  { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'deteccao-anomalias', expressao: '20 * * * *', executar: executarDeteccaoAnomalias },
   { nome: 'sincronizar-entidades', expressao: '0 1 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
