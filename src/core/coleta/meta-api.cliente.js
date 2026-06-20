@@ -260,6 +260,24 @@ export async function obterConfiguracaoAdset(adsetMetaId, token) {
 }
 
 /**
+ * Obtém status, saldo (pré-pago) e moeda de uma conta de anúncio.
+ * `balance` só existe em contas pré-pagas — em pós-pagas vem null/0.
+ * `account_status` indica se a conta está ativa (1), inadimplente (3/9), etc.
+ *
+ * @param {string} contaAnuncioId - formato `act_<id>`
+ * @param {string} [token]
+ */
+export async function obterDetalhesContaAnuncio(contaAnuncioId, token) {
+  obterApiMeta(token);
+
+  return comRetry(async () => {
+    const conta = new AdAccount(contaAnuncioId);
+    const dados = await conta.read(['id', 'name', 'account_status', 'balance', 'currency', 'amount_spent']);
+    return dados.export_all_data ? dados.export_all_data() : dados;
+  });
+}
+
+/**
  * @param {string} campanhaMetaId
  * @param {string} [token]
  */

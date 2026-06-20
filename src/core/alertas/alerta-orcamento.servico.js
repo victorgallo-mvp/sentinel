@@ -8,14 +8,26 @@
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
-import { obterConfiguracaoAdset, obterConfiguracaoCampanha } from '../coleta/meta-api.cliente.js';
+import { obterConfiguracaoAdset, obterConfiguracaoCampanha, obterDetalhesContaAnuncio } from '../coleta/meta-api.cliente.js';
 import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
 const LIMIAR_PCT_PADRAO = 0.20;   // 20% restante do orçamento diário
 const LIMIAR_REAIS_PADRAO = 30;   // R$30 restante (em qualquer cenário)
+const LIMIAR_CREDITO_REAIS_PADRAO = 50; // R$50 de saldo pré-pago na conta
 const JANELA_RENOTIFICACAO_HORAS = 4;
+
+// account_status da Meta API que indicam problema de pagamento/bloqueio
+const STATUS_PROBLEMA = {
+  2: 'desativada',
+  3: 'inadimplente (pagamento pendente)',
+  7: 'em revisão pela Meta',
+  8: 'em processo de encerramento',
+  9: 'em período de carência (pagamento atrasado)',
+  100: 'em revisão de risco',
+  101: 'encerrada',
+};
 
 export async function verificarOrcamentosContas() {
   const contas = await Conta.find({ ativo: true });
@@ -32,6 +44,16 @@ export async function verificarOrcamentosContas() {
 async function verificarOrcamentosConta(conta) {
   const token = conta.metaConfig?.systemUserToken || undefined;
 
+  // 1. Verifica status e saldo pré-pago de cada conta de anúncio
+  for (const contaAnuncioId of (conta.metaConfig?.contasAnuncioIds ?? [])) {
+    try {
+      await avaliarStatusContaAnuncio(conta, contaAnuncioId, token);
+    } catch (erro) {
+      logger.warn({ msg: 'Falha ao verificar status da conta de anúncio', contaAnuncioId, erro: erro.message });
+    }
+  }
+
+  // 2. Verifica orçamento restante de cada adset ativo
   const adsets = await Entidade.find({
     contaId: conta._id,
     tipo: 'adset',
@@ -46,6 +68,82 @@ async function verificarOrcamentosConta(conta) {
       logger.warn({ msg: 'Falha ao verificar saldo do adset', adsetId: String(adset._id), nome: adset.nome, erro: erro.message });
     }
   }
+}
+
+async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
+  const detalhes = await obterDetalhesContaAnuncio(contaAnuncioId, token);
+  const status = Number(detalhes.account_status);
+  const labelProblema = STATUS_PROBLEMA[status];
+
+  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
+  if (!destinatario) return;
+
+  // Conta com status problemático
+  if (labelProblema) {
+    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+    const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
+    const jaAvisou = await Notificacao.exists({
+      contaId: conta._id,
+      tipo: 'alerta_orcamento',
+      canal: 'whatsapp',
+      conteudo: new RegExp(chaveAlerta),
+      enviadaEm: { $gte: desde },
+      status: 'enviada',
+    });
+
+    if (!jaAvisou) {
+      const mensagem = [
+        `🚨 *Conta de anúncio bloqueada — ${conta.nome}*`,
+        ``,
+        `Conta: \`${contaAnuncioId}\``,
+        `Status: *${labelProblema}*`,
+        ``,
+        `Verifique o gerenciador de anúncios — as campanhas podem ter parado de entregar.`,
+        `<!-- ${chaveAlerta} -->`,
+      ].join('\n');
+
+      let envioStatus = 'enviada';
+      try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+
+      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+      logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
+    }
+    return; // se bloqueada não faz sentido checar saldo pré-pago
+  }
+
+  // Saldo pré-pago baixo (balance só existe em contas pré-pagas)
+  const balanceRaw = Number(detalhes.balance ?? 0);
+  if (balanceRaw <= 0) return; // pós-pago ou sem info
+
+  const balanceReais = balanceRaw / 100;
+  const limiarCredito = conta.configuracoes?.limiarAlertaCreditoReais ?? LIMIAR_CREDITO_REAIS_PADRAO;
+  if (balanceReais >= limiarCredito) return;
+
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    entidadeId: null,
+    conteudo: new RegExp(contaAnuncioId),
+    enviadaEm: { $gte: desde },
+    status: 'enviada',
+  });
+  if (jaAvisou) return;
+
+  const mensagem = [
+    `💳 *Saldo pré-pago baixo — ${conta.nome}*`,
+    ``,
+    `Conta: \`${contaAnuncioId}\``,
+    `Saldo restante: *R$ ${balanceReais.toFixed(2)}*`,
+    ``,
+    `Recarregue o saldo para evitar interrupção das campanhas.`,
+  ].join('\n');
+
+  let envioStatus = 'enviada';
+  try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+
+  await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+  logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, balanceReais });
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {

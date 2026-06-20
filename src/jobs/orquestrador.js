@@ -8,7 +8,8 @@
  * - Detecção de anomalias: a cada hora, no minuto 20 (após a coleta)
  * - Sincronização de entidades: diariamente às 01:00 (antes dos baselines)
  * - Atualização de baselines: diariamente às 02:00
- * - Relatório semanal: segundas-feiras às 08:00
+ * - Resumo diário WhatsApp: todos os dias às 08:00
+ * - Relatório semanal IA: segundas-feiras às 08:00
  * - Limpeza de dados antigos: diariamente às 03:00
  */
 import cron from 'node-cron';
@@ -19,6 +20,7 @@ import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
 import { enfileirarRelatoriosSemanais, criarWorkerRelatorio } from './relatorio-semanal.job.js';
 import { executarLimpezaDadosAntigos } from './limpeza-dados-antigos.job.js';
 import { executarAlertaOrcamento } from './alerta-orcamento.job.js';
+import { executarResumoDiario } from './resumo-diario.job.js';
 import { criarWorkersInvestigacao } from './investigacao.job.js';
 import { logger } from '../infra/logger.js';
 
@@ -28,6 +30,7 @@ const TAREFAS_CRON = [
   { nome: 'deteccao-anomalias', expressao: '20 * * * *', executar: executarDeteccaoAnomalias },
   { nome: 'sincronizar-entidades', expressao: '0 1 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
+  { nome: 'resumo-diario', expressao: '0 8 * * *', executar: executarResumoDiario },
   { nome: 'relatorio-semanal', expressao: '0 8 * * 1', executar: enfileirarRelatoriosSemanais },
   { nome: 'limpeza-dados-antigos', expressao: '0 3 * * *', executar: executarLimpezaDadosAntigos },
 ];
