@@ -1,18 +1,20 @@
 .metric-card {
-  background: #0d1117;
-  border: 1px solid #21262d;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: border-color .15s;
+  gap: 5px;
+  transition: border-color .15s, box-shadow .15s;
 }
-.metric-card:hover { border-color: #388bfd; }
+.metric-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
+}
 
-.metric-nome { font-size: 11px; color: #7d8590; font-weight: 500; }
-
-.metric-valor { font-size: 20px; font-weight: 700; color: #e6edf3; line-height: 1.1; }
+.metric-nome   { font-size: 11px; color: #6b7280; font-weight: 500; }
+.metric-valor  { font-size: 19px; font-weight: 700; color: #111827; line-height: 1.1; }
 
 .metric-variacao {
   font-size: 12px;
@@ -22,4 +24,4 @@
   gap: 3px;
 }
 
-.metric-hint { font-weight: 400; font-size: 11px; opacity: .7; }
+.metric-hint { font-weight: 400; font-size: 11px; opacity: .65; }

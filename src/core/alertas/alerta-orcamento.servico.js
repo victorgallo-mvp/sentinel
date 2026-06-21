@@ -9,13 +9,14 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { obterConfiguracaoAdset, obterConfiguracaoCampanha, obterDetalhesContaAnuncio } from '../coleta/meta-api.cliente.js';
+// `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
+// Para problemas de pagamento, usamos exclusivamente account_status.
 import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
 const LIMIAR_PCT_PADRAO = 0.20;   // 20% restante do orçamento diário
 const LIMIAR_REAIS_PADRAO = 30;   // R$30 restante (em qualquer cenário)
-const LIMIAR_CREDITO_REAIS_PADRAO = 50; // R$50 de saldo pré-pago na conta
 const JANELA_RENOTIFICACAO_HORAS = 4;
 
 // account_status da Meta API que indicam problema de pagamento/bloqueio
@@ -108,42 +109,9 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
-    return; // se bloqueada não faz sentido checar saldo pré-pago
+    return;
   }
-
-  // Saldo pré-pago baixo (balance só existe em contas pré-pagas)
-  const balanceRaw = Number(detalhes.balance ?? 0);
-  if (balanceRaw <= 0) return; // pós-pago ou sem info
-
-  const balanceReais = balanceRaw / 100;
-  const limiarCredito = conta.configuracoes?.limiarAlertaCreditoReais ?? LIMIAR_CREDITO_REAIS_PADRAO;
-  if (balanceReais >= limiarCredito) return;
-
-  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-  const jaAvisou = await Notificacao.exists({
-    contaId: conta._id,
-    tipo: 'alerta_orcamento',
-    entidadeId: null,
-    conteudo: new RegExp(contaAnuncioId),
-    enviadaEm: { $gte: desde },
-    status: 'enviada',
-  });
-  if (jaAvisou) return;
-
-  const mensagem = [
-    `💳 *Saldo pré-pago baixo — ${conta.nome}*`,
-    ``,
-    `Conta: \`${contaAnuncioId}\``,
-    `Saldo restante: *R$ ${balanceReais.toFixed(2)}*`,
-    ``,
-    `Recarregue o saldo para evitar interrupção das campanhas.`,
-  ].join('\n');
-
-  let envioStatus = 'enviada';
-  try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
-
-  await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
-  logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, balanceReais });
+  // account_status=1 (ACTIVE) → sem problema, nada a fazer
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {

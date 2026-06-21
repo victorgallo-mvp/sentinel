@@ -1,37 +1,38 @@
 .entity-section {
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 10px;
-  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
 
 .entity-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 
-.entity-nome { font-weight: 600; font-size: 15px; color: #e6edf3; }
+.entity-nome { font-weight: 700; font-size: 15px; color: #111827; }
 
 .entity-tipo {
   font-size: 11px;
-  background: #21262d;
-  color: #8b949e;
+  background: #f3f4f6;
+  color: #6b7280;
   padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
+  border-radius: 8px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .05em;
 }
 
-.entity-sinc { font-size: 11px; color: #484f58; margin-left: auto; }
+.entity-sinc { font-size: 11px; color: #9ca3af; margin-left: auto; }
 
-.entity-vazia { color: #484f58; font-size: 13px; font-style: italic; }
+.entity-vazia { color: #9ca3af; font-size: 13px; font-style: italic; }
 
 .metricas-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 10px;
 }

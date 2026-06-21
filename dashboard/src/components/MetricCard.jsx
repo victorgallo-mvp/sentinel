@@ -19,22 +19,21 @@ export default function MetricCard({ metrica }) {
 }
 
 function calcularTendencia(pct, direcaoBoa) {
-  if (pct === null) return { seta: '', cor: '#484f58' };
+  if (pct === null) return { seta: '', cor: '#9ca3af' };
 
   const subiu = pct > 0;
 
   if (direcaoBoa === 'maior') {
-    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#3fb950' : '#f85149' };
+    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#16a34a' : '#dc2626' };
   }
   if (direcaoBoa === 'menor') {
-    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#f85149' : '#3fb950' };
+    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#dc2626' : '#16a34a' };
   }
   if (direcaoBoa === 'estavel') {
     const intenso = Math.abs(pct) > 15;
-    return { seta: subiu ? '↑' : '↓', cor: intenso ? '#f0883e' : '#e3b341' };
+    return { seta: subiu ? '↑' : '↓', cor: intenso ? '#ea580c' : '#ca8a04' };
   }
-  // monitorar — neutro
-  return { seta: subiu ? '↑' : '↓', cor: '#8b949e' };
+  return { seta: subiu ? '↑' : '↓', cor: '#6b7280' };
 }
 
 function labelDirecao(direcaoBoa, pct) {

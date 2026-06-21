@@ -23,17 +23,17 @@ export default function Header({ stats, ultimaAtualizacao, segundos }) {
         <StatCard
           label="Anomalias (24h)"
           value={stats.anomalias24h}
-          cor={stats.anomalias24h > 0 ? '#f0883e' : '#3fb950'}
+          cor={stats.anomalias24h > 0 ? '#ea580c' : '#16a34a'}
         />
         <StatCard
           label="Investigações (24h)"
           value={stats.investigacoes24h}
-          cor={stats.investigacoes24h > 0 ? '#58a6ff' : '#7d8590'}
+          cor={stats.investigacoes24h > 0 ? '#2563eb' : '#6b7280'}
         />
         <StatCard
           label="Notificações (24h)"
           value={stats.notificacoes24h}
-          cor={stats.notificacoes24h > 0 ? '#58a6ff' : '#7d8590'}
+          cor={stats.notificacoes24h > 0 ? '#2563eb' : '#6b7280'}
         />
       </div>
     </header>

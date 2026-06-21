@@ -1,17 +1,17 @@
-.app { max-width: 1400px; margin: 0 auto; padding: 0 16px 40px; }
+.app { max-width: 1400px; margin: 0 auto; padding: 0 20px 48px; }
 
-.main { display: flex; flex-direction: column; gap: 32px; }
+.main { display: flex; flex-direction: column; gap: 28px; }
 
 /* Conta */
-.conta-section { display: flex; flex-direction: column; gap: 16px; }
+.conta-section { display: flex; flex-direction: column; gap: 14px; }
 .conta-nome {
-  font-size: 13px;
-  font-weight: 600;
-  color: #7d8590;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .1em;
   padding-bottom: 8px;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 2px solid #e5e7eb;
 }
 
 /* Events grid */
@@ -22,7 +22,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 10px 0;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid #f0f2f5;
   flex-wrap: wrap;
 }
 .event-item:last-child { border-bottom: none; }
@@ -31,17 +31,17 @@
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 10px;
   white-space: nowrap;
 }
-.event-badge.anomalia { background: #3d2200; color: #f0883e; }
-.event-badge.notificou { background: #0d2a4d; color: #58a6ff; }
-.event-badge.silencioso { background: #21262d; color: #7d8590; }
-.event-badge.ok { background: #0d3320; color: #3fb950; }
-.event-badge.erro { background: #3d1010; color: #f85149; }
+.event-badge.anomalia  { background: #fff3e0; color: #e65100; }
+.event-badge.notificou { background: #e3f2fd; color: #1565c0; }
+.event-badge.silencioso{ background: #f5f5f5; color: #757575; }
+.event-badge.ok        { background: #e8f5e9; color: #2e7d32; }
+.event-badge.erro      { background: #fce4ec; color: #c62828; }
 
-.event-detail { flex: 1; color: #8b949e; font-size: 12px; line-height: 1.4; }
-.event-time { font-size: 11px; color: #484f58; white-space: nowrap; margin-left: auto; }
+.event-detail { flex: 1; color: #6b7280; font-size: 12px; line-height: 1.4; }
+.event-time   { font-size: 11px; color: #9ca3af; white-space: nowrap; margin-left: auto; }
 
 /* States */
 .loading, .error-screen {
@@ -51,6 +51,6 @@
   justify-content: center;
   min-height: 100vh;
   gap: 12px;
-  color: #7d8590;
+  color: #9ca3af;
 }
 .error-icon { font-size: 32px; }
