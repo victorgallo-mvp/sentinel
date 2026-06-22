@@ -87,7 +87,9 @@ export default function App() {
               <div key={a.id} className="event-item">
                 <span className="event-badge anomalia">{a.metrica}</span>
                 <span className="event-detail">
+                  {a.direcao === 'aumento' ? '↑' : a.direcao === 'queda' ? '↓' : ''}{' '}
                   atual {fmt(a.valorAtual)} · esperado {fmt(a.valorEsperado)}
+                  {a.desvio != null ? ` (${Number(a.desvio).toFixed(1)}σ)` : ''}
                 </span>
                 <span className="event-time">{tempo(a.detectadaEm)}</span>
               </div>

@@ -36,7 +36,7 @@ export const MINIMO_OBSERVACOES_BASELINE = 10;
  * Janela mínima (em horas) entre duas detecções de anomalia para a mesma
  * combinação entidade+métrica+janela — evita re-detecção em loop.
  */
-export const JANELA_DEDUPLICACAO_HORAS = 1;
+export const JANELA_DEDUPLICACAO_HORAS = 4;
 
 /** Dias de histórico padrão usados pra calcular baseline. */
 export const DIAS_HISTORICO_BASELINE_PADRAO = 21;

@@ -43,6 +43,19 @@ export async function investigarAnomalia(anomaliaId) {
 
   const limiteCustoDiarioUsd = conta.configuracoes?.limiteCustoDiarioUsd ?? config.limites.custoDiarioUsd;
 
+  // Verifica limite ANTES de criar o documento — evita poluir a lista de investigações
+  // com entradas inúteis de "limite atingido" toda vez que uma anomalia chega à fila.
+  try {
+    await verificarLimiteCusto(anomalia.contaId, limiteCustoDiarioUsd);
+  } catch (erro) {
+    if (erro instanceof ErroLimiteCustoExcedido) {
+      logger.warn({ msg: 'Investigação não iniciada — limite de custo diário atingido', anomaliaId, contaId: String(anomalia.contaId) });
+      await Anomalia.findByIdAndUpdate(anomalia._id, { statusProcessamento: 'ignorada' });
+      return null;
+    }
+    throw erro;
+  }
+
   const investigacao = await Investigacao.create({
     contaId: anomalia.contaId,
     anomaliaId: anomalia._id,
@@ -51,16 +64,6 @@ export async function investigarAnomalia(anomaliaId) {
     toolsChamadas: [],
     raciocinio: [],
   });
-
-  try {
-    await verificarLimiteCusto(anomalia.contaId, limiteCustoDiarioUsd);
-  } catch (erro) {
-    if (erro instanceof ErroLimiteCustoExcedido) {
-      await finalizarSemInvestigar(investigacao, anomalia, erro.message);
-      return String(investigacao._id);
-    }
-    throw erro;
-  }
 
   const systemPrompt = await carregarPromptSystem();
   const promptInicial = construirPromptInicial(anomalia, entidade);
