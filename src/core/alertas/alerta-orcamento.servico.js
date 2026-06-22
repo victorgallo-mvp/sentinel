@@ -75,7 +75,6 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
   const detalhes = await obterDetalhesContaAnuncio(contaAnuncioId, token);
   const status = Number(detalhes.account_status);
   const labelProblema = STATUS_PROBLEMA[status];
-
   const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
   if (!destinatario) return;
 
@@ -84,34 +83,55 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
     const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
     const jaAvisou = await Notificacao.exists({
-      contaId: conta._id,
-      tipo: 'alerta_orcamento',
-      canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta),
-      enviadaEm: { $gte: desde },
-      status: 'enviada',
+      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde }, status: 'enviada',
     });
-
     if (!jaAvisou) {
       const mensagem = [
         `🚨 *Conta de anúncio bloqueada — ${conta.nome}*`,
-        ``,
-        `Conta: \`${contaAnuncioId}\``,
-        `Status: *${labelProblema}*`,
-        ``,
+        ``, `Conta: \`${contaAnuncioId}\``, `Status: *${labelProblema}*`, ``,
         `Verifique o gerenciador de anúncios — as campanhas podem ter parado de entregar.`,
         `<!-- ${chaveAlerta} -->`,
       ].join('\n');
-
       let envioStatus = 'enviada';
       try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
-
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
     return;
   }
-  // account_status=1 (ACTIVE) → sem problema, nada a fazer
+
+  // Saldo pré-pago via spend_cap - amount_spent (só para contas marcadas como prepago)
+  if (conta.configuracoes?.prepago) {
+    const spendCap = Number(detalhes.spend_cap ?? 0);
+    const amountSpent = Number(detalhes.amount_spent ?? 0);
+    if (spendCap <= 0) return; // spend_cap não definido — não é pré-pago real
+
+    const saldoEstimadoReais = (spendCap - amountSpent) / 100;
+    const limiar = conta.configuracoes?.limiarAlertaSaldoReais ?? 50;
+    if (saldoEstimadoReais >= limiar) return;
+
+    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+    const chaveAlerta = `saldo_prepago_${contaAnuncioId}`;
+    const jaAvisou = await Notificacao.exists({
+      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde }, status: 'enviada',
+    });
+    if (jaAvisou) return;
+
+    const mensagem = [
+      `💳 *Saldo pré-pago baixo — ${conta.nome}*`,
+      ``, `Conta: \`${contaAnuncioId}\``,
+      `Saldo estimado: *R$ ${saldoEstimadoReais.toFixed(2)}* (limite: R$ ${limiar.toFixed(2)})`,
+      ``,
+      `Recarregue o saldo para evitar interrupção das campanhas.`,
+      `<!-- ${chaveAlerta} -->`,
+    ].join('\n');
+    let envioStatus = 'enviada';
+    try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+    await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+    logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais });
+  }
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {

@@ -88,6 +88,8 @@ const esquemaPatchConta = z.object({
     limiteCustoDiarioUsd: z.number().optional(),
     diasHistoricoBaseline: z.number().optional(),
     googleSheetsId: z.string().optional(),
+    prepago: z.boolean().optional(),
+    limiarAlertaSaldoReais: z.number().optional(),
   }),
 });
 
@@ -119,6 +121,7 @@ const esquemaPatchEntidade = z.object({
   monitorada: z.boolean().optional(),
   sensibilidadeCustom: z.number().nullable().optional(),
   metricasIgnoradas: z.array(z.string()).optional(),
+  metricasPrioritarias: z.array(z.string()).optional(),
 });
 
 /** GET /admin/entidades?contaId=&tipo=&monitorada= */
@@ -145,6 +148,7 @@ rotaAdmin.patch('/entidades/:id', async (req, res, next) => {
     if (dados.monitorada !== undefined) atualizacoes['configuracoes.monitorada'] = dados.monitorada;
     if (dados.sensibilidadeCustom !== undefined) atualizacoes['configuracoes.sensibilidadeCustom'] = dados.sensibilidadeCustom;
     if (dados.metricasIgnoradas !== undefined) atualizacoes['configuracoes.metricasIgnoradas'] = dados.metricasIgnoradas;
+    if (dados.metricasPrioritarias !== undefined) atualizacoes['configuracoes.metricasPrioritarias'] = dados.metricasPrioritarias;
 
     const entidade = await Entidade.findByIdAndUpdate(req.params.id, { $set: atualizacoes }, { new: true });
     if (!entidade) throw new ErroNaoEncontrado(`Entidade ${req.params.id} não encontrada`);

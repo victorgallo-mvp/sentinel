@@ -12,13 +12,9 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS } from '../../config/metricas.config.js';
+import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 
 export const rotaDashboard = Router();
-
-const METRICAS_DASHBOARD = [
-  'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpm', 'cpc',
-  'frequency', 'conversions', 'cost_per_conversion', 'purchase_roas',
-];
 
 function autenticarDashboard(req, res, next) {
   const token = req.query.token ?? req.headers['x-dashboard-token'];
@@ -72,7 +68,8 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
             const [atual, anterior] = await Promise.all([buscarMetricas(tsAtual), buscarMetricas(tsAnterior)]);
 
-            const metricas = METRICAS_DASHBOARD.map((chave) => {
+            const metricasEntidade = resolverMetricasEntidade(entidade);
+            const metricas = metricasEntidade.map((chave) => {
               const meta = CATALOGO_METRICAS[chave];
               if (!meta || meta.tipo === 'enum') return null;
               const vAtual = atual[chave] ?? null;

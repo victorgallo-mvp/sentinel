@@ -29,6 +29,8 @@ const configuracoesEntidadeSchema = new Schema(
     monitorada: { type: Boolean, default: true },
     sensibilidadeCustom: { type: Number, default: null },
     metricasIgnoradas: { type: [String], default: [] },
+    // Se vazio, usa mapeamento automático por objetivo. Se preenchido, exibe só essas.
+    metricasPrioritarias: { type: [String], default: [] },
     // Silenciamentos temporários criados via feedback ("snooze 4h") —
     // expiram naturalmente; entradas vencidas são ignoradas na checagem.
     silenciamentos: { type: [silenciamentoSchema], default: [] },

@@ -9,6 +9,16 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
+const cargaSaldoSchema = new Schema(
+  {
+    valor: { type: Number, required: true },    // em reais
+    dataHora: { type: Date, required: true },
+    amountSpentNaCarga: { type: Number, default: 0 }, // amount_spent da conta no momento da carga
+    contaAnuncioId: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const metaConfigSchema = new Schema(
   {
     bmId: { type: String, required: true },
@@ -42,6 +52,8 @@ const configuracoesSchema = new Schema(
     limiteCustoDiarioUsd: { type: Number, default: 3 },
     diasHistoricoBaseline: { type: Number, default: 21 },
     googleSheetsId: { type: String, default: '' },
+    prepago: { type: Boolean, default: false },
+    limiarAlertaSaldoReais: { type: Number, default: 50 },
   },
   { _id: false }
 );
@@ -54,6 +66,7 @@ const contaSchema = new Schema(
     metaConfig: { type: metaConfigSchema, required: true },
     notificacao: { type: notificacaoSchema, default: () => ({}) },
     configuracoes: { type: configuracoesSchema, default: () => ({}) },
+    cargas: { type: [cargaSaldoSchema], default: [] },
 
     ativo: { type: Boolean, default: true },
   },

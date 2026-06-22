@@ -272,8 +272,30 @@ export async function obterDetalhesContaAnuncio(contaAnuncioId, token) {
 
   return comRetry(async () => {
     const conta = new AdAccount(contaAnuncioId);
-    const dados = await conta.read(['id', 'name', 'account_status', 'balance', 'currency', 'amount_spent']);
+    const dados = await conta.read(['id', 'name', 'account_status', 'balance', 'currency', 'amount_spent', 'spend_cap']);
     return dados.export_all_data ? dados.export_all_data() : dados;
+  });
+}
+
+/**
+ * Busca `issues_info` de uma campanha, adset ou ad — retorna erros de entrega ativos.
+ * Retorna array de { error_code, error_summary, error_message } ou [].
+ *
+ * @param {'campaign'|'adset'|'ad'} tipo
+ * @param {string} metaId
+ * @param {string} [token]
+ */
+export async function obterIssuesInfo(tipo, metaId, token) {
+  const Classe = CLASSES_POR_TIPO[tipo];
+  if (!Classe) throw new ErroMetaApi(`Tipo inválido para issues_info: ${tipo}`);
+
+  obterApiMeta(token);
+
+  return comRetry(async () => {
+    const objeto = new Classe(metaId);
+    const dados = await objeto.read(['id', 'issues_info']);
+    const raw = dados.export_all_data ? dados.export_all_data() : dados;
+    return Array.isArray(raw.issues_info) ? raw.issues_info : [];
   });
 }
 
