@@ -97,7 +97,15 @@ async function enviarResumoDiarioConta(conta) {
 }
 
 async function obterMetricasRecentes(entidadeId) {
-  const desde48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  // Busca a última coleta de ONTEM (janela 24h = gasto do dia inteiro com date_preset=today).
+  // A coleta das 23:05 de ontem tem o acumulado completo do dia — é exatamente o que
+  // o relatório das 08h precisa mostrar.
+  const inicioOntem = new Date();
+  inicioOntem.setDate(inicioOntem.getDate() - 1);
+  inicioOntem.setHours(0, 0, 0, 0);
+
+  const inicioHoje = new Date();
+  inicioHoje.setHours(0, 0, 0, 0);
 
   const resultado = await query(
     `SELECT DISTINCT ON (metrica)
@@ -106,8 +114,9 @@ async function obterMetricasRecentes(entidadeId) {
      WHERE entidade_id = $1
        AND janela_horas = 24
        AND coletada_em >= $2
+       AND coletada_em < $3
      ORDER BY metrica, coletada_em DESC`,
-    [entidadeId, desde48h]
+    [entidadeId, inicioOntem, inicioHoje]
   );
 
   return Object.fromEntries(resultado.rows.map((r) => [r.metrica, Number(r.valor)]));

@@ -143,7 +143,9 @@ async function avaliarSaldoAdset(conta, adset, token) {
   const limiarReais = conta.configuracoes?.limiarAlertaOrcamentoReais ?? LIMIAR_REAIS_PADRAO;
   const pctRestante = budgetRemaining / budgetTotal;
 
-  if (pctRestante >= limiarPct && budgetRemaining >= limiarReais) return;
+  // Alerta apenas quando AMBOS estão abaixo do limiar — evita falso positivo
+  // em orçamentos pequenos onde o absoluto em R$ é sempre menor que o limiar.
+  if (pctRestante >= limiarPct || budgetRemaining >= limiarReais) return;
 
   // Throttle — não reavisa em menos de JANELA_RENOTIFICACAO_HORAS
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
