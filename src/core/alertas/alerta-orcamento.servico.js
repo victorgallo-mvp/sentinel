@@ -55,6 +55,10 @@ async function verificarOrcamentosConta(conta) {
   }
 
   // 2. Verifica orçamento restante de cada adset ativo
+  // Contas pré-pagas: o saldo relevante é o da conta (spend_cap), não o orçamento
+  // diário do adset — que vai a zero todo dia de forma normal e esperada.
+  if (conta.configuracoes?.prepago) return;
+
   const adsets = await Entidade.find({
     contaId: conta._id,
     tipo: 'adset',
