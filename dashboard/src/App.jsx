@@ -101,8 +101,10 @@ export default function App() {
             vazia="Nenhuma investigação"
             renderItem={(i) => (
               <div key={i.id} className="event-item">
-                <span className={`event-badge ${i.decidiuNotificar ? 'notificou' : 'silencioso'}`}>
-                  {i.decidiuNotificar ? '🔔 Notificou' : '🔕 Silenciou'}
+                <span className={`event-badge ${i.decidiuNotificar ? (i.notificacaoEnviada === false ? 'erro' : 'notificou') : 'silencioso'}`}>
+                  {i.decidiuNotificar
+                    ? (i.notificacaoEnviada === false ? '⚠️ Notif. falhou' : '🔔 Notificou')
+                    : '🔕 Silenciou'}
                 </span>
                 <span className="event-detail">
                   {i.recomendacao?.acao ?? i.motivoNaoNotificar ?? '—'}

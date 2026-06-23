@@ -24,8 +24,11 @@ export async function processarNotificacao(investigacaoId) {
   if (!investigacao) throw new ErroNaoEncontrado(`Investigação ${investigacaoId} não encontrada`);
 
   const anomalia = await Anomalia.findById(investigacao.anomaliaId);
+  if (!anomalia) throw new ErroNaoEncontrado(`Anomalia ${investigacao.anomaliaId} não encontrada`);
   const entidade = await Entidade.findById(anomalia.entidadeId);
+  if (!entidade) throw new ErroNaoEncontrado(`Entidade ${anomalia.entidadeId} não encontrada`);
   const conta = await Conta.findById(investigacao.contaId);
+  if (!conta) throw new ErroNaoEncontrado(`Conta ${investigacao.contaId} não encontrada`);
 
   const { podeEnviar, motivo } = await podeNotificar(conta, entidade, anomalia);
   if (!podeEnviar) {

@@ -116,6 +116,16 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       Notificacao.find({ enviadaEm: { $gte: desde24h } }).sort({ enviadaEm: -1 }).limit(10).lean(),
     ]);
 
+    // Verifica quais investigações que decidiram notificar geraram uma Notificacao real
+    const idsDecidiramNotificar = investigacoes.filter((i) => i.decidiuNotificar).map((i) => i._id);
+    const notificacoesDeInvestigacao = idsDecidiramNotificar.length > 0
+      ? await Notificacao.find({
+          investigacaoId: { $in: idsDecidiramNotificar },
+          status: { $ne: 'erro' },
+        }).select('investigacaoId').lean()
+      : [];
+    const idsComNotificacaoEnviada = new Set(notificacoesDeInvestigacao.map((n) => String(n.investigacaoId)));
+
     const totalEntidades = dadosContas.reduce((acc, c) => acc + c.entidades.length, 0);
 
     res.json({
@@ -141,6 +151,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       investigacoes: investigacoes.map((i) => ({
         id: String(i._id),
         decidiuNotificar: i.decidiuNotificar,
+        notificacaoEnviada: i.decidiuNotificar ? idsComNotificacaoEnviada.has(String(i._id)) : null,
         recomendacao: i.recomendacao ?? null,
         motivoNaoNotificar: i.motivoNaoNotificar ?? null,
         inicioEm: i.inicioEm,
