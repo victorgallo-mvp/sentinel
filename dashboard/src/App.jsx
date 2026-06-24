@@ -114,7 +114,7 @@ export default function App() {
             )}
           />
           <EventList
-            titulo="Notificações (24h)"
+            titulo={`Notificações (24h)${dados.stats.errosEnvio24h > 0 ? ` · ⚠️ ${dados.stats.errosEnvio24h} falha${dados.stats.errosEnvio24h > 1 ? 's' : ''} oculta${dados.stats.errosEnvio24h > 1 ? 's' : ''}` : ''}`}
             items={dados.notificacoes}
             vazia="Nenhuma notificação enviada"
             renderItem={(n) => (

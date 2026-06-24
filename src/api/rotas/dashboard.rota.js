@@ -110,10 +110,11 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       })
     );
 
-    const [anomalias, investigacoes, notificacoes] = await Promise.all([
+    const [anomalias, investigacoes, notificacoes, errosEnvio] = await Promise.all([
       Anomalia.find({ detectadaEm: { $gte: desde24h } }).sort({ detectadaEm: -1 }).limit(20).lean(),
       Investigacao.find({ inicioEm: { $gte: desde24h } }).sort({ inicioEm: -1 }).limit(10).lean(),
-      Notificacao.find({ enviadaEm: { $gte: desde24h } }).sort({ enviadaEm: -1 }).limit(10).lean(),
+      Notificacao.find({ enviadaEm: { $gte: desde24h }, status: 'enviada' }).sort({ enviadaEm: -1 }).limit(10).lean(),
+      Notificacao.countDocuments({ enviadaEm: { $gte: desde24h }, status: 'erro' }),
     ]);
 
     // Verifica quais investigações que decidiram notificar geraram uma Notificacao real
@@ -136,6 +137,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
         anomalias24h: anomalias.length,
         investigacoes24h: investigacoes.length,
         notificacoes24h: notificacoes.length,
+        errosEnvio24h: errosEnvio,
       },
       contas: dadosContas,
       anomalias: anomalias.map((a) => ({

@@ -35,6 +35,13 @@ export default function Header({ stats, ultimaAtualizacao, segundos }) {
           value={stats.notificacoes24h}
           cor={stats.notificacoes24h > 0 ? '#2563eb' : '#6b7280'}
         />
+        {stats.errosEnvio24h > 0 && (
+          <StatCard
+            label="Falhas de envio (24h)"
+            value={stats.errosEnvio24h}
+            cor="#dc2626"
+          />
+        )}
       </div>
     </header>
   );
