@@ -83,8 +83,9 @@ async function verificarErrosEntidadeIndividual(conta, entidade, token, destinat
     let envioStatus = 'enviada';
     try {
       await enviarMensagemWhatsapp(destinatario, mensagem);
-    } catch {
+    } catch (e) {
       envioStatus = 'erro';
+      logger.error({ msg: 'Falha ao enviar alerta de erro de entrega', conta: conta.nome, entidade: entidade.nome, destinatario, erro: e.message });
     }
 
     await Notificacao.create({

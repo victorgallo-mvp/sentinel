@@ -98,7 +98,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
         `<!-- ${chaveAlerta} -->`,
       ].join('\n');
       let envioStatus = 'enviada';
-      try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+      try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de conta bloqueada', conta: conta.nome, erro: e.message }); }
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
@@ -134,7 +134,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
           `<!-- ${chaveZerado} -->`,
         ].join('\n');
         let envioStatus = 'enviada';
-        try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+        try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo zerado', conta: conta.nome, destinatario, erro: e.message }); }
         await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
         logger.info({ msg: 'Alerta de saldo zerado enviado', conta: conta.nome, contaAnuncioId, status: envioStatus });
       }
@@ -158,7 +158,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       `<!-- ${chaveAlerta} -->`,
     ].join('\n');
     let envioStatus = 'enviada';
-    try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+    try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo baixo', conta: conta.nome, destinatario, erro: e.message }); }
     await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
     logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais, status: envioStatus });
   }
