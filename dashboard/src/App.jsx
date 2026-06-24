@@ -1,21 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header.jsx';
-import EntitySection from './components/EntitySection.jsx';
+import FilterBar from './components/FilterBar.jsx';
+import HierarchyView from './components/HierarchyView.jsx';
 import EventList from './components/EventList.jsx';
 import './App.css';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_MS = 60_000;
 const LS_SELECTED = 'sentinela_contas_selecionadas';
-const LS_NOMES = 'sentinela_nomes_customizados';
+const LS_NOMES    = 'sentinela_nomes_customizados';
+const LS_NIVEL    = 'sentinela_nivel_filtro';
 
 function getToken() {
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('token');
-  if (fromUrl) {
-    sessionStorage.setItem('dash_token', fromUrl);
-    return fromUrl;
-  }
+  if (fromUrl) { sessionStorage.setItem('dash_token', fromUrl); return fromUrl; }
   return sessionStorage.getItem('dash_token') ?? '';
 }
 
@@ -24,17 +23,16 @@ function lerStorage(chave, fallback) {
 }
 
 export default function App() {
-  const [token] = useState(getToken);
-  const [dados, setDados] = useState(null);
-  const [erro, setErro] = useState(null);
+  const [token]  = useState(getToken);
+  const [dados,  setDados]  = useState(null);
+  const [erro,   setErro]   = useState(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
 
-  // Filtros: IDs de contas visíveis e nomes customizados
   const [selectedIds, setSelectedIds] = useState(() => lerStorage(LS_SELECTED, null));
   const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
+  const [nivel, setNivel]             = useState(() => lerStorage(LS_NIVEL, 'todos'));
 
-  // Ref para não recalcular selectedIds após o primeiro fetch quando ainda é null
   const initedFilter = useRef(false);
 
   const buscarDados = useCallback(async () => {
@@ -48,11 +46,9 @@ export default function App() {
       setSegundos(0);
       setErro(null);
 
-      // Na primeira carga, inicializa selectedIds com todas as contas se nunca salvo
       if (!initedFilter.current) {
         initedFilter.current = true;
-        const saved = lerStorage(LS_SELECTED, null);
-        if (saved === null) {
+        if (lerStorage(LS_SELECTED, null) === null) {
           const todos = json.contas.map((c) => c.id);
           setSelectedIds(todos);
           localStorage.setItem(LS_SELECTED, JSON.stringify(todos));
@@ -73,8 +69,6 @@ export default function App() {
     return () => clearInterval(tick);
   }, [ultimaAtualizacao]);
 
-  // Fecha dropdown ao clicar fora (tratado no Header via state local)
-
   function handleToggle(id) {
     setSelectedIds((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
@@ -94,10 +88,15 @@ export default function App() {
   function handleSelectAll() {
     if (!dados) return;
     const todos = dados.contas.map((c) => c.id);
-    const todasSelecionadas = todos.every((id) => selectedIds.includes(id));
-    const next = todasSelecionadas ? [] : todos;
+    const todasOn = todos.every((id) => (selectedIds ?? todos).includes(id));
+    const next = todasOn ? [] : todos;
     setSelectedIds(next);
     localStorage.setItem(LS_SELECTED, JSON.stringify(next));
+  }
+
+  function handleNivel(n) {
+    setNivel(n);
+    localStorage.setItem(LS_NIVEL, JSON.stringify(n));
   }
 
   if (erro) {
@@ -111,13 +110,9 @@ export default function App() {
 
   if (!dados) return <div className="loading">Carregando...</div>;
 
-  // Contas para o seletor (com nomeOriginal sempre disponível)
+  const idsAtivos = selectedIds ?? dados.contas.map((c) => c.id);
   const contasParaFiltro = dados.contas.map((c) => ({ id: c.id, nomeOriginal: c.nome }));
-
-  // Contas visíveis (filtradas)
-  const contasVisiveis = dados.contas.filter(
-    (c) => !selectedIds || selectedIds.length === 0 || selectedIds.includes(c.id)
-  );
+  const contasVisiveis = dados.contas.filter((c) => idsAtivos.includes(c.id));
 
   return (
     <div className="app">
@@ -125,12 +120,17 @@ export default function App() {
         stats={dados.stats}
         ultimaAtualizacao={ultimaAtualizacao}
         segundos={segundos}
+      />
+
+      <FilterBar
         contas={contasParaFiltro}
-        selectedIds={selectedIds ?? dados.contas.map((c) => c.id)}
+        selectedIds={idsAtivos}
         customNames={customNames}
-        onToggle={handleToggle}
+        nivel={nivel}
+        onToggleConta={handleToggle}
         onRename={handleRename}
         onSelectAll={handleSelectAll}
+        onNivel={handleNivel}
       />
 
       <main className="main">
@@ -139,9 +139,7 @@ export default function App() {
           return (
             <section key={conta.id} className="conta-section">
               <h2 className="conta-nome">{nomeExibido}</h2>
-              {conta.entidades.map((entidade) => (
-                <EntitySection key={entidade.id} entidade={entidade} />
-              ))}
+              <HierarchyView entidades={conta.entidades} nivel={nivel} />
             </section>
           );
         })}

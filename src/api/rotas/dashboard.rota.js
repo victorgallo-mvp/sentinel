@@ -91,8 +91,13 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
             return {
               id: String(entidade._id),
+              metaId: entidade.metaId,
               nome: entidade.nome,
               tipo: entidade.tipo,
+              hierarquia: {
+                campanhaId: entidade.hierarquia?.campanhaId ?? null,
+                adsetId: entidade.hierarquia?.adsetId ?? null,
+              },
               ultimaSincronizacao: entidade.ultimaSincronizacaoEm ?? null,
               tsAtual: tsAtual ?? null,
               tsAnterior: tsAnterior ?? null,

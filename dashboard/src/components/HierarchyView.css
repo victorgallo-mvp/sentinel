@@ -1,0 +1,119 @@
+/* ── Modo plano (filtro de nível específico) ── */
+.hv-flat { display: flex; flex-direction: column; gap: 12px; }
+.hv-vazio { color: #9ca3af; font-size: 13px; font-style: italic; padding: 12px 0; }
+
+/* ── Árvore ── */
+.hv-tree { display: flex; flex-direction: column; gap: 10px; }
+
+/* Campaign */
+.hv-camp-wrapper { display: flex; flex-direction: column; gap: 0; }
+.hv-camp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Adsets (filhos da campanha) */
+.hv-adset-list {
+  margin-left: 32px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 14px;
+  border-left: 2px solid #e5e7eb;
+}
+
+.hv-adset-wrapper { display: flex; flex-direction: column; }
+.hv-adset-row { display: flex; align-items: flex-start; gap: 6px; }
+
+/* Ads (filhos do adset) */
+.hv-ad-list {
+  margin-left: 28px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 2px solid #f3f4f6;
+}
+.hv-ad-row { display: flex; align-items: flex-start; gap: 6px; }
+
+/* Toggle buttons */
+.hv-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 4px;
+  margin-top: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  transition: color .12s;
+  line-height: 1;
+}
+.hv-toggle:hover { color: #374151; }
+.hv-toggle--vazio { cursor: default; }
+.hv-toggle--sm { margin-top: 12px; font-size: 11px; }
+.hv-ad-dot { color: #d1d5db; margin-top: 12px; font-size: 13px; flex-shrink: 0; width: 20px; text-align: center; }
+
+/* ── Cards ── */
+.hv-card {
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+.hv-card--campaign {
+  border-color: #d1d5db;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+.hv-card--adset {
+  background: #fafafa;
+  border-color: #e5e7eb;
+}
+.hv-card--ad {
+  background: #f9fafb;
+  border-color: #f3f4f6;
+  box-shadow: none;
+}
+
+.hv-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.hv-card-nome { font-weight: 700; font-size: 14px; color: #111827; }
+.hv-card--adset .hv-card-nome { font-size: 13px; }
+.hv-card--ad .hv-card-nome { font-size: 12px; font-weight: 600; }
+
+.hv-card-tipo {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.hv-card-tipo--campaign { background: #eff6ff; color: #2563eb; }
+.hv-card-tipo--adset    { background: #f0fdf4; color: #16a34a; }
+.hv-card-tipo--ad       { background: #faf5ff; color: #7c3aed; }
+
+.hv-card-sinc { font-size: 11px; color: #9ca3af; margin-left: auto; }
+
+.hv-card-vazio { color: #9ca3af; font-size: 12px; font-style: italic; margin: 0; }
+
+.hv-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
