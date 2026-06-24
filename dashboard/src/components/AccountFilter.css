@@ -1,0 +1,107 @@
+.af-panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.af-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.af-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.af-btn-tudo {
+  font-size: 11px;
+  color: #2563eb;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.af-btn-tudo:hover { color: #1d4ed8; }
+
+.af-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  transition: background .15s;
+}
+.af-item.inativa { opacity: .45; }
+.af-item:hover { background: #f9fafb; }
+
+.af-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.af-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.af-nome {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-input-nome {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+}
+
+.af-btn-renomear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background .12s;
+}
+.af-btn-renomear:hover { background: #f3f4f6; color: #374151; }

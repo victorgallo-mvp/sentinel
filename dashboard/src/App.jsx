@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header.jsx';
 import EntitySection from './components/EntitySection.jsx';
 import EventList from './components/EventList.jsx';
@@ -6,6 +6,8 @@ import './App.css';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_MS = 60_000;
+const LS_SELECTED = 'sentinela_contas_selecionadas';
+const LS_NOMES = 'sentinela_nomes_customizados';
 
 function getToken() {
   const params = new URLSearchParams(window.location.search);
@@ -17,12 +19,23 @@ function getToken() {
   return sessionStorage.getItem('dash_token') ?? '';
 }
 
+function lerStorage(chave, fallback) {
+  try { return JSON.parse(localStorage.getItem(chave)) ?? fallback; } catch { return fallback; }
+}
+
 export default function App() {
   const [token] = useState(getToken);
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
+
+  // Filtros: IDs de contas visíveis e nomes customizados
+  const [selectedIds, setSelectedIds] = useState(() => lerStorage(LS_SELECTED, null));
+  const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
+
+  // Ref para não recalcular selectedIds após o primeiro fetch quando ainda é null
+  const initedFilter = useRef(false);
 
   const buscarDados = useCallback(async () => {
     if (!token) { setErro('Token não encontrado na URL. Adicione ?token=SEU_TOKEN'); return; }
@@ -34,22 +47,58 @@ export default function App() {
       setUltimaAtualizacao(new Date());
       setSegundos(0);
       setErro(null);
+
+      // Na primeira carga, inicializa selectedIds com todas as contas se nunca salvo
+      if (!initedFilter.current) {
+        initedFilter.current = true;
+        const saved = lerStorage(LS_SELECTED, null);
+        if (saved === null) {
+          const todos = json.contas.map((c) => c.id);
+          setSelectedIds(todos);
+          localStorage.setItem(LS_SELECTED, JSON.stringify(todos));
+        }
+      }
     } catch {
       setErro('Não foi possível conectar ao servidor.');
     }
   }, [token]);
 
   useEffect(() => { buscarDados(); }, [buscarDados]);
-
   useEffect(() => {
-    const intervalo = setInterval(buscarDados, REFRESH_MS);
-    return () => clearInterval(intervalo);
+    const i = setInterval(buscarDados, REFRESH_MS);
+    return () => clearInterval(i);
   }, [buscarDados]);
-
   useEffect(() => {
     const tick = setInterval(() => setSegundos((s) => s + 1), 1000);
     return () => clearInterval(tick);
   }, [ultimaAtualizacao]);
+
+  // Fecha dropdown ao clicar fora (tratado no Header via state local)
+
+  function handleToggle(id) {
+    setSelectedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      localStorage.setItem(LS_SELECTED, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function handleRename(id, nome) {
+    setCustomNames((prev) => {
+      const next = { ...prev, [id]: nome };
+      localStorage.setItem(LS_NOMES, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function handleSelectAll() {
+    if (!dados) return;
+    const todos = dados.contas.map((c) => c.id);
+    const todasSelecionadas = todos.every((id) => selectedIds.includes(id));
+    const next = todasSelecionadas ? [] : todos;
+    setSelectedIds(next);
+    localStorage.setItem(LS_SELECTED, JSON.stringify(next));
+  }
 
   if (erro) {
     return (
@@ -60,23 +109,42 @@ export default function App() {
     );
   }
 
-  if (!dados) {
-    return <div className="loading">Carregando...</div>;
-  }
+  if (!dados) return <div className="loading">Carregando...</div>;
+
+  // Contas para o seletor (com nomeOriginal sempre disponível)
+  const contasParaFiltro = dados.contas.map((c) => ({ id: c.id, nomeOriginal: c.nome }));
+
+  // Contas visíveis (filtradas)
+  const contasVisiveis = dados.contas.filter(
+    (c) => !selectedIds || selectedIds.length === 0 || selectedIds.includes(c.id)
+  );
 
   return (
     <div className="app">
-      <Header stats={dados.stats} ultimaAtualizacao={ultimaAtualizacao} segundos={segundos} />
+      <Header
+        stats={dados.stats}
+        ultimaAtualizacao={ultimaAtualizacao}
+        segundos={segundos}
+        contas={contasParaFiltro}
+        selectedIds={selectedIds ?? dados.contas.map((c) => c.id)}
+        customNames={customNames}
+        onToggle={handleToggle}
+        onRename={handleRename}
+        onSelectAll={handleSelectAll}
+      />
 
       <main className="main">
-        {dados.contas.map((conta) => (
-          <section key={conta.id} className="conta-section">
-            <h2 className="conta-nome">{conta.nome}</h2>
-            {conta.entidades.map((entidade) => (
-              <EntitySection key={entidade.id} entidade={entidade} />
-            ))}
-          </section>
-        ))}
+        {contasVisiveis.map((conta) => {
+          const nomeExibido = customNames[conta.id] ?? conta.nome;
+          return (
+            <section key={conta.id} className="conta-section">
+              <h2 className="conta-nome">{nomeExibido}</h2>
+              {conta.entidades.map((entidade) => (
+                <EntitySection key={entidade.id} entidade={entidade} />
+              ))}
+            </section>
+          );
+        })}
 
         <div className="events-grid">
           <EventList
