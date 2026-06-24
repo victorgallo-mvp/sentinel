@@ -22,6 +22,7 @@ import { enfileirarRelatoriosSemanais, criarWorkerRelatorio } from './relatorio-
 import { executarLimpezaDadosAntigos } from './limpeza-dados-antigos.job.js';
 import { executarAlertaOrcamento } from './alerta-orcamento.job.js';
 import { executarAlertaEntrega } from './alerta-entrega.job.js';
+import { executarAlertaPerformance } from './alerta-performance.job.js';
 import { executarResumoDiario } from './resumo-diario.job.js';
 import { criarWorkersInvestigacao } from './investigacao.job.js';
 import { logger } from '../infra/logger.js';
@@ -31,6 +32,7 @@ const TAREFAS_CRON = [
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },
   { nome: 'deteccao-anomalias', expressao: '20 * * * *', executar: executarDeteccaoAnomalias },
+  { nome: 'alerta-performance', expressao: '25 * * * *', executar: executarAlertaPerformance },
   { nome: 'sincronizar-entidades', expressao: '0 1 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
   { nome: 'resumo-diario', expressao: '0 8 * * *', executar: executarResumoDiario },

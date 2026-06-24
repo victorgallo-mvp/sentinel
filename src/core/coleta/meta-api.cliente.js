@@ -300,6 +300,32 @@ export async function obterIssuesInfo(tipo, metaId, token) {
 }
 
 /**
+ * Busca `effective_status` e `issues_info` de uma campanha, adset ou ad em uma única chamada.
+ * Usado pelo alerta de entrega para detectar pausas + erros de entrega juntos.
+ *
+ * @param {'campaign'|'adset'|'ad'} tipo
+ * @param {string} metaId
+ * @param {string} [token]
+ * @returns {Promise<{ effectiveStatus: string|null, issues: Array }>}
+ */
+export async function obterStatusEIssues(tipo, metaId, token) {
+  const Classe = CLASSES_POR_TIPO[tipo];
+  if (!Classe) throw new ErroMetaApi(`Tipo inválido para status+issues: ${tipo}`);
+
+  obterApiMeta(token);
+
+  return comRetry(async () => {
+    const objeto = new Classe(metaId);
+    const dados = await objeto.read(['id', 'effective_status', 'issues_info']);
+    const raw = dados.export_all_data ? dados.export_all_data() : dados;
+    return {
+      effectiveStatus: raw.effective_status ?? null,
+      issues: Array.isArray(raw.issues_info) ? raw.issues_info : [],
+    };
+  });
+}
+
+/**
  * @param {string} campanhaMetaId
  * @param {string} [token]
  */

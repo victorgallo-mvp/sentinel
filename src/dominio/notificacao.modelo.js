@@ -15,7 +15,7 @@ const notificacaoSchema = new Schema(
     contaId: { type: Schema.Types.ObjectId, ref: 'Conta', required: true, index: true },
     tipo: {
       type: String,
-      enum: ['investigacao', 'alerta_orcamento', 'resumo_diario'],
+      enum: ['investigacao', 'alerta_orcamento', 'alerta_performance', 'resumo_diario'],
       default: 'investigacao',
       index: true,
     },

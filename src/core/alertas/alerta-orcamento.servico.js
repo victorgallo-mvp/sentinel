@@ -9,6 +9,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { obterConfiguracaoAdset, obterConfiguracaoCampanha, obterDetalhesContaAnuncio } from '../coleta/meta-api.cliente.js';
+import { query } from '../../infra/postgres.js';
 // `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
 // Para problemas de pagamento, usamos exclusivamente account_status.
 import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
@@ -17,7 +18,8 @@ import { logger } from '../../infra/logger.js';
 
 const LIMIAR_PCT_PADRAO = 0.20;   // 20% restante do orçamento diário
 const LIMIAR_REAIS_PADRAO = 30;   // R$30 restante (em qualquer cenário)
-const JANELA_RENOTIFICACAO_HORAS = 4;
+const JANELA_RENOTIFICACAO_HORAS = 4;        // alertas transitórios (saldo baixo)
+const JANELA_RENOTIFICACAO_PERSISTENTE = 24; // alertas persistentes (zerado, bloqueado)
 
 // account_status da Meta API que indicam problema de pagamento/bloqueio
 const STATUS_PROBLEMA = {
@@ -84,7 +86,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
 
   // Conta com status problemático
   if (labelProblema) {
-    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
     const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
     const jaAvisou = await Notificacao.exists({
       contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
@@ -119,10 +121,11 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
 
     // Saldo zerado — entrega interrompida (chave separada para não ser bloqueado pelo alerta de "baixo")
     if (saldoEstimadoReais <= 0) {
+      const janelaSaldo = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
       const chaveZerado = `saldo_prepago_zerado_${contaAnuncioId}`;
       const jaAvisouZerado = await Notificacao.exists({
         contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-        conteudo: new RegExp(chaveZerado), enviadaEm: { $gte: desde },
+        conteudo: new RegExp(chaveZerado), enviadaEm: { $gte: janelaSaldo },
       });
       if (!jaAvisouZerado) {
         const mensagem = [
@@ -149,10 +152,21 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     });
     if (jaAvisou) return;
 
+    // Burn rate: estima horas restantes com base no gasto de ontem
+    let burnRateLinha = '';
+    try {
+      const gastoOntem = await calcularGastoDiarioOntem(conta._id);
+      if (gastoOntem && gastoOntem > 0) {
+        const taxaHoraria = gastoOntem / 24;
+        const horasRestantes = Math.round(saldoEstimadoReais / taxaHoraria);
+        burnRateLinha = `\nRitmo atual: *R$ ${taxaHoraria.toFixed(2)}/h* → saldo acaba em ~*${horasRestantes}h*`;
+      }
+    } catch { /* não crítico — mensagem enviada sem burn rate */ }
+
     const mensagem = [
       `💳 *Saldo pré-pago baixo — ${conta.nome}*`,
       ``, `Conta: \`${contaAnuncioId}\``,
-      `Saldo estimado: *R$ ${saldoEstimadoReais.toFixed(2)}* (limite: R$ ${limiar.toFixed(2)})`,
+      `Saldo estimado: *R$ ${saldoEstimadoReais.toFixed(2)}* (limite: R$ ${limiar.toFixed(2)})${burnRateLinha}`,
       ``,
       `Recarregue o saldo para evitar interrupção das campanhas.`,
       `<!-- ${chaveAlerta} -->`,
@@ -162,6 +176,37 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
     logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais, status: envioStatus });
   }
+}
+
+/**
+ * Estima o gasto diário médio da conta (ontem) para calcular horas restantes de saldo.
+ * Usa o valor máximo de `spend` (24h) coletado ontem para cada entidade da conta.
+ * Retorna null se não houver dados suficientes.
+ */
+async function calcularGastoDiarioOntem(contaId) {
+  const entidades = await Entidade.find({ contaId }).select('_id').lean();
+  if (!entidades.length) return null;
+
+  const entidadeIds = entidades.map((e) => String(e._id));
+  const ontemFim = new Date();
+  ontemFim.setUTCHours(0, 0, 0, 0);
+  const ontemInicio = new Date(ontemFim);
+  ontemInicio.setDate(ontemInicio.getDate() - 1);
+
+  const res = await query(
+    `SELECT COALESCE(SUM(max_gasto), 0)::float AS gasto_total
+     FROM (
+       SELECT entidade_id, MAX(valor) AS max_gasto
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
+         AND coletada_em >= $2 AND coletada_em < $3
+       GROUP BY entidade_id
+     ) e`,
+    [entidadeIds, ontemInicio, ontemFim]
+  );
+
+  const gasto = Number(res.rows[0]?.gasto_total ?? 0);
+  return gasto > 0 ? gasto : null;
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {
