@@ -88,7 +88,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
     const jaAvisou = await Notificacao.exists({
       contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde }, status: 'enviada',
+      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde },
     });
     if (!jaAvisou) {
       const mensagem = [
@@ -116,10 +116,36 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     if (saldoEstimadoReais >= limiar) return;
 
     const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+
+    // Saldo zerado — entrega interrompida (chave separada para não ser bloqueado pelo alerta de "baixo")
+    if (saldoEstimadoReais <= 0) {
+      const chaveZerado = `saldo_prepago_zerado_${contaAnuncioId}`;
+      const jaAvisouZerado = await Notificacao.exists({
+        contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+        conteudo: new RegExp(chaveZerado), enviadaEm: { $gte: desde },
+      });
+      if (!jaAvisouZerado) {
+        const mensagem = [
+          `🔴 *Saldo zerado — entrega interrompida — ${conta.nome}*`,
+          ``, `Conta: \`${contaAnuncioId}\``,
+          `Saldo estimado: *R$ 0,00*`,
+          ``,
+          `As campanhas pararam de entregar por falta de saldo pré-pago. Recarregue para retomar.`,
+          `<!-- ${chaveZerado} -->`,
+        ].join('\n');
+        let envioStatus = 'enviada';
+        try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
+        await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+        logger.info({ msg: 'Alerta de saldo zerado enviado', conta: conta.nome, contaAnuncioId, status: envioStatus });
+      }
+      return;
+    }
+
+    // Saldo baixo (entre 0 e limiar)
     const chaveAlerta = `saldo_prepago_${contaAnuncioId}`;
     const jaAvisou = await Notificacao.exists({
       contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde }, status: 'enviada',
+      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde },
     });
     if (jaAvisou) return;
 
@@ -134,7 +160,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     let envioStatus = 'enviada';
     try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch { envioStatus = 'erro'; }
     await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
-    logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais });
+    logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais, status: envioStatus });
   }
 }
 

@@ -65,7 +65,6 @@ async function verificarErrosEntidadeIndividual(conta, entidade, token, destinat
       canal: 'whatsapp',
       conteudo: new RegExp(chaveAlerta),
       enviadaEm: { $gte: desde },
-      status: 'enviada',
     });
     if (jaAvisou) continue;
 
