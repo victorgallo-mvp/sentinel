@@ -10,6 +10,7 @@ import { encerrarPostgres } from './src/infra/postgres.js';
 import { encerrarRedis } from './src/infra/redis.js';
 import { criarServidor } from './src/api/servidor.js';
 import { iniciarOrquestrador, encerrarOrquestrador } from './src/jobs/orquestrador.js';
+import { executarSincronizacaoEntidades } from './src/jobs/sincronizar-entidades.job.js';
 import { config } from './src/config/index.js';
 import { logger } from './src/infra/logger.js';
 
@@ -22,6 +23,18 @@ async function main() {
   });
 
   const orquestrador = iniciarOrquestrador();
+
+  // Sincroniza entidades logo no boot para puxar novas campanhas/adsets/ads
+  // sem esperar pelo próximo cron (que roda a cada 2h)
+  setImmediate(async () => {
+    try {
+      logger.info({ msg: 'Sync de entidades no startup' });
+      await executarSincronizacaoEntidades();
+      logger.info({ msg: 'Sync de entidades no startup concluído' });
+    } catch (erro) {
+      logger.error({ msg: 'Sync de entidades no startup falhou', erro: erro.message });
+    }
+  });
 
   let encerrando = false;
   const encerrar = async (sinal) => {

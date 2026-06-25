@@ -45,9 +45,15 @@ async function autenticarDashboard(req, res, next) {
 
 function corsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'x-dashboard-token, Content-Type');
 }
+
+// Preflight catch-all: responde OPTIONS para qualquer rota do dashboard
+rotaDashboard.options('*', (req, res) => {
+  corsHeaders(res);
+  res.sendStatus(204);
+});
 
 const STATUS_CRITICO = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
 const STATUS_PAUSADO_SET = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'ARCHIVED', 'DELETED']);
@@ -83,11 +89,6 @@ function computarStatusConta(entidades) {
 
   return 'normal';
 }
-
-rotaDashboard.options('/data', (req, res) => {
-  corsHeaders(res);
-  res.sendStatus(204);
-});
 
 rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
   corsHeaders(res);
@@ -276,11 +277,6 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 });
 
 // ── Catálogo de métricas disponíveis ──────────────────────────────────────
-rotaDashboard.options('/metricas/catalogo', (req, res) => {
-  corsHeaders(res);
-  res.sendStatus(204);
-});
-
 rotaDashboard.get('/metricas/catalogo', autenticarDashboard, (req, res) => {
   corsHeaders(res);
   const catalogo = Object.entries(CATALOGO_METRICAS)
@@ -290,15 +286,8 @@ rotaDashboard.get('/metricas/catalogo', autenticarDashboard, (req, res) => {
 });
 
 // ── Seleção de métricas por conta ─────────────────────────────────────────
-rotaDashboard.options('/contas/:contaId/metricas', (req, res) => {
-  corsHeaders(res);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
-  res.sendStatus(204);
-});
-
 rotaDashboard.patch('/contas/:contaId/metricas', autenticarDashboard, async (req, res, next) => {
   corsHeaders(res);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
   try {
     const { contaId } = req.params;
     const { metricasSelecionadas } = req.body;

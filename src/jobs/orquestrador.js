@@ -8,7 +8,7 @@
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
  * - Detecção de anomalias: a cada hora, no minuto 20 (após a coleta)
- * - Sincronização de entidades: diariamente às 01:00 (antes dos baselines)
+ * - Sincronização de entidades: a cada 2 horas (minuto 30)
  * - Atualização de baselines: diariamente às 02:00
  * - Resumo diário WhatsApp: todos os dias às 08:00
  * - Relatório semanal IA: segundas-feiras às 08:00
@@ -36,7 +36,7 @@ const TAREFAS_CRON = [
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },
   { nome: 'deteccao-anomalias', expressao: '20 * * * *', executar: executarDeteccaoAnomalias },
   { nome: 'alerta-performance', expressao: '25 * * * *', executar: executarAlertaPerformance },
-  { nome: 'sincronizar-entidades', expressao: '0 1 * * *', executar: executarSincronizacaoEntidades },
+  { nome: 'sincronizar-entidades', expressao: '30 */2 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
   { nome: 'resumo-diario', expressao: '0 8 * * *', executar: executarResumoDiario },
   { nome: 'relatorio-semanal', expressao: '0 8 * * 1', executar: enfileirarRelatoriosSemanais },
