@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import HierarchyView from './HierarchyView.jsx';
 import MetricSelector from './MetricSelector.jsx';
 import './AccountModal.css';
@@ -38,13 +39,14 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
 
   return (
     <>
-    {mostrarSelector && (
+    {mostrarSelector && createPortal(
       <MetricSelector
         contaId={conta.id}
         selecionadas={conta.metricasSelecionadas ?? []}
         onClose={() => setMostrarSelector(false)}
         onSalvo={(novas) => { onMetricasSalvas?.(conta.id, novas); }}
-      />
+      />,
+      document.body
     )}
     <div className="am-overlay" onClick={onClose}>
       <div className="am-panel" onClick={(e) => e.stopPropagation()}>
