@@ -163,3 +163,51 @@
   color: #d97706;
   white-space: nowrap;
 }
+
+/* ── Status com erro ── */
+.hv-card--erro {
+  border-color: #fca5a5;
+  background: #fff8f8;
+}
+
+.hv-card-status-erro {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #dc2626;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* ── Motivo do status ── */
+.hv-card-motivo {
+  font-size: 11px;
+  color: #6b7280;
+  margin: -8px 0 10px;
+  font-style: italic;
+}
+
+/* ── Issues badges ── */
+.hv-card-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+
+.hv-card-issue-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.hv-card-issue-badge--mais {
+  background: #f3f4f6;
+  color: #6b7280;
+}

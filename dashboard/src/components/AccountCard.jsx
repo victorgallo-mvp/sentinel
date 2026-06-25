@@ -1,20 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import HierarchyView from './HierarchyView.jsx';
 import './AccountCard.css';
 
-const NIVEIS = [
-  { id: 'todos',    label: 'Todos' },
-  { id: 'campaign', label: 'Campanha' },
-  { id: 'adset',    label: 'Conjunto' },
-  { id: 'ad',       label: 'Anúncio' },
-];
+const STATUS_COR   = { critico: '#dc2626', atencao: '#f59e0b', pausado: '#9ca3af', normal: '#16a34a' };
+const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', pausado: 'Conta pausada', normal: 'Sem alertas' };
 
-const STATUS_COR   = { critico: '#dc2626', atencao: '#f59e0b', normal: '#16a34a' };
-const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', normal: 'Sem alertas' };
-
-export default function AccountCard({ conta, favorito, customName, onFavorito, onRename }) {
-  const [expandido, setExpandido] = useState(false);
-  const [nivel, setNivel]         = useState('todos');
+export default function AccountCard({ conta, favorito, customName, onFavorito, onRename, onClick }) {
   const [editando, setEditando]   = useState(false);
   const [valorEdit, setValorEdit] = useState('');
   const inputRef = useRef(null);
@@ -27,7 +17,7 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { gastoHoje, anomalias24h, notificacoes24h, status } = conta.resumo;
+  const { gastoHoje, status, alertas = [] } = conta.resumo;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -46,15 +36,23 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
     if (e.key === 'Escape') setEditando(false);
   }
 
+  function handleCardClick() {
+    if (!editando && onClick) onClick(conta.id);
+  }
+
   return (
-    <div className={`ac-card ac-card--${status} ${expandido ? 'ac-card--expandido' : ''}`}>
+    <div
+      className={`ac-card ac-card--${status}`}
+      onClick={handleCardClick}
+      style={{ cursor: onClick ? 'pointer' : undefined }}
+    >
       {/* ── Linha do header ── */}
-      <div className="ac-header" onClick={() => !editando && setExpandido((v) => !v)}>
+      <div className="ac-header">
         {/* Status dot */}
         <span
           className="ac-status-dot"
-          style={{ background: STATUS_COR[status] }}
-          title={STATUS_TITLE[status]}
+          style={{ background: STATUS_COR[status] ?? '#9ca3af' }}
+          title={STATUS_TITLE[status] ?? status}
         />
 
         {/* Favorito */}
@@ -78,9 +76,7 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
               onKeyDown={handleKeyDown}
             />
           ) : (
-            <span className="ac-nome" onClick={() => setExpandido((v) => !v)}>
-              {nomeExibido}
-            </span>
+            <span className="ac-nome">{nomeExibido}</span>
           )}
           <button className="ac-rename-btn" onClick={iniciarEdicao} title="Renomear">✏</button>
         </div>
@@ -92,42 +88,25 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
               R$ {gastoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </span>
           )}
-          {notificacoes24h > 0 && (
+          {alertas.length > 0 && (
             <span className="ac-badge ac-badge--critico">
-              {notificacoes24h} alerta{notificacoes24h !== 1 ? 's' : ''}
+              {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
             </span>
           )}
-          {anomalias24h > 0 && notificacoes24h === 0 && (
-            <span className="ac-badge ac-badge--atencao">
-              {anomalias24h} anomalia{anomalias24h !== 1 ? 's' : ''}
-            </span>
+          {status === 'atencao' && alertas.length === 0 && (
+            <span className="ac-badge ac-badge--atencao">atenção</span>
+          )}
+          {status === 'pausado' && (
+            <span className="ac-badge ac-badge--pausado">pausada</span>
           )}
           {status === 'normal' && (
             <span className="ac-badge ac-badge--normal">sem alertas</span>
           )}
         </div>
 
-        {/* Toggle */}
-        <span className="ac-toggle">{expandido ? '▾' : '▸'}</span>
+        {/* Indicador clicável */}
+        <span className="ac-toggle">▸</span>
       </div>
-
-      {/* ── Conteúdo expandido ── */}
-      {expandido && (
-        <div className="ac-body">
-          <div className="ac-niveis">
-            {NIVEIS.map((n) => (
-              <button
-                key={n.id}
-                className={`ac-nivel-btn ${nivel === n.id ? 'ativo' : ''}`}
-                onClick={() => setNivel(n.id)}
-              >
-                {n.label}
-              </button>
-            ))}
-          </div>
-          <HierarchyView entidades={conta.entidades} nivel={nivel} />
-        </div>
-      )}
     </div>
   );
 }

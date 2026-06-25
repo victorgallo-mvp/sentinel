@@ -34,6 +34,34 @@ const STATUS_LABEL = {
 };
 
 /**
+ * Mapeia effectiveStatus e issues para uma string legível em português.
+ * @param {string} effectiveStatus
+ * @param {Array} issues - lista de issues_info da Meta API
+ * @param {string} tipo - 'campaign'|'adset'|'ad'
+ * @returns {string|null}
+ */
+function computarMotivoStatus(effectiveStatus, issues = [], tipo = '') {
+  switch (effectiveStatus) {
+    case 'PAUSED':
+      return tipo === 'campaign' ? 'Pausada manualmente' : 'Pausada manualmente';
+    case 'CAMPAIGN_PAUSED':
+      return 'Pausada pela campanha';
+    case 'ADSET_PAUSED':
+      return 'Pausada pelo conjunto';
+    case 'WITH_ISSUES':
+      return issues[0]?.error_summary ?? 'Problema de entrega';
+    case 'DISAPPROVED':
+      return 'Reprovado pela Meta';
+    case 'PENDING_BILLING_INFO':
+      return 'Pendente de pagamento';
+    case 'ACTIVE':
+      return null;
+    default:
+      return null;
+  }
+}
+
+/**
  * Retorna true se o status deve gerar notificação WhatsApp,
  * considerando o nível hierárquico da entidade.
  */
@@ -89,7 +117,12 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
   if (effectiveStatus && effectiveStatus !== 'ACTIVE') {
     // Sempre atualiza MongoDB para manter status atual (usado na verificação 1C)
     if (effectiveStatus !== entidade.status) {
-      await Entidade.findByIdAndUpdate(entidade._id, { status: effectiveStatus });
+      const motivoStatus = computarMotivoStatus(effectiveStatus, issues, entidade.tipo);
+      await Entidade.findByIdAndUpdate(entidade._id, {
+        status: effectiveStatus,
+        issues: issues ?? [],
+        motivoStatus,
+      });
     }
     // Só envia alerta para mudanças acionáveis
     if (deveAlertarStatus(effectiveStatus, entidade.tipo)) {
@@ -98,7 +131,13 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
     return;
   }
 
-  // Entidade ACTIVE — verifica erros de entrega
+  // Entidade ACTIVE — atualiza issues no MongoDB e verifica erros de entrega
+  const motivoStatusAtual = issues.length > 0 ? computarMotivoStatus('WITH_ISSUES', issues, entidade.tipo) : null;
+  await Entidade.findByIdAndUpdate(entidade._id, {
+    issues: issues ?? [],
+    motivoStatus: motivoStatusAtual,
+  });
+
   if (!issues.length) return;
 
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);

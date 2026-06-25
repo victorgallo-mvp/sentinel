@@ -4,13 +4,14 @@
   border-radius: 12px;
   overflow: hidden;
   transition: box-shadow .15s, border-color .15s;
+  cursor: pointer;
 }
 .ac-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-.ac-card--expandido { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
 
 /* Status border accent */
 .ac-card--critico { border-left: 4px solid #dc2626; }
 .ac-card--atencao { border-left: 4px solid #f59e0b; }
+.ac-card--pausado { border-left: 4px solid #9ca3af; }
 .ac-card--normal  { border-left: 4px solid #e5e7eb; }
 
 /* ── Header ── */
@@ -19,12 +20,10 @@
   align-items: center;
   gap: 10px;
   padding: 14px 18px;
-  cursor: pointer;
   user-select: none;
   transition: background .12s;
 }
-.ac-header:hover { background: #fafafa; }
-.ac-card--expandido .ac-header { background: #f9fafb; border-bottom: 1px solid #f3f4f6; }
+.ac-card:hover .ac-header { background: #fafafa; }
 
 .ac-status-dot {
   width: 9px;
@@ -64,7 +63,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
 }
 
 .ac-nome-input {
@@ -121,47 +119,11 @@
 }
 .ac-badge--critico { background: #fee2e2; color: #dc2626; }
 .ac-badge--atencao { background: #fef3c7; color: #d97706; }
+.ac-badge--pausado { background: #f3f4f6; color: #6b7280; }
 .ac-badge--normal  { background: #f0fdf4; color: #16a34a; }
 
 .ac-toggle {
   font-size: 12px;
   color: #9ca3af;
   flex-shrink: 0;
-  transition: transform .15s;
-}
-
-/* ── Body expandido ── */
-.ac-body {
-  padding: 16px 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.ac-niveis {
-  display: flex;
-  background: #f3f4f6;
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-  width: fit-content;
-}
-
-.ac-nivel-btn {
-  padding: 5px 14px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  background: transparent;
-  color: #6b7280;
-  transition: all .15s;
-  white-space: nowrap;
-}
-.ac-nivel-btn:hover { color: #374151; background: #e5e7eb; }
-.ac-nivel-btn.ativo {
-  background: #fff;
-  color: #111827;
-  box-shadow: 0 1px 3px rgba(0,0,0,.12);
 }

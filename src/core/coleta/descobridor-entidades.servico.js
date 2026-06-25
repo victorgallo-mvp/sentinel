@@ -48,13 +48,16 @@ export async function descobrirContasAnuncio(bmId, token) {
  * @param {string} contaAnuncioId - `act_<id>`
  * @returns {Promise<{criadas: number, atualizadas: number, total: number}>}
  */
-export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apenasAtivos = true, token } = {}) {
-  const arvore = await descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos, token });
+export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apenasAtivos = false, token } = {}) {
+  // Busca ACTIVE + PAUSED (Meta API default quando não há filtro)
+  const arvore = await descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos: false, token });
 
   let criadas = 0;
   let atualizadas = 0;
+  const metaIdsSeen = new Set(); // rastreia todos os metaIds vistos
 
   for (const campanha of arvore) {
+    metaIdsSeen.add(campanha.id);
     const { criada: criadaCampanha } = await upsertEntidade(contaId, {
       tipo: 'campaign',
       metaId: campanha.id,
@@ -66,6 +69,7 @@ export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apen
     criadaCampanha ? criadas++ : atualizadas++;
 
     for (const adset of campanha.adsets) {
+      metaIdsSeen.add(adset.id);
       const { criada: criadaAdset } = await upsertEntidade(contaId, {
         tipo: 'adset',
         metaId: adset.id,
@@ -77,6 +81,7 @@ export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apen
       criadaAdset ? criadas++ : atualizadas++;
 
       for (const ad of adset.ads) {
+        metaIdsSeen.add(ad.id);
         const { criada: criadaAd } = await upsertEntidade(contaId, {
           tipo: 'ad',
           metaId: ad.id,
@@ -90,19 +95,55 @@ export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apen
     }
   }
 
+  // Desativa entidades monitoradas que não foram vistas na sincronização (removidas/arquivadas na Meta)
+  const entidadesMonitoradas = await Entidade.find({
+    contaId,
+    'hierarquia.contaAnuncioId': contaAnuncioId,
+    'configuracoes.monitorada': true,
+  }).select('metaId _id tipo').lean();
+
+  const idsOrfas = entidadesMonitoradas
+    .filter((e) => !metaIdsSeen.has(e.metaId))
+    .map((e) => e._id);
+
+  let desativadas = 0;
+  if (idsOrfas.length > 0) {
+    const result = await Entidade.updateMany(
+      { _id: { $in: idsOrfas } },
+      { $set: { 'configuracoes.monitorada': false, status: 'DELETED', motivoStatus: null } }
+    );
+    desativadas = result.modifiedCount ?? idsOrfas.length;
+    logger.info({ msg: 'Entidades órfãs desativadas', contaAnuncioId, desativadas, ids: idsOrfas.map(String) });
+  }
+
   const total = criadas + atualizadas;
-  logger.info({ msg: 'Sincronização de entidades concluída', contaAnuncioId, criadas, atualizadas, total });
-  return { criadas, atualizadas, total };
+  logger.info({ msg: 'Sincronização de entidades concluída', contaAnuncioId, criadas, atualizadas, desativadas, total });
+  return { criadas, atualizadas, desativadas, total };
+}
+
+function computarMotivoStatus(status, tipo) {
+  switch (status) {
+    case 'PAUSED':          return 'Pausada manualmente';
+    case 'CAMPAIGN_PAUSED': return 'Pausada pela campanha';
+    case 'ADSET_PAUSED':    return 'Pausada pelo conjunto';
+    case 'WITH_ISSUES':     return 'Problema de entrega';
+    case 'DISAPPROVED':     return 'Reprovado pela Meta';
+    case 'PENDING_BILLING_INFO': return 'Pendente de pagamento';
+    case 'ACTIVE':          return null;
+    default:                return null;
+  }
 }
 
 async function upsertEntidade(contaId, dados) {
   const existente = await Entidade.findOne({ contaId, metaId: dados.metaId, tipo: dados.tipo });
+  const motivoStatus = computarMotivoStatus(dados.status, dados.tipo);
 
   if (existente) {
     existente.nome = dados.nome;
     existente.status = dados.status;
     existente.objetivo = dados.objetivo;
     existente.hierarquia = dados.hierarquia;
+    existente.motivoStatus = motivoStatus;
     await existente.save();
     return { criada: false, entidade: existente };
   }
@@ -115,6 +156,7 @@ async function upsertEntidade(contaId, dados) {
     hierarquia: dados.hierarquia,
     objetivo: dados.objetivo,
     status: dados.status,
+    motivoStatus,
     configuracoes: { monitorada: true, sensibilidadeCustom: null, metricasIgnoradas: [] },
   });
 

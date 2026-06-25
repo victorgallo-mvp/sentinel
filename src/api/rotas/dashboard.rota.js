@@ -49,6 +49,41 @@ function corsHeaders(res) {
   res.setHeader('Access-Control-Allow-Headers', 'x-dashboard-token, Content-Type');
 }
 
+const STATUS_CRITICO = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
+const STATUS_PAUSADO_SET = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'ARCHIVED', 'DELETED']);
+
+/**
+ * Computa o status agregado de uma conta baseado no estado real das entidades.
+ * @param {Array} entidades - lista de entidades enriquecidas (com status, issues, tipo)
+ * @returns {'critico'|'atencao'|'pausado'|'normal'}
+ */
+function computarStatusConta(entidades) {
+  // critico: qualquer entidade com status problemático ou com issues
+  const temCritico = entidades.some((e) =>
+    STATUS_CRITICO.has(e.status) || (Array.isArray(e.issues) && e.issues.length > 0)
+  );
+  if (temCritico) return 'critico';
+
+  const campanhas = entidades.filter((e) => e.tipo === 'campaign');
+  const campanhasAtivas = campanhas.filter((e) => e.status === 'ACTIVE');
+
+  // pausado: nenhuma campanha ativa
+  if (campanhas.length > 0 && campanhasAtivas.length === 0) return 'pausado';
+
+  // atencao: campanha ativa mas todos os seus ads (se sincronizados) são não-ACTIVE
+  const ads = entidades.filter((e) => e.tipo === 'ad');
+  if (ads.length > 0) {
+    for (const camp of campanhasAtivas) {
+      const adsNaCampanha = ads.filter((ad) => ad.hierarquia?.campanhaId === camp.metaId);
+      if (adsNaCampanha.length > 0 && !adsNaCampanha.some((ad) => ad.status === 'ACTIVE')) {
+        return 'atencao';
+      }
+    }
+  }
+
+  return 'normal';
+}
+
 rotaDashboard.options('/data', (req, res) => {
   corsHeaders(res);
   res.sendStatus(204);
@@ -125,6 +160,9 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
               tsAtual: tsAtual ?? null,
               tsAnterior: tsAnterior ?? null,
               metricas,
+              motivoStatus: entidade.motivoStatus ?? null,
+              issues: entidade.issues ?? [],
+              dataReferencia: tsAtual ? new Date(tsAtual).toLocaleDateString('pt-BR') : null,
             };
           })
         );
@@ -139,14 +177,13 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tsAtual && new Date(e.tsAtual) >= hojeUtcInicio)
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
-        const [anomalias24hConta, notificacoes24hConta] = await Promise.all([
-          Anomalia.countDocuments({ contaId: conta._id, detectadaEm: { $gte: desde24h } }),
-          Notificacao.countDocuments({ contaId: conta._id, enviadaEm: { $gte: desde24h }, status: 'enviada' }),
-        ]);
+        const statusConta = computarStatusConta(dadosEntidades);
 
-        const statusConta = notificacoes24hConta > 0 ? 'critico'
-          : anomalias24hConta > 0 ? 'atencao'
-          : 'normal';
+        // Alertas: entidades com status crítico
+        const STATUS_ALERTAS = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
+        const alertas = dadosEntidades
+          .filter((e) => STATUS_ALERTAS.has(e.status) || e.issues?.length > 0)
+          .map((e) => ({ tipo: e.tipo, nome: e.nome, status: e.status, motivoStatus: e.motivoStatus }));
 
         return {
           id: String(conta._id),
@@ -155,19 +192,20 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           entidades: dadosEntidades,
           resumo: {
             gastoHoje,
-            anomalias24h: anomalias24hConta,
-            notificacoes24h: notificacoes24hConta,
             status: statusConta,
+            alertas,
           },
         };
       })
     );
 
+    const idsContas = contas.map((c) => c._id);
+
     const [anomalias, investigacoes, notificacoes, errosEnvio] = await Promise.all([
-      Anomalia.find({ detectadaEm: { $gte: desde24h } }).sort({ detectadaEm: -1 }).limit(20).lean(),
-      Investigacao.find({ inicioEm: { $gte: desde24h } }).sort({ inicioEm: -1 }).limit(10).lean(),
-      Notificacao.find({ enviadaEm: { $gte: desde24h }, status: 'enviada' }).sort({ enviadaEm: -1 }).limit(10).lean(),
-      Notificacao.countDocuments({ enviadaEm: { $gte: desde24h }, status: 'erro' }),
+      Anomalia.find({ contaId: { $in: idsContas }, detectadaEm: { $gte: desde24h } }).sort({ detectadaEm: -1 }).limit(20).lean(),
+      Investigacao.find({ contaId: { $in: idsContas }, inicioEm: { $gte: desde24h } }).sort({ inicioEm: -1 }).limit(10).lean(),
+      Notificacao.find({ contaId: { $in: idsContas }, enviadaEm: { $gte: desde24h }, status: 'enviada' }).sort({ enviadaEm: -1 }).limit(10).lean(),
+      Notificacao.countDocuments({ contaId: { $in: idsContas }, enviadaEm: { $gte: desde24h }, status: 'erro' }),
     ]);
 
     // Verifica quais investigações que decidiram notificar geraram uma Notificacao real

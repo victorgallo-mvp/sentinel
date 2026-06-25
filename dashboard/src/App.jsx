@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header.jsx';
 import AccountList from './components/AccountList.jsx';
-import EventList from './components/EventList.jsx';
+import AlertsPanel from './components/AlertsPanel.jsx';
 import './App.css';
 
 const API_URL    = import.meta.env.VITE_API_URL ?? '';
@@ -102,56 +102,12 @@ export default function App() {
           onRename={handleRename}
         />
 
-        <div className="events-grid">
-          <EventList
-            titulo="Anomalias (24h)"
-            items={dados.anomalias}
-            vazia="Nenhuma anomalia detectada"
-            renderItem={(a) => (
-              <div key={a.id} className="event-item">
-                <span className="event-badge anomalia">{a.metrica}</span>
-                <span className="event-detail">
-                  {a.direcao === 'aumento' ? '↑' : a.direcao === 'queda' ? '↓' : ''}{' '}
-                  atual {fmt(a.valorAtual)} · esperado {fmt(a.valorEsperado)}
-                  {a.desvio != null ? ` (${Number(a.desvio).toFixed(1)}σ)` : ''}
-                </span>
-                <span className="event-time">{tempo(a.detectadaEm)}</span>
-              </div>
-            )}
-          />
-          <EventList
-            titulo="Investigações (24h)"
-            items={dados.investigacoes}
-            vazia="Nenhuma investigação"
-            renderItem={(i) => (
-              <div key={i.id} className="event-item">
-                <span className={`event-badge ${i.decidiuNotificar ? (i.notificacaoEnviada === false ? 'erro' : 'notificou') : 'silencioso'}`}>
-                  {i.decidiuNotificar
-                    ? (i.notificacaoEnviada === false ? '⚠️ Notif. falhou' : '🔔 Notificou')
-                    : '🔕 Silenciou'}
-                </span>
-                <span className="event-detail">
-                  {i.recomendacao?.acao ?? i.motivoNaoNotificar ?? '—'}
-                </span>
-                <span className="event-time">{tempo(i.inicioEm)}</span>
-              </div>
-            )}
-          />
-          <EventList
-            titulo={`Notificações (24h)${dados.stats.errosEnvio24h > 0 ? ` · ⚠️ ${dados.stats.errosEnvio24h} falha${dados.stats.errosEnvio24h > 1 ? 's' : ''} oculta${dados.stats.errosEnvio24h > 1 ? 's' : ''}` : ''}`}
-            items={dados.notificacoes}
-            vazia="Nenhuma notificação enviada"
-            renderItem={(n) => (
-              <div key={n.id} className="event-item">
-                <span className={`event-badge ${n.status === 'enviada' ? 'ok' : 'erro'}`}>
-                  {n.status === 'enviada' ? '✓ Enviada' : '✗ Erro'}
-                </span>
-                <span className="event-detail">{n.conteudo?.slice(0, 80)}…</span>
-                <span className="event-time">{tempo(n.enviadaEm)}</span>
-              </div>
-            )}
-          />
-        </div>
+        <AlertsPanel
+          anomalias={dados.anomalias}
+          investigacoes={dados.investigacoes}
+          notificacoes={dados.notificacoes}
+          stats={dados.stats}
+        />
       </main>
     </div>
   );

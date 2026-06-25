@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import AccountCard from './AccountCard.jsx';
+import AccountModal from './AccountModal.jsx';
 import './AccountList.css';
 
-const ORDEM_STATUS = { critico: 0, atencao: 1, normal: 2 };
+const ORDEM_STATUS = { critico: 0, atencao: 1, pausado: 2, normal: 3 };
 
 const SORTS = [
   { id: 'alertas', label: 'Alertas' },
@@ -11,8 +12,11 @@ const SORTS = [
 ];
 
 export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename }) {
-  const [busca, setBusca]   = useState('');
-  const [sort,  setSort]    = useState('alertas');
+  const [busca, setBusca]             = useState('');
+  const [sort,  setSort]              = useState('alertas');
+  const [openModalContaId, setOpenModalContaId] = useState(null);
+
+  const contaModal = openModalContaId ? contas.find((c) => c.id === openModalContaId) ?? null : null;
 
   const contasOrdenadas = useMemo(() => {
     const termoBusca = busca.trim().toLowerCase();
@@ -30,7 +34,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
       if (aFav !== bFav) return aFav - bFav;
 
       if (sort === 'alertas') {
-        const diffStatus = ORDEM_STATUS[a.resumo.status] - ORDEM_STATUS[b.resumo.status];
+        const diffStatus = (ORDEM_STATUS[a.resumo.status] ?? 9) - (ORDEM_STATUS[b.resumo.status] ?? 9);
         if (diffStatus !== 0) return diffStatus;
         return (b.resumo.gastoHoje ?? 0) - (a.resumo.gastoHoje ?? 0);
       }
@@ -89,9 +93,19 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
               customName={customNames[conta.id] ?? null}
               onFavorito={onFavorito}
               onRename={onRename}
+              onClick={(id) => setOpenModalContaId(id)}
             />
           ))}
         </div>
+      )}
+
+      {/* ── Modal de conta ── */}
+      {contaModal && (
+        <AccountModal
+          conta={contaModal}
+          customName={customNames[contaModal.id] ?? null}
+          onClose={() => setOpenModalContaId(null)}
+        />
       )}
     </div>
   );

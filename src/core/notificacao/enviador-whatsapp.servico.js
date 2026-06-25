@@ -45,6 +45,13 @@ async function enviarParaJid(destinatario, texto) {
     throw new ErroAplicacao('Evolution API não configurada (EVOLUTION_API_URL/API_KEY/INSTANCE_NAME)', 'ERRO_CONFIG_EVOLUTION');
   }
 
+  // Normalização defensiva do JID: garante sufixo correto se não vier formatado
+  let jidNormalizado = destinatario;
+  if (!destinatario.includes('@')) {
+    jidNormalizado = `${destinatario}@s.whatsapp.net`;
+    logger.warn({ msg: 'JID sem sufixo @, normalizado automaticamente', original: destinatario, normalizado: jidNormalizado });
+  }
+
   const url = `${config.evolution.apiUrl.replace(/\/$/, '')}/message/sendText/${config.evolution.instanceName}`;
 
   return comRetry(
@@ -56,7 +63,7 @@ async function enviarParaJid(destinatario, texto) {
           apikey: config.evolution.apiKey,
         },
         body: JSON.stringify({
-          number: destinatario,
+          number: jidNormalizado,
           text: texto,
         }),
       });
@@ -69,7 +76,7 @@ async function enviarParaJid(destinatario, texto) {
       const dados = await resposta.json();
       const idMensagemEnviada = dados?.key?.id ?? null;
 
-      logger.info({ msg: 'Mensagem WhatsApp enviada', destinatario, idMensagemEnviada });
+      logger.info({ msg: 'Mensagem WhatsApp enviada', destinatario: jidNormalizado, idMensagemEnviada });
       return { idMensagemEnviada };
     },
     { tentativas: 3, esperaBaseMs: 1000, fatorBackoff: 2 }

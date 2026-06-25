@@ -51,6 +51,9 @@ const entidadeSchema = new Schema(
     objetivo: { type: String, default: null },
     status: { type: String, default: 'UNKNOWN' },
 
+    issues:       { type: Array, default: [] },        // issues_info from Meta API
+    motivoStatus: { type: String, default: null },     // human-readable reason
+
     configuracoes: { type: configuracoesEntidadeSchema, default: () => ({}) },
 
     ultimaSincronizacaoEm: { type: Date, default: null },
