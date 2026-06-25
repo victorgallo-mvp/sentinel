@@ -94,6 +94,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
               metaId: entidade.metaId,
               nome: entidade.nome,
               tipo: entidade.tipo,
+              status: entidade.status ?? 'ACTIVE',
               hierarquia: {
                 campanhaId: entidade.hierarquia?.campanhaId ?? null,
                 adsetId: entidade.hierarquia?.adsetId ?? null,
@@ -106,9 +107,14 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           })
         );
 
-        // Resumo por conta: spend de campanhas (top-level evita double-count), anomalias e alertas
+        // Resumo por conta: spend de campanhas do dia corrente (UTC).
+        // Se a última coleta da entidade não for de hoje, contribui 0 — evita exibir
+        // gasto de dias anteriores como se fosse o gasto atual.
+        const hojeUtcInicio = new Date();
+        hojeUtcInicio.setUTCHours(0, 0, 0, 0);
         const gastoHoje = dadosEntidades
           .filter((e) => e.tipo === 'campaign')
+          .filter((e) => e.tsAtual && new Date(e.tsAtual) >= hojeUtcInicio)
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
         const [anomalias24hConta, notificacoes24hConta] = await Promise.all([

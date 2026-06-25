@@ -117,3 +117,49 @@
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
 }
+
+/* ── Toggle pausados ── */
+.hv-pausados-toggle {
+  margin-bottom: 10px;
+  padding: 5px 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all .15s;
+}
+.hv-pausados-toggle:hover { background: #f9fafb; color: #374151; border-color: #9ca3af; }
+
+/* ── Entidades pausadas ── */
+.hv-pausado { opacity: .55; }
+.hv-pausado:hover { opacity: .8; }
+
+.hv-card--pausado {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  box-shadow: none;
+}
+
+.hv-card-status-pausado {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* ── Aviso sem ad ativo ── */
+.hv-card-aviso {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #d97706;
+  white-space: nowrap;
+}

@@ -16,7 +16,8 @@ export async function executarSincronizacaoEntidades() {
 
     for (const contaAnuncioId of contasAnuncioIds) {
       try {
-        const resultado = await sincronizarEntidades(String(conta._id), bmId, contaAnuncioId);
+        const token = conta.metaConfig?.systemUserToken;
+        const resultado = await sincronizarEntidades(String(conta._id), bmId, contaAnuncioId, { token });
         logger.info({ msg: 'Sincronização de entidades concluída', contaId: String(conta._id), contaAnuncioId, ...resultado });
       } catch (erro) {
         logger.error({ msg: 'Falha na sincronização de entidades — seguindo com as demais', contaId: String(conta._id), contaAnuncioId, erro: erro.message });
