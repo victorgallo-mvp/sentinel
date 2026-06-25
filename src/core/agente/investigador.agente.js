@@ -140,6 +140,9 @@ export async function investigarAnomalia(anomaliaId) {
 
       if (toolUse.name === 'decidir_notificar') {
         finalizadoPorFerramenta = true;
+        // findByIdAndUpdate na tool não atualiza o objeto em memória —
+        // lemos o valor do input diretamente para a checagem pós-loop
+        investigacao.decidiuNotificar = Boolean(toolUse.input.notificar);
       }
     }
 

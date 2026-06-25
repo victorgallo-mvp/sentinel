@@ -125,7 +125,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
             const [atual, anterior] = await Promise.all([buscarMetricas(tsAtual), buscarMetricas(tsAnterior)]);
 
-            const metricasEntidade = resolverMetricasEntidade(entidade);
+            const metricasSelecionadas = conta.configuracoes?.metricasSelecionadas ?? [];
+            const metricasEntidade = metricasSelecionadas.length > 0
+              ? metricasSelecionadas
+              : resolverMetricasEntidade(entidade);
             const metricas = metricasEntidade.map((chave) => {
               const meta = CATALOGO_METRICAS[chave];
               if (!meta || meta.tipo === 'enum') return null;
@@ -149,6 +152,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             return {
               id: String(entidade._id),
               metaId: entidade.metaId,
+              contaAnuncioId: entidade.contaAnuncioId ?? null,
               nome: entidade.nome,
               tipo: entidade.tipo,
               status: entidade.status ?? 'ACTIVE',
@@ -189,6 +193,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           id: String(conta._id),
           nome: conta.nome,
           identificador: conta.identificador,
+          metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
           entidades: dadosEntidades,
           resumo: {
             gastoHoje,
@@ -259,6 +264,55 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
         enviadaEm: n.enviadaEm,
       })),
     });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Catálogo de métricas disponíveis ──────────────────────────────────────
+rotaDashboard.options('/metricas/catalogo', (req, res) => {
+  corsHeaders(res);
+  res.sendStatus(204);
+});
+
+rotaDashboard.get('/metricas/catalogo', autenticarDashboard, (req, res) => {
+  corsHeaders(res);
+  const catalogo = Object.entries(CATALOGO_METRICAS)
+    .filter(([, m]) => m.tipo !== 'enum')
+    .map(([chave, m]) => ({ chave, nome: m.nome, unidade: m.unidade, nivel: m.nivel }));
+  res.json({ catalogo });
+});
+
+// ── Seleção de métricas por conta ─────────────────────────────────────────
+rotaDashboard.options('/contas/:contaId/metricas', (req, res) => {
+  corsHeaders(res);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+  res.sendStatus(204);
+});
+
+rotaDashboard.patch('/contas/:contaId/metricas', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+  try {
+    const { contaId } = req.params;
+    const { metricasSelecionadas } = req.body;
+
+    if (!Array.isArray(metricasSelecionadas)) {
+      return res.status(400).json({ erro: 'metricasSelecionadas deve ser um array' });
+    }
+
+    const chaveValidas = new Set(Object.keys(CATALOGO_METRICAS));
+    const validas = metricasSelecionadas.filter((k) => chaveValidas.has(k));
+
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+
+    await Conta.findByIdAndUpdate(contaId, { 'configuracoes.metricasSelecionadas': validas });
+    res.json({ ok: true, metricasSelecionadas: validas });
   } catch (erro) {
     next(erro);
   }

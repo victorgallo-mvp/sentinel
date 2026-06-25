@@ -92,7 +92,22 @@
   flex-wrap: wrap;
 }
 
-.hv-card-nome { font-weight: 700; font-size: 14px; color: #111827; }
+.hv-card-nome { font-weight: 700; font-size: 14px; color: #111827; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.hv-card-meta-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.hv-card-meta-link:hover { background: #e5e7eb; color: #1877f2; }
 .hv-card--adset .hv-card-nome { font-size: 13px; }
 .hv-card--ad .hv-card-nome { font-size: 12px; font-weight: 600; }
 

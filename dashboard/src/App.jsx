@@ -100,6 +100,7 @@ export default function App() {
           customNames={customNames}
           onFavorito={handleFavorito}
           onRename={handleRename}
+          onRefresh={buscarDados}
         />
 
         <AlertsPanel

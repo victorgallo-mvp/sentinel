@@ -11,7 +11,7 @@ const SORTS = [
   { id: 'nome',    label: 'Nome' },
 ];
 
-export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename }) {
+export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, onRefresh }) {
   const [busca, setBusca]             = useState('');
   const [sort,  setSort]              = useState('alertas');
   const [openModalContaId, setOpenModalContaId] = useState(null);
@@ -105,6 +105,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
           conta={contaModal}
           customName={customNames[contaModal.id] ?? null}
           onClose={() => setOpenModalContaId(null)}
+          onMetricasSalvas={onRefresh}
         />
       )}
     </div>

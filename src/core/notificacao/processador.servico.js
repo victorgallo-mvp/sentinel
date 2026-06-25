@@ -10,7 +10,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { podeNotificar } from './throttling.js';
 import { construirMensagem } from './construtor-mensagem.js';
-import { enviarMensagemWhatsapp } from './enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from './enviador-whatsapp.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 import { ErroNaoEncontrado } from '../../shared/erros.js';
@@ -36,8 +36,8 @@ export async function processarNotificacao(investigacaoId) {
     return { enviada: false, motivo };
   }
 
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) {
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) {
     logger.warn({ msg: 'Notificação não enviada — destinatário não configurado', investigacaoId, contaId: String(conta._id) });
     return { enviada: false, motivo: 'Destinatário WhatsApp não configurado para a conta.' };
   }
@@ -47,7 +47,7 @@ export async function processarNotificacao(investigacaoId) {
   let idMensagemEnviada = null;
   let status = 'enviada';
   try {
-    const resultado = await enviarMensagemWhatsapp(destinatario, mensagem);
+    const resultado = await enviarMensagemWhatsapp(destinatarios, mensagem);
     idMensagemEnviada = resultado.idMensagemEnviada;
   } catch (erro) {
     status = 'erro';
@@ -58,7 +58,7 @@ export async function processarNotificacao(investigacaoId) {
     contaId: conta._id,
     investigacaoId: investigacao._id,
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     idMensagemEnviada,
     enviadaEm: new Date(),

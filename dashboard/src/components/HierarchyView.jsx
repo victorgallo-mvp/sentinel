@@ -200,11 +200,22 @@ function AdsetNode({ node, mostrarPausados, statusFiltro }) {
   );
 }
 
+function urlMetaAds(entidade) {
+  const act = entidade.contaAnuncioId;
+  if (!act || !entidade.metaId) return null;
+  const base = `https://adsmanager.facebook.com/adsmanager/manage`;
+  if (entidade.tipo === 'campaign') return `${base}/campaigns?act=${act}&selected_campaign_ids=${entidade.metaId}`;
+  if (entidade.tipo === 'adset')   return `${base}/adsets?act=${act}&selected_adset_ids=${entidade.metaId}`;
+  if (entidade.tipo === 'ad')      return `${base}/ads?act=${act}&selected_ad_ids=${entidade.metaId}`;
+  return null;
+}
+
 function EntidadeCard({ entidade, variante, avisoSemAd }) {
   const semDados = entidade.metricas.every((m) => m.atual === null);
   const metricasVisiveis = entidade.metricas.filter((m) => m.atual !== null);
   const pausado = !isAtivo(entidade);
   const temErro = STATUS_ERRO.has(entidade.status) || (entidade.issues?.length > 0);
+  const linkMeta = urlMetaAds(entidade);
 
   const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
   const STATUS_LABEL = {
@@ -221,6 +232,18 @@ function EntidadeCard({ entidade, variante, avisoSemAd }) {
     <div className={`hv-card hv-card--${variante ?? entidade.tipo} ${pausado ? 'hv-card--pausado' : ''} ${temErro ? 'hv-card--erro' : ''}`}>
       <div className="hv-card-header">
         <span className="hv-card-nome">{entidade.nome}</span>
+        {linkMeta && (
+          <a
+            href={linkMeta}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hv-card-meta-link"
+            title="Abrir no Meta Ads Manager"
+            onClick={(e) => e.stopPropagation()}
+          >
+            ↗
+          </a>
+        )}
         <span className={`hv-card-tipo hv-card-tipo--${entidade.tipo}`}>
           {TIPO_LABEL[entidade.tipo] ?? entidade.tipo}
         </span>

@@ -3,6 +3,7 @@
  * workers BullMQ que consomem as filas de investigação e relatório.
  *
  * Cron (horário do servidor):
+ * - Health check Evolution API: a cada 5 minutos
  * - Coleta de métricas: a cada hora, no minuto 5
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
@@ -25,9 +26,11 @@ import { executarAlertaEntrega } from './alerta-entrega.job.js';
 import { executarAlertaPerformance } from './alerta-performance.job.js';
 import { executarResumoDiario } from './resumo-diario.job.js';
 import { criarWorkersInvestigacao } from './investigacao.job.js';
+import { verificarSaudeEvolution } from './health-check-evolution.job.js';
 import { logger } from '../infra/logger.js';
 
 const TAREFAS_CRON = [
+  { nome: 'health-check-evolution', expressao: '*/5 * * * *', executar: verificarSaudeEvolution },
   { nome: 'coleta-metricas', expressao: '5 * * * *', executar: executarColetaMetricas },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },

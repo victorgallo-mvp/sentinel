@@ -55,6 +55,7 @@ const configuracoesSchema = new Schema(
     googleSheetsId: { type: String, default: '' },
     prepago: { type: Boolean, default: false },
     limiarAlertaSaldoReais: { type: Number, default: 50 },
+    metricasSelecionadas: { type: [String], default: [] }, // [] = usar padrão por objetivo
   },
   { _id: false }
 );

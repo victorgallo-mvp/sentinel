@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import HierarchyView from './HierarchyView.jsx';
+import MetricSelector from './MetricSelector.jsx';
 import './AccountModal.css';
 
 const FILTROS = [
@@ -9,8 +10,9 @@ const FILTROS = [
   { id: 'pausadas', label: 'Pausadas' },
 ];
 
-export default function AccountModal({ conta, customName, onClose }) {
+export default function AccountModal({ conta, customName, onClose, onMetricasSalvas }) {
   const [filtroAtivo, setFiltroAtivo] = useState('todas');
+  const [mostrarSelector, setMostrarSelector] = useState(false);
 
   // Fecha com ESC
   useEffect(() => {
@@ -35,6 +37,15 @@ export default function AccountModal({ conta, customName, onClose }) {
   const dataReferencia = entidadeComTs?.dataReferencia ?? null;
 
   return (
+    <>
+    {mostrarSelector && (
+      <MetricSelector
+        contaId={conta.id}
+        selecionadas={conta.metricasSelecionadas ?? []}
+        onClose={() => setMostrarSelector(false)}
+        onSalvo={(novas) => { onMetricasSalvas?.(conta.id, novas); }}
+      />
+    )}
     <div className="am-overlay" onClick={onClose}>
       <div className="am-panel" onClick={(e) => e.stopPropagation()}>
         {/* ── Header ── */}
@@ -50,6 +61,13 @@ export default function AccountModal({ conta, customName, onClose }) {
               <span className="am-data-ref">Métricas de {dataReferencia}</span>
             )}
           </div>
+          <button
+            className="am-metricas-btn"
+            onClick={() => setMostrarSelector(true)}
+            title="Configurar métricas"
+          >
+            ⚙ Métricas
+          </button>
           <button className="am-close" onClick={onClose} title="Fechar (ESC)">×</button>
         </div>
 
@@ -80,5 +98,6 @@ export default function AccountModal({ conta, customName, onClose }) {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -95,6 +95,20 @@
 }
 .am-close:hover { background: #e5e7eb; color: #111827; }
 
+.am-metricas-btn {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  color: #374151;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.am-metricas-btn:hover { background: #e5e7eb; color: #2563eb; }
+
 /* ── Filtros ── */
 .am-filtros {
   display: flex;
