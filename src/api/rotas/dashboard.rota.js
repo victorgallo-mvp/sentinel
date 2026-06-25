@@ -9,6 +9,7 @@ import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
+import { Usuario } from '../../dominio/usuario.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS } from '../../config/metricas.config.js';
@@ -16,12 +17,30 @@ import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js'
 
 export const rotaDashboard = Router();
 
-function autenticarDashboard(req, res, next) {
-  const token = req.query.token ?? req.headers['x-dashboard-token'];
-  if (!config.dashboardToken || token !== config.dashboardToken) {
-    return res.status(401).json({ erro: 'Token inválido' });
+async function autenticarDashboard(req, res, next) {
+  try {
+    const token = req.query.token ?? req.headers['x-dashboard-token'];
+    if (!token) return res.status(401).json({ erro: 'Token não fornecido' });
+
+    // Env var → super-admin (vê todas as contas)
+    if (config.dashboardToken && token === config.dashboardToken) {
+      req.usuario = { nome: null, superAdmin: true, contaIds: [] };
+      return next();
+    }
+
+    // Usuário cadastrado no banco
+    const usuario = await Usuario.findOne({ token, ativo: true }).lean();
+    if (!usuario) return res.status(401).json({ erro: 'Token inválido' });
+
+    req.usuario = {
+      nome:       usuario.nome,
+      superAdmin: usuario.superAdmin ?? false,
+      contaIds:   (usuario.contaIds ?? []).map(String),
+    };
+    next();
+  } catch (erro) {
+    next(erro);
   }
-  next();
 }
 
 function corsHeaders(res) {
@@ -38,7 +57,10 @@ rotaDashboard.options('/data', (req, res) => {
 rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
   corsHeaders(res);
   try {
-    const contas = await Conta.find({ ativo: true }).lean();
+    const todasContas = await Conta.find({ ativo: true }).lean();
+    const contas = req.usuario.superAdmin
+      ? todasContas
+      : todasContas.filter((c) => req.usuario.contaIds.includes(String(c._id)));
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const dadosContas = await Promise.all(
@@ -162,6 +184,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
     res.json({
       atualizadoEm: new Date(),
+      usuario: { nome: req.usuario.nome, superAdmin: req.usuario.superAdmin },
       stats: {
         totalContas: contas.length,
         totalEntidades,

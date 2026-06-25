@@ -1,6 +1,6 @@
 import './Header.css';
 
-export default function Header({ stats, ultimaAtualizacao, segundos }) {
+export default function Header({ stats, ultimaAtualizacao, segundos, usuario }) {
   const atualStr = ultimaAtualizacao
     ? segundos < 5
       ? 'agora mesmo'
@@ -14,7 +14,12 @@ export default function Header({ stats, ultimaAtualizacao, segundos }) {
           <span className="header-shield">🛡</span>
           <span className="header-title">Sentinela Ads</span>
         </div>
-        <span className="header-refresh">{atualStr}</span>
+        <div className="header-top-right">
+          {usuario?.nome && (
+            <span className="header-usuario">{usuario.nome}</span>
+          )}
+          <span className="header-refresh">{atualStr}</span>
+        </div>
       </div>
 
       <div className="stat-cards">

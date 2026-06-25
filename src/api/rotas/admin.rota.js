@@ -4,6 +4,7 @@
  * de jobs (coleta, baselines, relatório). Protegidas por `autenticarAdmin`.
  */
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
@@ -11,6 +12,7 @@ import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Relatorio } from '../../dominio/relatorio.modelo.js';
+import { Usuario } from '../../dominio/usuario.modelo.js';
 import { coletarMetricasConta } from '../../core/coleta/coletor-metricas.servico.js';
 import { sincronizarEntidades } from '../../core/coleta/descobridor-entidades.servico.js';
 import { calcularBaselinesConta } from '../../core/deteccao/calculador-baseline.servico.js';
@@ -21,6 +23,68 @@ import { logger } from '../../infra/logger.js';
 export const rotaAdmin = Router();
 
 const CAMPOS_SENSIVEIS_CONTA = '-metaConfig.systemUserToken -metaConfig.appSecret';
+
+// ===== Usuários do dashboard =====
+
+const esquemaNovoUsuario = z.object({
+  nome:       z.string().min(1),
+  contaIds:   z.array(z.string()).default([]),
+  superAdmin: z.boolean().default(false),
+});
+
+/** GET /admin/usuarios — lista usuários (sem expor tokens) */
+rotaAdmin.get('/usuarios', async (req, res, next) => {
+  try {
+    const usuarios = await Usuario.find().select('-token').sort({ nome: 1 });
+    res.json({ usuarios });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/** POST /admin/usuarios — cria usuário e gera token automaticamente */
+rotaAdmin.post('/usuarios', async (req, res, next) => {
+  try {
+    const dados = esquemaNovoUsuario.parse(req.body);
+    const token = randomUUID().replace(/-/g, '');
+    const usuario = await Usuario.create({ ...dados, token });
+    logger.info({ msg: 'Usuário dashboard criado', usuarioId: String(usuario._id), nome: usuario.nome });
+    res.status(201).json({ usuario: usuario.toObject() }); // token visível só na criação
+  } catch (erro) {
+    if (erro instanceof z.ZodError) return next(new ErroValidacao('Dados inválidos', erro.flatten()));
+    next(erro);
+  }
+});
+
+/** PATCH /admin/usuarios/:id — atualiza nome, contaIds ou ativo */
+rotaAdmin.patch('/usuarios/:id', async (req, res, next) => {
+  try {
+    const dados = z.object({
+      nome:     z.string().min(1).optional(),
+      contaIds: z.array(z.string()).optional(),
+      ativo:    z.boolean().optional(),
+    }).parse(req.body);
+
+    const usuario = await Usuario.findByIdAndUpdate(req.params.id, { $set: dados }, { new: true }).select('-token');
+    if (!usuario) throw new ErroNaoEncontrado(`Usuário ${req.params.id} não encontrado`);
+    res.json({ usuario });
+  } catch (erro) {
+    if (erro instanceof z.ZodError) return next(new ErroValidacao('Dados inválidos', erro.flatten()));
+    next(erro);
+  }
+});
+
+/** DELETE /admin/usuarios/:id */
+rotaAdmin.delete('/usuarios/:id', async (req, res, next) => {
+  try {
+    const usuario = await Usuario.findByIdAndDelete(req.params.id);
+    if (!usuario) throw new ErroNaoEncontrado(`Usuário ${req.params.id} não encontrado`);
+    logger.info({ msg: 'Usuário dashboard removido', usuarioId: req.params.id });
+    res.json({ removido: true });
+  } catch (erro) {
+    next(erro);
+  }
+});
 
 // ===== Contas =====
 

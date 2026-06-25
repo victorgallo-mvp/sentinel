@@ -27,6 +27,7 @@ export default function App() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
 
+  const [usuario,     setUsuario]     = useState(null);
   const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
   const [favoritos,   setFavoritos]   = useState(() => lerStorage(LS_FAVS,  []));
 
@@ -37,6 +38,7 @@ export default function App() {
       if (!res.ok) { setErro(`Erro ${res.status}: token inválido ou servidor indisponível.`); return; }
       const json = await res.json();
       setDados(json);
+      setUsuario(json.usuario ?? null);
       setUltimaAtualizacao(new Date());
       setSegundos(0);
       setErro(null);
@@ -88,6 +90,7 @@ export default function App() {
         stats={dados.stats}
         ultimaAtualizacao={ultimaAtualizacao}
         segundos={segundos}
+        usuario={usuario}
       />
 
       <main className="main">
