@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header.jsx';
-import FilterBar from './components/FilterBar.jsx';
-import HierarchyView from './components/HierarchyView.jsx';
+import AccountList from './components/AccountList.jsx';
 import EventList from './components/EventList.jsx';
 import './App.css';
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+const API_URL    = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_MS = 60_000;
-const LS_SELECTED = 'sentinela_contas_selecionadas';
-const LS_NOMES    = 'sentinela_nomes_customizados';
-const LS_NIVEL    = 'sentinela_nivel_filtro';
+const LS_NOMES   = 'sentinela_nomes_customizados';
+const LS_FAVS    = 'sentinela_favoritos';
 
 function getToken() {
   const params = new URLSearchParams(window.location.search);
@@ -29,11 +27,8 @@ export default function App() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
 
-  const [selectedIds, setSelectedIds] = useState(() => lerStorage(LS_SELECTED, null));
   const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
-  const [nivel, setNivel]             = useState(() => lerStorage(LS_NIVEL, 'todos'));
-
-  const initedFilter = useRef(false);
+  const [favoritos,   setFavoritos]   = useState(() => lerStorage(LS_FAVS,  []));
 
   const buscarDados = useCallback(async () => {
     if (!token) { setErro('Token não encontrado na URL. Adicione ?token=SEU_TOKEN'); return; }
@@ -45,15 +40,6 @@ export default function App() {
       setUltimaAtualizacao(new Date());
       setSegundos(0);
       setErro(null);
-
-      if (!initedFilter.current) {
-        initedFilter.current = true;
-        if (lerStorage(LS_SELECTED, null) === null) {
-          const todos = json.contas.map((c) => c.id);
-          setSelectedIds(todos);
-          localStorage.setItem(LS_SELECTED, JSON.stringify(todos));
-        }
-      }
     } catch {
       setErro('Não foi possível conectar ao servidor.');
     }
@@ -69,14 +55,6 @@ export default function App() {
     return () => clearInterval(tick);
   }, [ultimaAtualizacao]);
 
-  function handleToggle(id) {
-    setSelectedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      localStorage.setItem(LS_SELECTED, JSON.stringify(next));
-      return next;
-    });
-  }
-
   function handleRename(id, nome) {
     setCustomNames((prev) => {
       const next = { ...prev, [id]: nome };
@@ -85,18 +63,12 @@ export default function App() {
     });
   }
 
-  function handleSelectAll() {
-    if (!dados) return;
-    const todos = dados.contas.map((c) => c.id);
-    const todasOn = todos.every((id) => (selectedIds ?? todos).includes(id));
-    const next = todasOn ? [] : todos;
-    setSelectedIds(next);
-    localStorage.setItem(LS_SELECTED, JSON.stringify(next));
-  }
-
-  function handleNivel(n) {
-    setNivel(n);
-    localStorage.setItem(LS_NIVEL, JSON.stringify(n));
+  function handleFavorito(id) {
+    setFavoritos((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      localStorage.setItem(LS_FAVS, JSON.stringify(next));
+      return next;
+    });
   }
 
   if (erro) {
@@ -110,10 +82,6 @@ export default function App() {
 
   if (!dados) return <div className="loading">Carregando...</div>;
 
-  const idsAtivos = selectedIds ?? dados.contas.map((c) => c.id);
-  const contasParaFiltro = dados.contas.map((c) => ({ id: c.id, nomeOriginal: c.nome }));
-  const contasVisiveis = dados.contas.filter((c) => idsAtivos.includes(c.id));
-
   return (
     <div className="app">
       <Header
@@ -122,27 +90,14 @@ export default function App() {
         segundos={segundos}
       />
 
-      <FilterBar
-        contas={contasParaFiltro}
-        selectedIds={idsAtivos}
-        customNames={customNames}
-        nivel={nivel}
-        onToggleConta={handleToggle}
-        onRename={handleRename}
-        onSelectAll={handleSelectAll}
-        onNivel={handleNivel}
-      />
-
       <main className="main">
-        {contasVisiveis.map((conta) => {
-          const nomeExibido = customNames[conta.id] ?? conta.nome;
-          return (
-            <section key={conta.id} className="conta-section">
-              <h2 className="conta-nome">{nomeExibido}</h2>
-              <HierarchyView entidades={conta.entidades} nivel={nivel} />
-            </section>
-          );
-        })}
+        <AccountList
+          contas={dados.contas}
+          favoritos={favoritos}
+          customNames={customNames}
+          onFavorito={handleFavorito}
+          onRename={handleRename}
+        />
 
         <div className="events-grid">
           <EventList

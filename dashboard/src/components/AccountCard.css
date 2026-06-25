@@ -1,0 +1,167 @@
+.ac-card {
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+.ac-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.ac-card--expandido { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+
+/* Status border accent */
+.ac-card--critico { border-left: 4px solid #dc2626; }
+.ac-card--atencao { border-left: 4px solid #f59e0b; }
+.ac-card--normal  { border-left: 4px solid #e5e7eb; }
+
+/* ── Header ── */
+.ac-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .12s;
+}
+.ac-header:hover { background: #fafafa; }
+.ac-card--expandido .ac-header { background: #f9fafb; border-bottom: 1px solid #f3f4f6; }
+
+.ac-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.8);
+}
+
+.ac-favorito {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  color: #f59e0b;
+  opacity: .5;
+  transition: opacity .12s, transform .12s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.ac-favorito:hover { opacity: 1; transform: scale(1.15); }
+
+/* Nome */
+.ac-nome-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-nome {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.ac-nome-input {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  border: 1px solid #2563eb;
+  border-radius: 5px;
+  padding: 2px 6px;
+  outline: none;
+  background: #eff6ff;
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-rename-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #d1d5db;
+  padding: 2px 3px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity .12s, color .12s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.ac-nome-wrapper:hover .ac-rename-btn { opacity: 1; }
+.ac-rename-btn:hover { color: #6b7280; background: #f3f4f6; }
+
+/* Resumo */
+.ac-resumo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ac-resumo-gasto {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.ac-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.ac-badge--critico { background: #fee2e2; color: #dc2626; }
+.ac-badge--atencao { background: #fef3c7; color: #d97706; }
+.ac-badge--normal  { background: #f0fdf4; color: #16a34a; }
+
+.ac-toggle {
+  font-size: 12px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  transition: transform .15s;
+}
+
+/* ── Body expandido ── */
+.ac-body {
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ac-niveis {
+  display: flex;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  width: fit-content;
+}
+
+.ac-nivel-btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #6b7280;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.ac-nivel-btn:hover { color: #374151; background: #e5e7eb; }
+.ac-nivel-btn.ativo {
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}

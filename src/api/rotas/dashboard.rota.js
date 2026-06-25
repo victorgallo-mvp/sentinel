@@ -106,11 +106,31 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           })
         );
 
+        // Resumo por conta: spend de campanhas (top-level evita double-count), anomalias e alertas
+        const gastoHoje = dadosEntidades
+          .filter((e) => e.tipo === 'campaign')
+          .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
+
+        const [anomalias24hConta, notificacoes24hConta] = await Promise.all([
+          Anomalia.countDocuments({ contaId: conta._id, detectadaEm: { $gte: desde24h } }),
+          Notificacao.countDocuments({ contaId: conta._id, enviadaEm: { $gte: desde24h }, status: 'enviada' }),
+        ]);
+
+        const statusConta = notificacoes24hConta > 0 ? 'critico'
+          : anomalias24hConta > 0 ? 'atencao'
+          : 'normal';
+
         return {
           id: String(conta._id),
           nome: conta.nome,
           identificador: conta.identificador,
           entidades: dadosEntidades,
+          resumo: {
+            gastoHoje,
+            anomalias24h: anomalias24hConta,
+            notificacoes24h: notificacoes24hConta,
+            status: statusConta,
+          },
         };
       })
     );
