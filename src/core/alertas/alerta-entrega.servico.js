@@ -126,7 +126,13 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
     }
     // Só envia alerta para mudanças acionáveis
     if (deveAlertarStatus(effectiveStatus, entidade.tipo)) {
-      await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatarios);
+      // Contas pré-pagas: PENDING_BILLING_INFO = saldo esgotado, alerta com mensagem diferente
+      const isPrepago = conta.configuracoes?.prepago === true;
+      if (effectiveStatus === 'PENDING_BILLING_INFO' && isPrepago) {
+        await notificarSaldoEsgotado(conta, entidade, destinatarios);
+      } else {
+        await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatarios);
+      }
     }
     return;
   }
@@ -142,6 +148,16 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
 
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
 
+  // Busca campanha pai para adsets e ads
+  let campanhaPai = null;
+  if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
+    campanhaPai = await Entidade.findOne({
+      contaId: conta._id,
+      metaId: entidade.hierarquia.campanhaId,
+      tipo: 'campaign',
+    }).lean();
+  }
+
   for (const issue of issues) {
     const errorCode = issue.error_code ?? issue.error_type ?? 'desconhecido';
     const chaveAlerta = `erroentrega_${String(entidade._id)}_${errorCode}`;
@@ -155,10 +171,15 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
     });
     if (jaAvisou) continue;
 
+    const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
+    const linhaContexto = campanhaPai
+      ? [`Campanha: *${campanhaPai.nome}*`, `${TIPO_LABEL[entidade.tipo] ?? entidade.tipo}: *${entidade.nome}*`]
+      : [`${TIPO_LABEL[entidade.tipo] ?? entidade.tipo}: *${entidade.nome}*`];
+
     const mensagem = [
       `⛔ *Erro de entrega — ${conta.nome}*`,
       ``,
-      `Entidade: *${entidade.nome}* (${entidade.tipo})`,
+      ...linhaContexto,
       `Código: \`${errorCode}\``,
       `Resumo: ${issue.error_summary ?? '—'}`,
       `Detalhe: ${issue.error_message ?? '—'}`,
@@ -203,12 +224,28 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
   });
   if (jaAvisou) return;
 
-  const tipoLabel = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' }[entidade.tipo] ?? entidade.tipo;
+  const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
+  const tipoLabel = TIPO_LABEL[entidade.tipo] ?? entidade.tipo;
   const statusLabel = STATUS_LABEL[novoStatus] ?? novoStatus;
+
+  // Busca campanha pai para adsets e ads
+  let campanhaPai = null;
+  if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
+    campanhaPai = await Entidade.findOne({
+      contaId: conta._id,
+      metaId: entidade.hierarquia.campanhaId,
+      tipo: 'campaign',
+    }).lean();
+  }
+
+  const linhasContexto = campanhaPai
+    ? [`Campanha: *${campanhaPai.nome}*`, `${tipoLabel}: *${entidade.nome}*`]
+    : [`${tipoLabel}: *${entidade.nome}*`];
+
   const mensagem = [
     `⏸ *${tipoLabel} alterada — ${conta.nome}*`,
     ``,
-    `${tipoLabel}: *${entidade.nome}*`,
+    ...linhasContexto,
     `Novo status: *${statusLabel}*`,
     ``,
     `A entrega pode ter sido interrompida. Verifique o gerenciador de anúncios.`,
@@ -235,6 +272,51 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
   });
 
   logger.info({ msg: 'Alerta de mudança de status enviado', conta: conta.nome, entidade: entidade.nome, novoStatus, status: envioStatus });
+}
+
+/** Conta pré-paga com saldo esgotado (PENDING_BILLING_INFO). */
+async function notificarSaldoEsgotado(conta, entidade, destinatarios) {
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  const chaveAlerta = `saldo_esgotado_${String(conta._id)}`;
+
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    canal: 'whatsapp',
+    conteudo: new RegExp(chaveAlerta),
+    enviadaEm: { $gte: desde },
+  });
+  if (jaAvisou) return;
+
+  const mensagem = [
+    `💳 *Saldo esgotado — ${conta.nome}*`,
+    ``,
+    `A conta de anúncios ficou sem saldo e as veiculações foram pausadas.`,
+    `Recarregue o saldo no Gerenciador de Anúncios para retomar as campanhas.`,
+    ``,
+    `<!-- ${chaveAlerta} -->`,
+  ].join('\n');
+
+  let envioStatus = 'enviada';
+  try {
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
+  } catch (e) {
+    envioStatus = 'erro';
+    logger.error({ msg: 'Falha ao enviar alerta de saldo esgotado', conta: conta.nome, erro: e.message });
+  }
+
+  await Notificacao.create({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    entidadeId: entidade._id,
+    canal: 'whatsapp',
+    destinatario: destinatarios.join(','),
+    conteudo: mensagem,
+    enviadaEm: new Date(),
+    status: envioStatus,
+  });
+
+  logger.info({ msg: 'Alerta de saldo esgotado enviado', conta: conta.nome, status: envioStatus });
 }
 
 /**

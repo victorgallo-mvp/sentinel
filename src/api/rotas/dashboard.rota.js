@@ -98,6 +98,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       ? todasContas
       : todasContas.filter((c) => req.usuario.contaIds.includes(String(c._id)));
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const periodo = req.query.periodo ?? 'hoje'; // 'hoje' | 'ontem'
 
     const dadosContas = await Promise.all(
       contas.map(async (conta) => {
@@ -105,12 +106,20 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
         const dadosEntidades = await Promise.all(
           entidades.map(async (entidade) => {
-            const tsRes = await query(
-              `SELECT DISTINCT coletada_em FROM metricas_serie_temporal
-               WHERE entidade_id = $1 AND janela_horas = 24
-               ORDER BY coletada_em DESC LIMIT 2`,
-              [String(entidade._id)]
-            );
+            const tsRes = periodo === 'ontem'
+              ? await query(
+                  `SELECT DISTINCT coletada_em FROM metricas_serie_temporal
+                   WHERE entidade_id = $1 AND janela_horas = 24
+                   AND coletada_em < date_trunc('day', NOW())
+                   ORDER BY coletada_em DESC LIMIT 2`,
+                  [String(entidade._id)]
+                )
+              : await query(
+                  `SELECT DISTINCT coletada_em FROM metricas_serie_temporal
+                   WHERE entidade_id = $1 AND janela_horas = 24
+                   ORDER BY coletada_em DESC LIMIT 2`,
+                  [String(entidade._id)]
+                );
 
             const [tsAtual, tsAnterior] = tsRes.rows.map((r) => r.coletada_em);
 
@@ -231,6 +240,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
     res.json({
       atualizadoEm: new Date(),
+      periodo,
       usuario: { nome: req.usuario.nome, superAdmin: req.usuario.superAdmin },
       stats: {
         totalContas: contas.length,

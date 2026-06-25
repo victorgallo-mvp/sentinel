@@ -129,25 +129,43 @@ export default function HierarchyView({ entidades, nivel, statusFiltro = 'todas'
   );
 }
 
+function statusBorderClass(entidade) {
+  if (STATUS_ERRO.has(entidade.status)) return 'hv-camp-wrapper--erro';
+  if (STATUS_PAUSADO.has(entidade.status ?? '')) return 'hv-camp-wrapper--pausado';
+  return 'hv-camp-wrapper--active';
+}
+
 function CampaignNode({ node, mostrarPausados, semAdAtivo, statusFiltro }) {
-  const [expandido, setExpandido] = useState(true);
+  const [expandido, setExpandido] = useState(false);
 
   const filhosVisiveis = mostrarPausados
     ? node.filhos
     : node.filhos.filter(isAtivo);
   const temFilhos = filhosVisiveis.length > 0;
 
+  const borderClass = statusBorderClass(node);
+
   return (
-    <div className={`hv-camp-wrapper ${!isAtivo(node) ? 'hv-pausado' : ''}`}>
-      <div className="hv-camp-row">
+    <div className={`hv-camp-wrapper ${borderClass} ${!isAtivo(node) ? 'hv-pausado' : ''}`}>
+      <div
+        className="hv-camp-row"
+        onClick={() => temFilhos && setExpandido((v) => !v)}
+        style={{ cursor: temFilhos ? 'pointer' : 'default' }}
+      >
         <button
           className={`hv-toggle ${!temFilhos ? 'hv-toggle--vazio' : ''}`}
-          onClick={() => temFilhos && setExpandido((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); temFilhos && setExpandido((v) => !v); }}
           aria-label={expandido ? 'Colapsar' : 'Expandir'}
+          tabIndex={-1}
         >
           {temFilhos ? (expandido ? '▾' : '▸') : '·'}
         </button>
-        <EntidadeCard entidade={node} variante="campaign" avisoSemAd={semAdAtivo} />
+        <EntidadeCard
+          entidade={node}
+          variante="campaign"
+          avisoSemAd={semAdAtivo}
+          filhosCount={!expandido && temFilhos ? filhosVisiveis.length : null}
+        />
       </div>
 
       {expandido && temFilhos && (
@@ -167,7 +185,7 @@ function CampaignNode({ node, mostrarPausados, semAdAtivo, statusFiltro }) {
 }
 
 function AdsetNode({ node, mostrarPausados, statusFiltro }) {
-  const [expandido, setExpandido] = useState(true);
+  const [expandido, setExpandido] = useState(false);
 
   const filhosVisiveis = mostrarPausados
     ? node.filhos
@@ -176,14 +194,23 @@ function AdsetNode({ node, mostrarPausados, statusFiltro }) {
 
   return (
     <div className={`hv-adset-wrapper ${!isAtivo(node) ? 'hv-pausado' : ''}`}>
-      <div className="hv-adset-row">
+      <div
+        className="hv-adset-row"
+        onClick={() => temFilhos && setExpandido((v) => !v)}
+        style={{ cursor: temFilhos ? 'pointer' : 'default' }}
+      >
         <button
           className={`hv-toggle hv-toggle--sm ${!temFilhos ? 'hv-toggle--vazio' : ''}`}
-          onClick={() => temFilhos && setExpandido((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); temFilhos && setExpandido((v) => !v); }}
+          tabIndex={-1}
         >
           {temFilhos ? (expandido ? '▾' : '▸') : '·'}
         </button>
-        <EntidadeCard entidade={node} variante="adset" />
+        <EntidadeCard
+          entidade={node}
+          variante="adset"
+          filhosCount={!expandido && temFilhos ? filhosVisiveis.length : null}
+        />
       </div>
 
       {expandido && temFilhos && (
@@ -212,7 +239,7 @@ function urlMetaAds(entidade) {
   return null;
 }
 
-function EntidadeCard({ entidade, variante, avisoSemAd }) {
+function EntidadeCard({ entidade, variante, avisoSemAd, filhosCount }) {
   const semDados = entidade.metricas.every((m) => m.atual === null);
   const metricasVisiveis = entidade.metricas.filter((m) => m.atual !== null);
   const pausado = !isAtivo(entidade);
@@ -257,6 +284,11 @@ function EntidadeCard({ entidade, variante, avisoSemAd }) {
         {temErro && !pausado && (
           <span className="hv-card-status-erro">
             {STATUS_LABEL[entidade.status] ?? entidade.status}
+          </span>
+        )}
+        {filhosCount != null && (
+          <span className="hv-card-filhos-count">
+            {entidade.tipo === 'campaign' ? `${filhosCount} conjunto${filhosCount !== 1 ? 's' : ''}` : `${filhosCount} anúncio${filhosCount !== 1 ? 's' : ''}`}
           </span>
         )}
         {avisoSemAd && (

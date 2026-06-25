@@ -6,12 +6,27 @@
 .hv-tree { display: flex; flex-direction: column; gap: 10px; }
 
 /* Campaign */
-.hv-camp-wrapper { display: flex; flex-direction: column; gap: 0; }
+.hv-camp-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 3px solid #e5e7eb;
+  border-radius: 0 10px 10px 0;
+  padding-left: 2px;
+  transition: border-color .15s;
+}
+.hv-camp-wrapper--active  { border-left-color: #16a34a; }
+.hv-camp-wrapper--erro    { border-left-color: #dc2626; }
+.hv-camp-wrapper--pausado { border-left-color: #9ca3af; }
+
 .hv-camp-row {
   display: flex;
   align-items: flex-start;
   gap: 6px;
+  border-radius: 0 10px 10px 0;
+  transition: background .1s;
 }
+.hv-camp-row:hover { background: rgba(0,0,0,.015); }
 
 /* Adsets (filhos da campanha) */
 .hv-adset-list {
@@ -124,6 +139,16 @@
 .hv-card-tipo--ad       { background: #faf5ff; color: #7c3aed; }
 
 .hv-card-sinc { font-size: 11px; color: #9ca3af; margin-left: auto; }
+
+.hv-card-filhos-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #6b7280;
+  white-space: nowrap;
+}
 
 .hv-card-vazio { color: #9ca3af; font-size: 12px; font-style: italic; margin: 0; }
 

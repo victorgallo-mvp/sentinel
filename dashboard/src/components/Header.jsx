@@ -1,6 +1,11 @@
 import './Header.css';
 
-export default function Header({ stats, ultimaAtualizacao, segundos, usuario }) {
+const PERIODOS = [
+  { id: 'hoje',  label: 'Hoje' },
+  { id: 'ontem', label: 'Ontem' },
+];
+
+export default function Header({ stats, ultimaAtualizacao, segundos, usuario, periodo, onPeriodoChange }) {
   const atualStr = ultimaAtualizacao
     ? segundos < 5
       ? 'agora mesmo'
@@ -15,6 +20,17 @@ export default function Header({ stats, ultimaAtualizacao, segundos, usuario }) 
           <span className="header-title">Sentinela Ads</span>
         </div>
         <div className="header-top-right">
+          <div className="header-periodo">
+            {PERIODOS.map((p) => (
+              <button
+                key={p.id}
+                className={`header-periodo-btn ${periodo === p.id ? 'ativo' : ''}`}
+                onClick={() => onPeriodoChange?.(p.id)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           {usuario?.nome && (
             <span className="header-usuario">{usuario.nome}</span>
           )}
