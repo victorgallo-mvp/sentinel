@@ -13,7 +13,7 @@ import { query } from '../../infra/postgres.js';
 import { analisarPortfolio } from './analisador-portfolio.agente.js';
 import { renderizarRelatorioHtml } from './templates/index.js';
 import { atualizarPlanilhaSemanal } from './google-sheets.servico.js';
-import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { arredondar } from '../../shared/utils.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
@@ -73,8 +73,8 @@ export async function gerarRelatorioSemanal(contaId, periodo = null) {
  * @param {Object} conta - documento Conta
  */
 export async function enviarRelatorioWhatsapp(relatorio, conta) {
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) {
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) {
     logger.warn({ msg: 'Sem destinatário configurado para envio do relatório semanal', contaId: String(conta._id) });
     return;
   }
@@ -82,7 +82,7 @@ export async function enviarRelatorioWhatsapp(relatorio, conta) {
   const link = config.urlBase ? `${config.urlBase.replace(/\/$/, '')}/relatorios/${relatorio._id}` : null;
   const texto = construirMensagemRelatorio(relatorio, conta, link);
 
-  await enviarMensagemWhatsapp(destinatario, texto);
+  await enviarMensagemWhatsapp(destinatarios, texto);
 
   relatorio.enviadoWhatsapp = true;
   await relatorio.save();

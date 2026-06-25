@@ -8,12 +8,39 @@ import { comRetry } from '../../shared/utils.js';
 import { ErroAplicacao } from '../../shared/erros.js';
 
 /**
+ * Resolve a lista de JIDs de destinatários de uma conta.
+ * Combina whatsappJid (primário) + whatsappJids (adicionais), deduplica.
+ * Fallback para NOTIFICACAO_WHATSAPP_JID do env se nenhum JID configurado.
+ * @param {Object} conta - documento Conta
+ * @returns {string[]}
+ */
+export function resolverDestinatarios(conta) {
+  const principal  = conta.notificacao?.whatsappJid ?? '';
+  const adicionais = conta.notificacao?.whatsappJids ?? [];
+  const todos = [...new Set([principal, ...adicionais].filter(Boolean))];
+  if (todos.length === 0 && config.evolution.whatsappJidPadrao) {
+    return [config.evolution.whatsappJidPadrao];
+  }
+  return todos;
+}
+
+/**
  * Envia uma mensagem de texto via Evolution API.
- * @param {string} destinatario - JID/número do destinatário (ex: "5511999999999")
+ * Aceita um único JID (string) ou múltiplos JIDs (string[]).
+ * @param {string|string[]} destinatario - JID(s) do(s) destinatário(s)
  * @param {string} texto - conteúdo da mensagem
- * @returns {Promise<{idMensagemEnviada: string|null}>}
+ * @returns {Promise<{idMensagemEnviada: string|null}>} resultado do primeiro envio
  */
 export async function enviarMensagemWhatsapp(destinatario, texto) {
+  const jids = Array.isArray(destinatario) ? destinatario : [destinatario];
+  let ultimo = { idMensagemEnviada: null };
+  for (const jid of jids) {
+    ultimo = await enviarParaJid(jid, texto);
+  }
+  return ultimo;
+}
+
+async function enviarParaJid(destinatario, texto) {
   if (!config.evolution.apiUrl || !config.evolution.apiKey || !config.evolution.instanceName) {
     throw new ErroAplicacao('Evolution API não configurada (EVOLUTION_API_URL/API_KEY/INSTANCE_NAME)', 'ERRO_CONFIG_EVOLUTION');
   }

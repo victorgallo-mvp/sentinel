@@ -14,8 +14,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
-import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
-import { config } from '../../config/index.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 
 const THRESHOLD_FREQUENCIA = 3.0;
@@ -37,8 +36,8 @@ export async function verificarPerformance() {
 }
 
 async function verificarPerformanceConta(conta) {
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) return;
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
 
   const entidades = await Entidade.find({
     contaId: conta._id,
@@ -49,10 +48,10 @@ async function verificarPerformanceConta(conta) {
 
   for (const entidade of entidades) {
     try {
-      await verificarFrequenciaSaturacao(conta, entidade, destinatario);
+      await verificarFrequenciaSaturacao(conta, entidade, destinatarios);
 
       if (OBJETIVOS_CONVERSAO.has(entidade.objetivo?.toUpperCase())) {
-        await verificarZeroConversoes(conta, entidade, destinatario);
+        await verificarZeroConversoes(conta, entidade, destinatarios);
       }
     } catch (erro) {
       logger.warn({ msg: 'Falha ao verificar performance da entidade', entidadeId: String(entidade._id), nome: entidade.nome, erro: erro.message });
@@ -60,7 +59,7 @@ async function verificarPerformanceConta(conta) {
   }
 }
 
-async function verificarFrequenciaSaturacao(conta, entidade, destinatario) {
+async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
   const res = await query(
     `SELECT valor FROM metricas_serie_temporal
      WHERE entidade_id = $1 AND metrica = 'frequency' AND janela_horas = 24
@@ -99,10 +98,10 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatario) {
 
   let envioStatus = 'enviada';
   try {
-    await enviarMensagemWhatsapp(destinatario, mensagem);
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (e) {
     envioStatus = 'erro';
-    logger.error({ msg: 'Falha ao enviar alerta de frequência', conta: conta.nome, entidade: entidade.nome, destinatario, erro: e.message });
+    logger.error({ msg: 'Falha ao enviar alerta de frequência', conta: conta.nome, entidade: entidade.nome, destinatario: destinatarios.join(','), erro: e.message });
   }
 
   await Notificacao.create({
@@ -110,7 +109,7 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatario) {
     tipo: 'alerta_performance',
     entidadeId: entidade._id,
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     enviadaEm: new Date(),
     status: envioStatus,
@@ -119,7 +118,7 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatario) {
   logger.info({ msg: 'Alerta de frequência elevada', conta: conta.nome, entidade: entidade.nome, frequencia: frequencia.toFixed(2), status: envioStatus });
 }
 
-async function verificarZeroConversoes(conta, entidade, destinatario) {
+async function verificarZeroConversoes(conta, entidade, destinatarios) {
   const limiarGasto = conta.configuracoes?.limiarGastoZeroConversoes ?? LIMIAR_GASTO_ZERO_CONVERSOES;
 
   const res = await query(
@@ -164,10 +163,10 @@ async function verificarZeroConversoes(conta, entidade, destinatario) {
 
   let envioStatus = 'enviada';
   try {
-    await enviarMensagemWhatsapp(destinatario, mensagem);
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (e) {
     envioStatus = 'erro';
-    logger.error({ msg: 'Falha ao enviar alerta de zero conversões', conta: conta.nome, entidade: entidade.nome, destinatario, erro: e.message });
+    logger.error({ msg: 'Falha ao enviar alerta de zero conversões', conta: conta.nome, entidade: entidade.nome, destinatario: destinatarios.join(','), erro: e.message });
   }
 
   await Notificacao.create({
@@ -175,7 +174,7 @@ async function verificarZeroConversoes(conta, entidade, destinatario) {
     tipo: 'alerta_performance',
     entidadeId: entidade._id,
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     enviadaEm: new Date(),
     status: envioStatus,

@@ -8,8 +8,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
-import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
-import { config } from '../../config/index.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 
 const METRICAS_RESUMO = ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpm', 'conversions', 'cost_per_conversion', 'purchase_roas'];
@@ -27,8 +26,8 @@ export async function enviarResumoDiarioContas() {
 }
 
 async function enviarResumoDiarioConta(conta) {
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) return;
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
 
   const entidades = await Entidade.find({
     contaId: conta._id,
@@ -77,7 +76,7 @@ async function enviarResumoDiarioConta(conta) {
 
   let status = 'enviada';
   try {
-    await enviarMensagemWhatsapp(destinatario, mensagem);
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (erro) {
     status = 'erro';
     logger.error({ msg: 'Falha ao enviar resumo diário WhatsApp', contaId: String(conta._id), erro: erro.message });
@@ -87,7 +86,7 @@ async function enviarResumoDiarioConta(conta) {
     contaId: conta._id,
     tipo: 'resumo_diario',
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     enviadaEm: new Date(),
     status,

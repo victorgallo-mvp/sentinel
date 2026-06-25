@@ -12,7 +12,7 @@ import { obterConfiguracaoAdset, obterConfiguracaoCampanha, obterDetalhesContaAn
 import { query } from '../../infra/postgres.js';
 // `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
 // Para problemas de pagamento, usamos exclusivamente account_status.
-import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
@@ -81,8 +81,8 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
   const detalhes = await obterDetalhesContaAnuncio(contaAnuncioId, token);
   const status = Number(detalhes.account_status);
   const labelProblema = STATUS_PROBLEMA[status];
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) return;
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
 
   // Conta com status problemático
   if (labelProblema) {
@@ -100,8 +100,8 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
         `<!-- ${chaveAlerta} -->`,
       ].join('\n');
       let envioStatus = 'enviada';
-      try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de conta bloqueada', conta: conta.nome, erro: e.message }); }
-      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+      try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de conta bloqueada', conta: conta.nome, erro: e.message }); }
+      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
     return;
@@ -137,8 +137,8 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
           `<!-- ${chaveZerado} -->`,
         ].join('\n');
         let envioStatus = 'enviada';
-        try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo zerado', conta: conta.nome, destinatario, erro: e.message }); }
-        await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+        try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo zerado', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
+        await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
         logger.info({ msg: 'Alerta de saldo zerado enviado', conta: conta.nome, contaAnuncioId, status: envioStatus });
       }
       return;
@@ -172,8 +172,8 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       `<!-- ${chaveAlerta} -->`,
     ].join('\n');
     let envioStatus = 'enviada';
-    try { await enviarMensagemWhatsapp(destinatario, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo baixo', conta: conta.nome, destinatario, erro: e.message }); }
-    await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario, conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+    try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo baixo', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
+    await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
     logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais, status: envioStatus });
   }
 }
@@ -233,8 +233,8 @@ async function avaliarSaldoAdset(conta, adset, token) {
   });
   if (jaAvisou) return;
 
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) {
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) {
     logger.warn({ msg: 'Alerta de saldo sem destinatário configurado', contaId: String(conta._id) });
     return;
   }
@@ -255,7 +255,7 @@ async function avaliarSaldoAdset(conta, adset, token) {
 
   let status = 'enviada';
   try {
-    await enviarMensagemWhatsapp(destinatario, mensagem);
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (erro) {
     status = 'erro';
     logger.error({ msg: 'Falha ao enviar alerta de saldo WhatsApp', adsetId: String(adset._id), erro: erro.message });
@@ -266,7 +266,7 @@ async function avaliarSaldoAdset(conta, adset, token) {
     tipo: 'alerta_orcamento',
     entidadeId: adset._id,
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     enviadaEm: new Date(),
     status,

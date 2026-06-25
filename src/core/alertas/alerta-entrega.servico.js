@@ -18,8 +18,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { obterStatusEIssues } from '../coleta/meta-api.cliente.js';
-import { enviarMensagemWhatsapp } from '../notificacao/enviador-whatsapp.servico.js';
-import { config } from '../../config/index.js';
+import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 
 const JANELA_RENOTIFICACAO_HORAS = 24;
@@ -58,8 +57,8 @@ export async function verificarErrosEntrega() {
 
 async function verificarErrosEntregaConta(conta) {
   const token = conta.metaConfig?.systemUserToken || undefined;
-  const destinatario = conta.notificacao?.whatsappJid || config.evolution.whatsappJidPadrao;
-  if (!destinatario) return;
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
 
   const entidades = await Entidade.find({
     contaId: conta._id,
@@ -70,7 +69,7 @@ async function verificarErrosEntregaConta(conta) {
 
   for (const entidade of entidades) {
     try {
-      await verificarEntidadeIndividual(conta, entidade, token, destinatario);
+      await verificarEntidadeIndividual(conta, entidade, token, destinatarios);
     } catch (erro) {
       logger.warn({ msg: 'Falha ao verificar entidade', entidadeId: String(entidade._id), nome: entidade.nome, erro: erro.message });
     }
@@ -78,13 +77,13 @@ async function verificarErrosEntregaConta(conta) {
 
   // Bug 1C: campanha ativa sem nenhum anúncio ativo
   try {
-    await verificarCampanhasAtivas(conta, destinatario);
+    await verificarCampanhasAtivas(conta, destinatarios);
   } catch (erro) {
     logger.warn({ msg: 'Falha ao verificar campanhas sem ad ativo', contaId: String(conta._id), erro: erro.message });
   }
 }
 
-async function verificarEntidadeIndividual(conta, entidade, token, destinatario) {
+async function verificarEntidadeIndividual(conta, entidade, token, destinatarios) {
   const { effectiveStatus, issues } = await obterStatusEIssues(entidade.tipo, entidade.metaId, token);
 
   if (effectiveStatus && effectiveStatus !== 'ACTIVE') {
@@ -94,7 +93,7 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatario)
     }
     // Só envia alerta para mudanças acionáveis
     if (deveAlertarStatus(effectiveStatus, entidade.tipo)) {
-      await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatario);
+      await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatarios);
     }
     return;
   }
@@ -131,10 +130,10 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatario)
 
     let envioStatus = 'enviada';
     try {
-      await enviarMensagemWhatsapp(destinatario, mensagem);
+      await enviarMensagemWhatsapp(destinatarios, mensagem);
     } catch (e) {
       envioStatus = 'erro';
-      logger.error({ msg: 'Falha ao enviar alerta de erro de entrega', conta: conta.nome, entidade: entidade.nome, destinatario, erro: e.message });
+      logger.error({ msg: 'Falha ao enviar alerta de erro de entrega', conta: conta.nome, entidade: entidade.nome, destinatario: destinatarios.join(','), erro: e.message });
     }
 
     await Notificacao.create({
@@ -142,7 +141,7 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatario)
       tipo: 'alerta_orcamento',
       entidadeId: entidade._id,
       canal: 'whatsapp',
-      destinatario,
+      destinatario: destinatarios.join(','),
       conteudo: mensagem,
       enviadaEm: new Date(),
       status: envioStatus,
@@ -152,7 +151,7 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatario)
   }
 }
 
-async function notificarMudancaStatus(conta, entidade, novoStatus, destinatario) {
+async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios) {
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
   const chaveAlerta = `status_change_${String(entidade._id)}_${novoStatus}`;
 
@@ -179,10 +178,10 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatario)
 
   let envioStatus = 'enviada';
   try {
-    await enviarMensagemWhatsapp(destinatario, mensagem);
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (e) {
     envioStatus = 'erro';
-    logger.error({ msg: 'Falha ao enviar alerta de mudança de status', conta: conta.nome, entidade: entidade.nome, novoStatus, destinatario, erro: e.message });
+    logger.error({ msg: 'Falha ao enviar alerta de mudança de status', conta: conta.nome, entidade: entidade.nome, novoStatus, destinatario: destinatarios.join(','), erro: e.message });
   }
 
   await Notificacao.create({
@@ -190,7 +189,7 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatario)
     tipo: 'alerta_orcamento',
     entidadeId: entidade._id,
     canal: 'whatsapp',
-    destinatario,
+    destinatario: destinatarios.join(','),
     conteudo: mensagem,
     enviadaEm: new Date(),
     status: envioStatus,
@@ -203,7 +202,7 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatario)
  * Bug 1C: detecta campanhas ACTIVE que não possuem nenhum ad ACTIVE.
  * Requer que os ads estejam sincronizados no MongoDB para funcionar.
  */
-async function verificarCampanhasAtivas(conta, destinatario) {
+async function verificarCampanhasAtivas(conta, destinatarios) {
   const campanhasAtivas = await Entidade.find({
     contaId: conta._id,
     tipo: 'campaign',
@@ -253,7 +252,7 @@ async function verificarCampanhasAtivas(conta, destinatario) {
 
     let envioStatus = 'enviada';
     try {
-      await enviarMensagemWhatsapp(destinatario, mensagem);
+      await enviarMensagemWhatsapp(destinatarios, mensagem);
     } catch (e) {
       envioStatus = 'erro';
       logger.error({ msg: 'Falha ao enviar alerta de campanha sem ad ativo', conta: conta.nome, campanha: campanha.nome, erro: e.message });
@@ -264,7 +263,7 @@ async function verificarCampanhasAtivas(conta, destinatario) {
       tipo: 'alerta_orcamento',
       entidadeId: campanha._id,
       canal: 'whatsapp',
-      destinatario,
+      destinatario: destinatarios.join(','),
       conteudo: mensagem,
       enviadaEm: new Date(),
       status: envioStatus,

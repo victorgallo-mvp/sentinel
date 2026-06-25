@@ -37,7 +37,8 @@ const notificacaoSchema = new Schema(
       enum: ['whatsapp', 'email', 'telegram'],
       default: 'whatsapp',
     },
-    whatsappJid: { type: String, default: '' },
+    whatsappJid:  { type: String, default: '' },
+    whatsappJids: { type: [String], default: [] }, // destinatários adicionais
     horarioPermitidoInicio: { type: String, default: '08:00' },
     horarioPermitidoFim: { type: String, default: '22:00' },
     diasUteis: { type: [Number], default: [0, 1, 2, 3, 4, 5, 6] },
