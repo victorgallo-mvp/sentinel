@@ -81,6 +81,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 ? <p className="ap-vazio">Nenhuma anomalia detectada</p>
                 : anomalias.map((a) => (
                     <div key={a.id} className="ap-item">
+                      {a.contaNome && <span className="ap-conta-tag">{a.contaNome}</span>}
                       <span className="ap-badge ap-badge--anomalia">{a.metrica}</span>
                       <span className="ap-detalhe">
                         {a.direcao === 'aumento' ? '↑' : a.direcao === 'queda' ? '↓' : ''}{' '}
@@ -97,6 +98,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 ? <p className="ap-vazio">Nenhuma investigação</p>
                 : investigacoes.map((i) => (
                     <div key={i.id} className="ap-item">
+                      {i.contaNome && <span className="ap-conta-tag">{i.contaNome}</span>}
                       <span className={`ap-badge ${i.decidiuNotificar ? (i.notificacaoEnviada === false ? 'ap-badge--erro' : 'ap-badge--notificou') : 'ap-badge--silencioso'}`}>
                         {i.decidiuNotificar
                           ? (i.notificacaoEnviada === false ? '⚠ Falhou' : '🔔 Notificou')
@@ -115,6 +117,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 ? <p className="ap-vazio">Nenhuma notificação enviada</p>
                 : notificacoes.map((n) => (
                     <div key={n.id} className="ap-item">
+                      {n.contaNome && <span className="ap-conta-tag">{n.contaNome}</span>}
                       <span className={`ap-badge ${n.status === 'enviada' ? 'ap-badge--ok' : 'ap-badge--erro'}`}>
                         {n.status === 'enviada' ? '✓ Enviada' : '✗ Erro'}
                       </span>

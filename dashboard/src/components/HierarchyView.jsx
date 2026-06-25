@@ -167,7 +167,7 @@ function CampaignNode({ node, mostrarPausados, semAdAtivo, statusFiltro }) {
 }
 
 function AdsetNode({ node, mostrarPausados, statusFiltro }) {
-  const [expandido, setExpandido] = useState(false);
+  const [expandido, setExpandido] = useState(true);
 
   const filhosVisiveis = mostrarPausados
     ? node.filhos
@@ -201,8 +201,10 @@ function AdsetNode({ node, mostrarPausados, statusFiltro }) {
 }
 
 function urlMetaAds(entidade) {
-  const act = entidade.contaAnuncioId;
-  if (!act || !entidade.metaId) return null;
+  const actRaw = entidade.contaAnuncioId;
+  if (!actRaw || !entidade.metaId) return null;
+  // Meta Ads Manager usa o ID numérico sem o prefixo "act_"
+  const act = actRaw.replace(/^act_/, '');
   const base = `https://adsmanager.facebook.com/adsmanager/manage`;
   if (entidade.tipo === 'campaign') return `${base}/campaigns?act=${act}&selected_campaign_ids=${entidade.metaId}`;
   if (entidade.tipo === 'adset')   return `${base}/adsets?act=${act}&selected_adset_ids=${entidade.metaId}`;

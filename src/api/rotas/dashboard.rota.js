@@ -152,7 +152,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             return {
               id: String(entidade._id),
               metaId: entidade.metaId,
-              contaAnuncioId: entidade.contaAnuncioId ?? null,
+              contaAnuncioId: entidade.hierarquia?.contaAnuncioId ?? null,
               nome: entidade.nome,
               tipo: entidade.tipo,
               status: entidade.status ?? 'ACTIVE',
@@ -225,6 +225,9 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
     const totalEntidades = dadosContas.reduce((acc, c) => acc + c.entidades.length, 0);
 
+    // Mapa contaId → nome para enriquecer eventos
+    const nomeConta = new Map(contas.map((c) => [String(c._id), c.nome]));
+
     res.json({
       atualizadoEm: new Date(),
       usuario: { nome: req.usuario.nome, superAdmin: req.usuario.superAdmin },
@@ -239,6 +242,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       contas: dadosContas,
       anomalias: anomalias.map((a) => ({
         id: String(a._id),
+        contaNome: nomeConta.get(String(a.contaId)) ?? null,
         metrica: a.metrica,
         valorAtual: a.valorAtual,
         valorEsperado: a.baselineMedia,
@@ -249,6 +253,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       })),
       investigacoes: investigacoes.map((i) => ({
         id: String(i._id),
+        contaNome: nomeConta.get(String(i.contaId)) ?? null,
         decidiuNotificar: i.decidiuNotificar,
         notificacaoEnviada: i.decidiuNotificar ? idsComNotificacaoEnviada.has(String(i._id)) : null,
         recomendacao: i.recomendacao ?? null,
@@ -258,6 +263,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       })),
       notificacoes: notificacoes.map((n) => ({
         id: String(n._id),
+        contaNome: nomeConta.get(String(n.contaId)) ?? null,
         canal: n.canal,
         conteudo: n.conteudo,
         status: n.status,

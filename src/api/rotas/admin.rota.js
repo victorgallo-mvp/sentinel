@@ -355,24 +355,28 @@ rotaAdmin.post('/disparar/baselines', async (req, res, next) => {
   }
 });
 
-/** POST /admin/disparar/sincronizar-entidades { contaId } */
+/** POST /admin/disparar/sincronizar-entidades { contaId? } — sem contaId sincroniza todas */
 rotaAdmin.post('/disparar/sincronizar-entidades', async (req, res, next) => {
   try {
-    const { contaId } = req.body;
-    if (!contaId) return res.status(400).json({ erro: 'contaId é obrigatório' });
+    const { contaId } = req.body ?? {};
 
-    res.status(202).json({ disparado: true, job: 'sincronizar-entidades', contaId });
+    const contas = contaId
+      ? await Conta.find({ _id: contaId, ativo: true })
+      : await Conta.find({ ativo: true });
+
+    if (contas.length === 0) return res.status(404).json({ erro: 'Nenhuma conta encontrada' });
+
+    res.status(202).json({ disparado: true, job: 'sincronizar-entidades', totalContas: contas.length });
 
     (async () => {
-      const conta = await Conta.findById(contaId);
-      if (!conta) return;
-
-      for (const contaAnuncioId of conta.metaConfig.contasAnuncioIds) {
-        try {
-          const resultado = await sincronizarEntidades(contaId, conta.metaConfig.bmId, contaAnuncioId, { token: conta.metaConfig.systemUserToken });
-          logger.info({ msg: 'Sincronização de entidades concluída (disparo manual)', contaId, contaAnuncioId, ...resultado });
-        } catch (erro) {
-          logger.error({ msg: 'Erro ao disparar sincronização de entidades manualmente via API admin', contaId, contaAnuncioId, erro: erro.message });
+      for (const conta of contas) {
+        for (const contaAnuncioId of conta.metaConfig.contasAnuncioIds) {
+          try {
+            const resultado = await sincronizarEntidades(String(conta._id), conta.metaConfig.bmId, contaAnuncioId, { token: conta.metaConfig.systemUserToken });
+            logger.info({ msg: 'Sincronização manual concluída', contaId: String(conta._id), contaAnuncioId, ...resultado });
+          } catch (erro) {
+            logger.error({ msg: 'Erro na sincronização manual', contaId: String(conta._id), contaAnuncioId, erro: erro.message });
+          }
         }
       }
     })();

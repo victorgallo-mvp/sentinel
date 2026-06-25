@@ -126,6 +126,17 @@
 }
 .ap-item:last-child { border-bottom: none; }
 
+.ap-conta-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .ap-badge {
   font-size: 10px;
   font-weight: 700;

@@ -19,6 +19,11 @@ import { ErroMetaApi } from '../../shared/erros.js';
 
 const { AdAccount, Campaign, AdSet, Ad, Business } = bizSdk;
 
+// Ao buscar todas as entidades (não só ativas), precisa filtro explícito —
+// sem filtro a Meta API usa default ACTIVE+PAUSED e omite CAMPAIGN_PAUSED, ADSET_PAUSED etc.
+const STATUS_SYNC = ['ACTIVE', 'PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED',
+  'PENDING_REVIEW', 'DISAPPROVED', 'PENDING_BILLING_INFO', 'WITH_ISSUES'];
+
 export const CAMPOS_INSIGHTS_BASE = [
   'impressions',
   'reach',
@@ -114,9 +119,7 @@ export async function listarCampanhas(contaAnuncioId, { apenasAtivas = false, to
   return comRetry(async () => {
     const conta = new AdAccount(contaAnuncioId);
     const params = {};
-    if (apenasAtivas) {
-      params.filtering = [{ field: 'effective_status', operator: 'IN', value: ['ACTIVE'] }];
-    }
+    params.filtering = [{ field: 'effective_status', operator: 'IN', value: apenasAtivas ? ['ACTIVE'] : STATUS_SYNC }];
     const cursor = await conta.getCampaigns(['id', 'name', 'objective', 'status', 'effective_status'], params);
     verificarRateLimit(cursor);
     return paraArrayPlano(cursor).map((c) => ({
@@ -139,9 +142,7 @@ export async function listarAdsets(campanhaId, { apenasAtivos = false, token } =
   return comRetry(async () => {
     const campanha = new Campaign(campanhaId);
     const params = {};
-    if (apenasAtivos) {
-      params.filtering = [{ field: 'effective_status', operator: 'IN', value: ['ACTIVE'] }];
-    }
+    params.filtering = [{ field: 'effective_status', operator: 'IN', value: apenasAtivos ? ['ACTIVE'] : STATUS_SYNC }];
     const cursor = await campanha.getAdSets(['id', 'name', 'status', 'effective_status', 'daily_budget', 'lifetime_budget'], params);
     verificarRateLimit(cursor);
     return paraArrayPlano(cursor).map((a) => ({
@@ -165,9 +166,7 @@ export async function listarAds(adsetId, { apenasAtivos = false, token } = {}) {
   return comRetry(async () => {
     const adset = new AdSet(adsetId);
     const params = {};
-    if (apenasAtivos) {
-      params.filtering = [{ field: 'effective_status', operator: 'IN', value: ['ACTIVE'] }];
-    }
+    params.filtering = [{ field: 'effective_status', operator: 'IN', value: apenasAtivos ? ['ACTIVE'] : STATUS_SYNC }];
     const cursor = await adset.getAds(['id', 'name', 'status', 'effective_status', 'creative'], params);
     verificarRateLimit(cursor);
     return paraArrayPlano(cursor).map((a) => ({
