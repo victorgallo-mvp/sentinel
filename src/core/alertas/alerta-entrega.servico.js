@@ -146,74 +146,75 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
 
   if (!issues.length) return;
 
-  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-
-  // Busca campanha pai para adsets e ads
-  let campanhaPai = null;
+  // Resolve campanha de referência — throttle e notificação sempre no nível campanha
+  let campanhaRef = entidade;
   if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
-    campanhaPai = await Entidade.findOne({
+    const campanhaPai = await Entidade.findOne({
       contaId: conta._id,
       metaId: entidade.hierarquia.campanhaId,
       tipo: 'campaign',
     }).lean();
+    if (campanhaPai) campanhaRef = campanhaPai;
   }
 
-  for (const issue of issues) {
-    const errorCode = issue.error_code ?? issue.error_type ?? 'desconhecido';
-    const chaveAlerta = `erroentrega_${String(entidade._id)}_${errorCode}`;
+  // 1 alerta por campanha/24h — todos os adsets/ads da mesma campanha usam a mesma chave
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  const chaveAlerta = `erroentrega_camp_${String(campanhaRef._id)}`;
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    canal: 'whatsapp',
+    conteudo: new RegExp(chaveAlerta),
+    enviadaEm: { $gte: desde },
+  });
+  if (jaAvisou) return;
 
-    const jaAvisou = await Notificacao.exists({
-      contaId: conta._id,
-      tipo: 'alerta_orcamento',
-      canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta),
-      enviadaEm: { $gte: desde },
-    });
-    if (jaAvisou) continue;
+  const mensagem = [
+    `⛔ *Problemas de entrega — ${conta.nome}*`,
+    ``,
+    `Campanha: *${campanhaRef.nome}*`,
+    ``,
+    `Foram detectados erros de entrega nesta campanha. Acesse o painel Sentinela para ver os detalhes.`,
+    `<!-- ${chaveAlerta} -->`,
+  ].join('\n');
 
-    const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
-    const linhaContexto = campanhaPai
-      ? [`Campanha: *${campanhaPai.nome}*`, `${TIPO_LABEL[entidade.tipo] ?? entidade.tipo}: *${entidade.nome}*`]
-      : [`${TIPO_LABEL[entidade.tipo] ?? entidade.tipo}: *${entidade.nome}*`];
-
-    const mensagem = [
-      `⛔ *Erro de entrega — ${conta.nome}*`,
-      ``,
-      ...linhaContexto,
-      `Código: \`${errorCode}\``,
-      `Resumo: ${issue.error_summary ?? '—'}`,
-      `Detalhe: ${issue.error_message ?? '—'}`,
-      ``,
-      `Verifique o gerenciador de anúncios para resolver o problema.`,
-      `<!-- ${chaveAlerta} -->`,
-    ].join('\n');
-
-    let envioStatus = 'enviada';
-    try {
-      await enviarMensagemWhatsapp(destinatarios, mensagem);
-    } catch (e) {
-      envioStatus = 'erro';
-      logger.error({ msg: 'Falha ao enviar alerta de erro de entrega', conta: conta.nome, entidade: entidade.nome, destinatario: destinatarios.join(','), erro: e.message });
-    }
-
-    await Notificacao.create({
-      contaId: conta._id,
-      tipo: 'alerta_orcamento',
-      entidadeId: entidade._id,
-      canal: 'whatsapp',
-      destinatario: destinatarios.join(','),
-      conteudo: mensagem,
-      enviadaEm: new Date(),
-      status: envioStatus,
-    });
-
-    logger.info({ msg: 'Alerta de erro de entrega enviado', conta: conta.nome, entidade: entidade.nome, errorCode, status: envioStatus });
+  let envioStatus = 'enviada';
+  try {
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
+  } catch (e) {
+    envioStatus = 'erro';
+    logger.error({ msg: 'Falha ao enviar alerta de erro de entrega', conta: conta.nome, campanha: campanhaRef.nome, erro: e.message });
   }
+
+  await Notificacao.create({
+    contaId: conta._id,
+    tipo: 'alerta_orcamento',
+    entidadeId: campanhaRef._id,
+    canal: 'whatsapp',
+    destinatario: destinatarios.join(','),
+    conteudo: mensagem,
+    enviadaEm: new Date(),
+    status: envioStatus,
+  });
+
+  logger.info({ msg: 'Alerta de erro de entrega enviado', conta: conta.nome, campanha: campanhaRef.nome, status: envioStatus });
 }
 
 async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios) {
+  // Resolve campanha de referência ANTES do throttle — chave usa campaign ID
+  let campanhaRef = entidade;
+  if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
+    const campanhaPai = await Entidade.findOne({
+      contaId: conta._id,
+      metaId: entidade.hierarquia.campanhaId,
+      tipo: 'campaign',
+    }).lean();
+    if (campanhaPai) campanhaRef = campanhaPai;
+  }
+
+  // Throttle por campanha: adset1 e adset2 da mesma campanha com mesmo status → 1 alerta/24h
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-  const chaveAlerta = `status_change_${String(entidade._id)}_${novoStatus}`;
+  const chaveAlerta = `status_change_camp_${String(campanhaRef._id)}_${novoStatus}`;
 
   const jaAvisou = await Notificacao.exists({
     contaId: conta._id,
@@ -224,31 +225,14 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
   });
   if (jaAvisou) return;
 
-  const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
-  const tipoLabel = TIPO_LABEL[entidade.tipo] ?? entidade.tipo;
   const statusLabel = STATUS_LABEL[novoStatus] ?? novoStatus;
-
-  // Busca campanha pai para adsets e ads
-  let campanhaPai = null;
-  if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
-    campanhaPai = await Entidade.findOne({
-      contaId: conta._id,
-      metaId: entidade.hierarquia.campanhaId,
-      tipo: 'campaign',
-    }).lean();
-  }
-
-  const linhasContexto = campanhaPai
-    ? [`Campanha: *${campanhaPai.nome}*`, `${tipoLabel}: *${entidade.nome}*`]
-    : [`${tipoLabel}: *${entidade.nome}*`];
-
   const mensagem = [
-    `⏸ *${tipoLabel} alterada — ${conta.nome}*`,
+    `⏸ *Campanha alterada — ${conta.nome}*`,
     ``,
-    ...linhasContexto,
+    `Campanha: *${campanhaRef.nome}*`,
     `Novo status: *${statusLabel}*`,
     ``,
-    `A entrega pode ter sido interrompida. Verifique o gerenciador de anúncios.`,
+    `A entrega pode ter sido interrompida. Acesse o painel Sentinela para verificar.`,
     `<!-- ${chaveAlerta} -->`,
   ].join('\n');
 
@@ -257,13 +241,13 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
     await enviarMensagemWhatsapp(destinatarios, mensagem);
   } catch (e) {
     envioStatus = 'erro';
-    logger.error({ msg: 'Falha ao enviar alerta de mudança de status', conta: conta.nome, entidade: entidade.nome, novoStatus, destinatario: destinatarios.join(','), erro: e.message });
+    logger.error({ msg: 'Falha ao enviar alerta de mudança de status', conta: conta.nome, campanha: campanhaRef.nome, novoStatus, erro: e.message });
   }
 
   await Notificacao.create({
     contaId: conta._id,
     tipo: 'alerta_orcamento',
-    entidadeId: entidade._id,
+    entidadeId: campanhaRef._id,
     canal: 'whatsapp',
     destinatario: destinatarios.join(','),
     conteudo: mensagem,
@@ -271,7 +255,7 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
     status: envioStatus,
   });
 
-  logger.info({ msg: 'Alerta de mudança de status enviado', conta: conta.nome, entidade: entidade.nome, novoStatus, status: envioStatus });
+  logger.info({ msg: 'Alerta de mudança de status enviado', conta: conta.nome, campanha: campanhaRef.nome, novoStatus, status: envioStatus });
 }
 
 /** Conta pré-paga com saldo esgotado (PENDING_BILLING_INFO). */
