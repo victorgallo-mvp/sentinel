@@ -13,23 +13,48 @@ const JANELA_MINIMA_REPETICAO_HORAS = 4;
 
 /**
  * Verifica se uma notificação pode ser enviada agora.
- * @returns {Promise<{podeEnviar: boolean, motivo: string|null}>}
+ * O `codigo` permite ao chamador distinguir o tipo de bloqueio — em especial
+ * `fora_horario`, que deve ser ADIADO (reenfileirado) e não descartado.
+ * @returns {Promise<{podeEnviar: boolean, motivo: string|null, codigo: string|null}>}
  */
 export async function podeNotificar(conta, entidade, anomalia) {
   if (!dentroDoHorarioPermitido(conta)) {
-    return { podeEnviar: false, motivo: 'Fora do horário/dia permitido para notificações.' };
+    return { podeEnviar: false, motivo: 'Fora do horário/dia permitido para notificações.', codigo: 'fora_horario' };
   }
 
   if (estaSilenciada(entidade, anomalia.metrica)) {
-    return { podeEnviar: false, motivo: `Métrica "${anomalia.metrica}" silenciada temporariamente (snooze) para esta entidade.` };
+    return { podeEnviar: false, motivo: `Métrica "${anomalia.metrica}" silenciada temporariamente (snooze) para esta entidade.`, codigo: 'silenciada' };
   }
 
   const repeticaoRecente = await notificacaoRecenteParaMetrica(conta._id, entidade._id, anomalia.metrica);
   if (repeticaoRecente) {
-    return { podeEnviar: false, motivo: `Já houve notificação para "${anomalia.metrica}" nesta entidade nas últimas ${JANELA_MINIMA_REPETICAO_HORAS}h.` };
+    return { podeEnviar: false, motivo: `Já houve notificação para "${anomalia.metrica}" nesta entidade nas últimas ${JANELA_MINIMA_REPETICAO_HORAS}h.`, codigo: 'repeticao' };
   }
 
-  return { podeEnviar: true, motivo: null };
+  return { podeEnviar: true, motivo: null, codigo: null };
+}
+
+/**
+ * Calcula quantos milissegundos faltam até a próxima abertura da janela de
+ * notificação permitida (horarioPermitidoInicio em um dia útil configurado).
+ * Usa o horário local do servidor — mesma base de `dentroDoHorarioPermitido`.
+ * @returns {number} ms até a próxima abertura (sempre > 0)
+ */
+export function msAteProximaAberturaJanela(conta) {
+  const notificacao = conta?.notificacao ?? {};
+  const diasUteis = notificacao.diasUteis ?? [0, 1, 2, 3, 4, 5, 6];
+  const inicio = paraMinutos(notificacao.horarioPermitidoInicio ?? '08:00');
+  const agora = new Date();
+
+  // Procura o próximo instante (hoje ou nos próximos 7 dias) em que a janela abre.
+  for (let i = 0; i < 8; i++) {
+    const candidato = new Date(agora);
+    candidato.setDate(agora.getDate() + i);
+    candidato.setHours(Math.floor(inicio / 60), inicio % 60, 0, 0);
+    if (!diasUteis.includes(candidato.getDay())) continue;
+    if (candidato.getTime() > agora.getTime()) return candidato.getTime() - agora.getTime();
+  }
+  return 60 * 60 * 1000; // fallback defensivo: 1h
 }
 
 /** Verifica horário permitido (HH:MM) e dia da semana configurados na conta. */

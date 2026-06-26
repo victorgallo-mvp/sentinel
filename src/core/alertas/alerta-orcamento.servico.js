@@ -112,41 +112,22 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
-    // Reflete o bloqueio no dashboard (conta pré-paga)
+    // Reflete o bloqueio no dashboard (conta pré-paga), com o motivo (status) legível
     if (conta.configuracoes?.prepago) {
-      await persistirSnapshotSaldo(conta._id, contaAnuncioId, { nivel: 'bloqueado' });
+      await persistirSnapshotSaldo(conta._id, contaAnuncioId, { nivel: 'bloqueado', motivoBloqueio: labelProblema });
     }
     return;
   }
 
-  // Saldo pré-pago via spend_cap - amount_spent (só para contas marcadas como prepago)
+  // Saldo pré-pago via funding_source_details (valor REAL carregado na conta),
+  // com fallback para spend_cap - amount_spent. (só para contas marcadas como prepago)
   if (conta.configuracoes?.prepago) {
-    const spendCap = Number(detalhes.spend_cap ?? 0);
-    const amountSpent = Number(detalhes.amount_spent ?? 0);
-    if (spendCap <= 0) return; // spend_cap não definido — não é pré-pago real
-
-    const saldoEstimadoReais = (spendCap - amountSpent) / 100;
-    const ritmoHora = await estimarRitmoHoraPrepago(conta._id);
-    const limiarReais = conta.configuracoes?.limiarAlertaSaldoReais ?? 50;
-    const runwayHoras = (ritmoHora && ritmoHora > 0 && saldoEstimadoReais > 0)
-      ? saldoEstimadoReais / ritmoHora
-      : null;
-
-    // Classifica o nível de saldo (usado no alerta e no snapshot do dashboard)
-    let nivel;
-    if (saldoEstimadoReais <= 0) nivel = 'zerado';
-    else if (runwayHoras != null && runwayHoras < RUNWAY_CRITICO_HORAS) nivel = 'critico';
-    else if (runwayHoras != null && runwayHoras < RUNWAY_ACABANDO_HORAS) nivel = 'acabando';
-    else if (runwayHoras == null && saldoEstimadoReais < limiarReais) nivel = 'acabando';
-    else nivel = 'ok';
+    const snap = await computarSaldoPrepago(conta, contaAnuncioId, detalhes, token);
+    if (!snap) return; // saldo indeterminável — não é pré-pago real
+    const { saldoReais: saldoEstimadoReais, ritmoHora, runwayHoras, nivel } = snap;
 
     // Persiste o snapshot para o dashboard ler sem chamar a Meta API
-    await persistirSnapshotSaldo(conta._id, contaAnuncioId, {
-      saldoReais: saldoEstimadoReais,
-      ritmoHora: ritmoHora ?? null,
-      runwayHoras,
-      nivel,
-    });
+    await persistirSnapshotSaldo(conta._id, contaAnuncioId, snap);
 
     // 1. Saldo zerado — entrega interrompida (chave própria, 24h)
     if (nivel === 'zerado') {
@@ -213,11 +194,15 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
 
 /**
  * Estima o gasto diário médio da conta (ontem) para calcular horas restantes de saldo.
- * Usa o valor máximo de `spend` (24h) coletado ontem para cada entidade da conta.
+ * Usa o valor máximo de `spend` (24h) coletado ontem para cada CAMPANHA da conta.
+ * IMPORTANTE: agrega apenas no nível de campanha — somar campaign+adset+ad contaria
+ * o mesmo gasto 2-3x (cada nível já totaliza o mesmo dinheiro).
  * Retorna null se não houver dados suficientes.
  */
-async function calcularGastoDiarioOntem(contaId) {
-  const entidades = await Entidade.find({ contaId }).select('_id').lean();
+async function calcularGastoDiarioOntem(contaId, contaAnuncioId) {
+  const filtro = { contaId, tipo: 'campaign' };
+  if (contaAnuncioId) filtro['hierarquia.contaAnuncioId'] = contaAnuncioId;
+  const entidades = await Entidade.find(filtro).select('_id').lean();
   if (!entidades.length) return null;
 
   const entidadeIds = entidades.map((e) => String(e._id));
@@ -249,8 +234,10 @@ async function calcularGastoDiarioOntem(contaId) {
  * só ontem); se não houver histórico, cai para o gasto de ontem.
  * Retorna null se não houver dados suficientes.
  */
-async function estimarRitmoHoraPrepago(contaId) {
-  const entidades = await Entidade.find({ contaId }).select('_id').lean();
+async function estimarRitmoHoraPrepago(contaId, contaAnuncioId) {
+  const filtro = { contaId, tipo: 'campaign' };
+  if (contaAnuncioId) filtro['hierarquia.contaAnuncioId'] = contaAnuncioId;
+  const entidades = await Entidade.find(filtro).select('_id').lean();
   if (!entidades.length) return null;
 
   const entidadeIds = entidades.map((e) => String(e._id));
@@ -280,8 +267,143 @@ async function estimarRitmoHoraPrepago(contaId) {
   if (mediaDiaria > 0) return mediaDiaria / 24;
 
   // Fallback: gasto de ontem
-  const gastoOntem = await calcularGastoDiarioOntem(contaId);
+  const gastoOntem = await calcularGastoDiarioOntem(contaId, contaAnuncioId);
   return gastoOntem ? gastoOntem / 24 : null;
+}
+
+/**
+ * Extrai o saldo pré-pago disponível (em reais) de `funding_source_details`.
+ * Esse é o valor REAL carregado na conta — diferente de `spend_cap`, que é um
+ * limite de gasto e não o saldo. `display_string` vem no formato pt-BR, ex.:
+ * "Saldo disponível (R$158,46 BRL)". Faz parse do número pt-BR ("1.234,56").
+ * Fallback: spend_cap - amount_spent (em centavos). Retorna null se indeterminável.
+ */
+function extrairSaldoPrepago(detalhes) {
+  const displayString = detalhes?.funding_source_details?.display_string;
+  if (displayString) {
+    const m = String(displayString).match(/(\d[\d.]*,\d{2})/);
+    if (m) {
+      const valor = Number(m[1].replace(/\./g, '').replace(',', '.'));
+      if (Number.isFinite(valor)) return valor;
+    }
+  }
+  // Fallback legado: spend_cap - amount_spent (centavos → reais)
+  const spendCap = Number(detalhes?.spend_cap ?? 0);
+  const amountSpent = Number(detalhes?.amount_spent ?? 0);
+  if (spendCap > 0) return (spendCap - amountSpent) / 100;
+  return null;
+}
+
+/**
+ * Estima o gasto diário PREVISTO (R$/dia) de uma conta pré-paga somando os
+ * orçamentos diários das entidades ATIVAS — base mais estável e previsível que o
+ * gasto medido para projetar o runway. Campanhas CBO: usa o daily_budget da
+ * campanha; ABO: soma o daily_budget dos adsets ativos da campanha.
+ * Considera apenas entidades da conta de anúncio informada.
+ * Retorna null se não conseguir determinar (cai para o gasto medido).
+ */
+async function estimarOrcamentoDiarioPrevisto(contaId, contaAnuncioId, token) {
+  const campanhas = await Entidade.find({
+    contaId, tipo: 'campaign', status: 'ACTIVE',
+    'hierarquia.contaAnuncioId': contaAnuncioId,
+  }).select('metaId').lean();
+  if (!campanhas.length) return null;
+
+  let totalCentavos = 0;
+  let temDado = false;
+
+  for (const campanha of campanhas) {
+    try {
+      const cfg = await obterConfiguracaoCampanha(campanha.metaId, token);
+      if (cfg.daily_budget) { // CBO — orçamento mora na campanha
+        totalCentavos += Number(cfg.daily_budget);
+        temDado = true;
+        continue;
+      }
+      // ABO — soma o orçamento diário dos adsets ativos da campanha
+      const adsets = await Entidade.find({
+        contaId, tipo: 'adset', status: 'ACTIVE',
+        'hierarquia.campanhaId': campanha.metaId,
+      }).select('metaId').lean();
+      for (const adset of adsets) {
+        const cfgAd = await obterConfiguracaoAdset(adset.metaId, token);
+        if (cfgAd.daily_budget) { totalCentavos += Number(cfgAd.daily_budget); temDado = true; }
+      }
+    } catch (e) {
+      logger.warn({ msg: 'Falha ao obter orçamento diário previsto', campanhaId: campanha.metaId, erro: e.message });
+    }
+  }
+
+  if (!temDado || totalCentavos <= 0) return null;
+  return totalCentavos / 100; // centavos → reais/dia
+}
+
+/**
+ * Calcula (SEM notificar) o snapshot de saldo pré-pago de uma conta de anúncio
+ * a partir dos detalhes já lidos da Meta. Fonte única da matemática de saldo/runway,
+ * usada tanto pelo alerta horário quanto pelo backfill do dashboard.
+ * @returns {Promise<{saldoReais, ritmoHora, runwayHoras, nivel}|null>} ou null se não for pré-pago real
+ */
+async function computarSaldoPrepago(conta, contaAnuncioId, detalhes, token) {
+  const saldoReais = extrairSaldoPrepago(detalhes);
+  if (saldoReais == null) return null;
+
+  // Ritmo de gasto (R$/h): prioriza o orçamento diário previsto das campanhas/adsets
+  // ativos (base estável e previsível); cai para o gasto medido (nível campanha) se
+  // não houver orçamento determinável.
+  const orcamentoDiarioPrevisto = await estimarOrcamentoDiarioPrevisto(conta._id, contaAnuncioId, token);
+  const ritmoHora = orcamentoDiarioPrevisto != null
+    ? orcamentoDiarioPrevisto / 24
+    : await estimarRitmoHoraPrepago(conta._id, contaAnuncioId);
+  const limiarReais = conta.configuracoes?.limiarAlertaSaldoReais ?? 50;
+  const runwayHoras = (ritmoHora && ritmoHora > 0 && saldoReais > 0)
+    ? saldoReais / ritmoHora
+    : null;
+
+  let nivel;
+  if (saldoReais <= 0) nivel = 'zerado';
+  else if (runwayHoras != null && runwayHoras < RUNWAY_CRITICO_HORAS) nivel = 'critico';
+  else if (runwayHoras != null && runwayHoras < RUNWAY_ACABANDO_HORAS) nivel = 'acabando';
+  else if (runwayHoras == null && saldoReais < limiarReais) nivel = 'acabando';
+  else nivel = 'ok';
+
+  return { saldoReais, ritmoHora: ritmoHora ?? null, runwayHoras, nivel };
+}
+
+/**
+ * Recalcula e persiste o snapshot de saldo de TODAS as contas pré-pagas SEM enviar
+ * nenhuma notificação. Usado para corrigir/atualizar os valores exibidos no dashboard
+ * após mudanças na lógica de saldo/runway. Retorna um resumo por conta de anúncio.
+ */
+export async function recalcularSnapshotsSaldoPrepago() {
+  const contas = await Conta.find({ ativo: true, 'configuracoes.prepago': true });
+  const resultado = [];
+
+  for (const conta of contas) {
+    const token = conta.metaConfig?.systemUserToken || undefined;
+    for (const contaAnuncioId of (conta.metaConfig?.contasAnuncioIds ?? [])) {
+      try {
+        const detalhes = await obterDetalhesContaAnuncio(contaAnuncioId, token);
+        const labelProblema = STATUS_PROBLEMA[Number(detalhes.account_status)];
+
+        const snap = labelProblema
+          ? { nivel: 'bloqueado', motivoBloqueio: labelProblema }
+          : await computarSaldoPrepago(conta, contaAnuncioId, detalhes, token);
+
+        if (!snap) {
+          resultado.push({ conta: conta.nome, contaAnuncioId, ignorado: 'saldo indeterminável' });
+          continue;
+        }
+        await persistirSnapshotSaldo(conta._id, contaAnuncioId, snap);
+        resultado.push({ conta: conta.nome, contaAnuncioId, ...snap });
+      } catch (e) {
+        logger.warn({ msg: 'Falha ao recalcular snapshot de saldo', conta: conta.nome, contaAnuncioId, erro: e.message });
+        resultado.push({ conta: conta.nome, contaAnuncioId, erro: e.message });
+      }
+    }
+  }
+
+  return resultado;
 }
 
 /**
@@ -289,7 +411,7 @@ async function estimarRitmoHoraPrepago(contaId) {
  * documento da Conta, para o dashboard ler sem chamar a Meta API.
  */
 async function persistirSnapshotSaldo(contaId, contaAnuncioId, dados) {
-  const snapshot = { contaAnuncioId, atualizadoEm: new Date(), saldoReais: null, ritmoHora: null, runwayHoras: null, nivel: null, ...dados };
+  const snapshot = { contaAnuncioId, atualizadoEm: new Date(), saldoReais: null, ritmoHora: null, runwayHoras: null, nivel: null, motivoBloqueio: null, ...dados };
   const r = await Conta.updateOne(
     { _id: contaId, 'saldoPrepago.contaAnuncioId': contaAnuncioId },
     { $set: { 'saldoPrepago.$': snapshot } }

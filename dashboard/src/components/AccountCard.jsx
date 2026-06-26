@@ -58,7 +58,7 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { gastoHoje, status, alertas = [], saldoPrepago = [] } = conta.resumo;
+  const { status, alertas = [], saldoPrepago = [] } = conta.resumo;
   const saldo = piorSaldo(saldoPrepago);
   const saldoTexto = saldo ? textoSaldo(saldo) : null;
 
@@ -126,11 +126,6 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
 
         {/* Resumo */}
         <div className="ac-resumo">
-          {gastoHoje > 0 && (
-            <span className="ac-resumo-gasto">
-              R$ {gastoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </span>
-          )}
           {saldoTexto && (
             <span
               className={`ac-badge ac-saldo ac-badge--${SALDO_CLS[saldo.nivel] ?? 'normal'}`}

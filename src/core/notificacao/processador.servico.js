@@ -8,9 +8,10 @@ import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
-import { podeNotificar } from './throttling.js';
+import { podeNotificar, msAteProximaAberturaJanela } from './throttling.js';
 import { construirMensagem } from './construtor-mensagem.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from './enviador-whatsapp.servico.js';
+import { adicionarJob, FILAS } from '../../infra/fila.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 import { ErroNaoEncontrado } from '../../shared/erros.js';
@@ -30,8 +31,16 @@ export async function processarNotificacao(investigacaoId) {
   const conta = await Conta.findById(investigacao.contaId);
   if (!conta) throw new ErroNaoEncontrado(`Conta ${investigacao.contaId} não encontrada`);
 
-  const { podeEnviar, motivo } = await podeNotificar(conta, entidade, anomalia);
+  const { podeEnviar, motivo, codigo } = await podeNotificar(conta, entidade, anomalia);
   if (!podeEnviar) {
+    // Fora do horário permitido: não descarta — reenfileira para a próxima
+    // abertura da janela. O job roda uma vez no delay e aí passa no horário.
+    if (codigo === 'fora_horario') {
+      const delay = msAteProximaAberturaJanela(conta);
+      await adicionarJob(FILAS.NOTIFICAR, 'notificar', { investigacaoId: String(investigacao._id) }, { delay });
+      logger.info({ msg: 'Notificação adiada para a próxima janela permitida', investigacaoId, delayMs: delay, motivo });
+      return { enviada: false, adiada: true, motivo };
+    }
     logger.info({ msg: 'Notificação suprimida por throttling', investigacaoId, motivo });
     return { enviada: false, motivo };
   }

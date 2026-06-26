@@ -271,7 +271,7 @@ export async function obterDetalhesContaAnuncio(contaAnuncioId, token) {
 
   return comRetry(async () => {
     const conta = new AdAccount(contaAnuncioId);
-    const dados = await conta.read(['id', 'name', 'account_status', 'balance', 'currency', 'amount_spent', 'spend_cap']);
+    const dados = await conta.read(['id', 'name', 'account_status', 'balance', 'currency', 'amount_spent', 'spend_cap', 'funding_source_details', 'is_prepay_account']);
     return dados.export_all_data ? dados.export_all_data() : dados;
   });
 }

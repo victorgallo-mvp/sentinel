@@ -109,6 +109,83 @@
 }
 .am-metricas-btn:hover { background: #e5e7eb; color: #2563eb; }
 
+/* ── Alertas (detalhes + marcar ciente) ── */
+.am-alertas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #f0f2f5;
+  background: #fffbfa;
+  flex-shrink: 0;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+.am-alerta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #dc2626;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.am-alerta-info { min-width: 0; flex: 1; }
+
+.am-alerta-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.am-alerta-tipo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: #9ca3af;
+}
+
+.am-alerta-nome {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.am-alerta-motivo {
+  font-size: 13px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-top: 2px;
+}
+
+.am-alerta-issue {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 3px;
+}
+
+.am-alerta-ciente {
+  flex-shrink: 0;
+  background: #f0fdf4;
+  border: 1.5px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 12px;
+  color: #16a34a;
+  transition: background .12s, border-color .12s;
+  white-space: nowrap;
+}
+.am-alerta-ciente:hover:not(:disabled) { background: #dcfce7; border-color: #86efac; }
+.am-alerta-ciente:disabled { opacity: .6; cursor: default; }
+
 /* ── Filtros ── */
 .am-filtros {
   display: flex;

@@ -129,6 +129,16 @@ export const CATALOGO_METRICAS = {
     campoApi: 'actions', // extraído de `actions` filtrando pelo evento de conversão configurado
   },
 
+  messaging_conversations_started: {
+    nome: 'Conversas por mensagem iniciada',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+    campoApi: 'actions', // onsite_conversion.messaging_conversation_started_7d
+  },
+
   conversion_rate: {
     nome: 'Taxa de conversão',
     tipo: 'gauge',

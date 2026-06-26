@@ -18,6 +18,7 @@
     "simular-anomalia": "node scripts/simular-anomalia.js",
     "testar-agente": "node scripts/testar-agente.js",
     "enviar-relatorio-manual": "node scripts/enviar-relatorio-manual.js",
+    "recalcular-saldo": "node scripts/recalcular-saldo-prepago.js",
     "migrate": "node scripts/executar-migrations.js"
   },
   "dependencies": {

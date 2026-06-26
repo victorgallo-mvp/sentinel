@@ -28,6 +28,7 @@ const saldoPrepagoSchema = new Schema(
     ritmoHora: { type: Number, default: null },     // R$/h estimado
     runwayHoras: { type: Number, default: null },   // horas de autonomia projetadas
     nivel: { type: String, default: null },         // 'ok'|'acabando'|'critico'|'zerado'|'bloqueado'
+    motivoBloqueio: { type: String, default: null }, // rótulo do account_status quando nivel='bloqueado'
     atualizadoEm: { type: Date },
   },
   { _id: false }
@@ -70,6 +71,17 @@ const configuracoesSchema = new Schema(
     prepago: { type: Boolean, default: false },
     limiarAlertaSaldoReais: { type: Number, default: 50 },
     metricasSelecionadas: { type: [String], default: [] }, // [] = usar padrão por objetivo
+    // Alertas de entrega que o usuário marcou como "ciente" no dashboard.
+    // chave = `${entidadeId}:${status}`; some quando o status muda (novo problema).
+    alertasReconhecidos: {
+      type: [
+        new Schema(
+          { chave: { type: String, required: true }, reconhecidoEm: { type: Date, default: Date.now } },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { _id: false }
 );

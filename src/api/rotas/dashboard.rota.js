@@ -125,10 +125,12 @@ const STATUS_PAUSADO_SET = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED',
  * @param {Array} entidades - lista de entidades enriquecidas (com status, issues, tipo)
  * @returns {'critico'|'atencao'|'pausado'|'normal'}
  */
-function computarStatusConta(entidades) {
-  // critico: qualquer entidade com status problemático ou com issues
+function computarStatusConta(entidades, reconhecidos = new Set()) {
+  // critico: qualquer entidade com status problemático ou com issues — exceto as
+  // que o usuário já marcou como ciente (mesma chave entidade:status do alerta).
   const temCritico = entidades.some((e) =>
-    STATUS_CRITICO.has(e.status) || (Array.isArray(e.issues) && e.issues.length > 0)
+    (STATUS_CRITICO.has(e.status) || (Array.isArray(e.issues) && e.issues.length > 0)) &&
+    !reconhecidos.has(`${e.id}:${e.status}`)
   );
   if (temCritico) return 'critico';
 
@@ -229,13 +231,27 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tipo === 'campaign')
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
-        const statusConta = computarStatusConta(dadosEntidades);
-
-        // Alertas: entidades com status crítico
+        // Alertas: entidades com status crítico. Cada alerta tem uma `chave` estável
+        // (entidade + status) para o usuário marcar como "ciente" no dashboard.
         const STATUS_ALERTAS = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
+        const reconhecidos = new Set(
+          (conta.configuracoes?.alertasReconhecidos ?? []).map((a) => a.chave)
+        );
         const alertas = dadosEntidades
           .filter((e) => STATUS_ALERTAS.has(e.status) || e.issues?.length > 0)
-          .map((e) => ({ tipo: e.tipo, nome: e.nome, status: e.status, motivoStatus: e.motivoStatus }));
+          .map((e) => ({
+            chave: `${e.id}:${e.status}`,
+            entidadeId: e.id,
+            tipo: e.tipo,
+            nome: e.nome,
+            status: e.status,
+            motivoStatus: e.motivoStatus,
+            issues: e.issues ?? [],
+          }))
+          .filter((a) => !reconhecidos.has(a.chave));
+
+        // Status agregado: alertas reconhecidos não pesam (usuário já está ciente)
+        const statusConta = computarStatusConta(dadosEntidades, reconhecidos);
 
         // Saldo pré-pago: snapshot persistido pelo job horário de orçamento
         const saldoPrepago = conta.configuracoes?.prepago
@@ -245,6 +261,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
               ritmoHora: s.ritmoHora ?? null,
               runwayHoras: s.runwayHoras ?? null,
               nivel: s.nivel ?? null,
+              motivoBloqueio: s.motivoBloqueio ?? null,
               atualizadoEm: s.atualizadoEm ?? null,
             }))
           : [];
@@ -370,6 +387,45 @@ rotaDashboard.patch('/contas/:contaId/metricas', autenticarDashboard, async (req
 
     await Conta.findByIdAndUpdate(contaId, { 'configuracoes.metricasSelecionadas': validas });
     res.json({ ok: true, metricasSelecionadas: validas });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Reconhecer / desfazer alertas de entrega ("marcar ciente") ─────────────
+// body: { chave: string, reconhecer?: boolean }  (reconhecer=false desfaz)
+rotaDashboard.patch('/contas/:contaId/alertas', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    const { chave, reconhecer = true } = req.body;
+
+    if (!chave || typeof chave !== 'string') {
+      return res.status(400).json({ erro: 'chave do alerta é obrigatória' });
+    }
+
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+
+    if (reconhecer) {
+      // Adiciona sem duplicar (remove a chave antiga e reinsere com timestamp atual)
+      await Conta.findByIdAndUpdate(contaId, {
+        $pull: { 'configuracoes.alertasReconhecidos': { chave } },
+      });
+      await Conta.findByIdAndUpdate(contaId, {
+        $push: { 'configuracoes.alertasReconhecidos': { chave, reconhecidoEm: new Date() } },
+      });
+    } else {
+      await Conta.findByIdAndUpdate(contaId, {
+        $pull: { 'configuracoes.alertasReconhecidos': { chave } },
+      });
+    }
+
+    res.json({ ok: true, chave, reconhecido: Boolean(reconhecer) });
   } catch (erro) {
     next(erro);
   }
