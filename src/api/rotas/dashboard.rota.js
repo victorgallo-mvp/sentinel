@@ -237,16 +237,30 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => STATUS_ALERTAS.has(e.status) || e.issues?.length > 0)
           .map((e) => ({ tipo: e.tipo, nome: e.nome, status: e.status, motivoStatus: e.motivoStatus }));
 
+        // Saldo pré-pago: snapshot persistido pelo job horário de orçamento
+        const saldoPrepago = conta.configuracoes?.prepago
+          ? (conta.saldoPrepago ?? []).map((s) => ({
+              contaAnuncioId: s.contaAnuncioId,
+              saldoReais: s.saldoReais ?? null,
+              ritmoHora: s.ritmoHora ?? null,
+              runwayHoras: s.runwayHoras ?? null,
+              nivel: s.nivel ?? null,
+              atualizadoEm: s.atualizadoEm ?? null,
+            }))
+          : [];
+
         return {
           id: String(conta._id),
           nome: conta.nome,
           identificador: conta.identificador,
+          prepago: conta.configuracoes?.prepago ?? false,
           metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
           entidades: dadosEntidades,
           resumo: {
             gastoHoje: gastoPeriodo,
             status: statusConta,
             alertas,
+            saldoPrepago,
           },
         };
       })

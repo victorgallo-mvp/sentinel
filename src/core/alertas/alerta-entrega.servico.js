@@ -126,13 +126,13 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
     }
     // Só envia alerta para mudanças acionáveis
     if (deveAlertarStatus(effectiveStatus, entidade.tipo)) {
-      // Contas pré-pagas: PENDING_BILLING_INFO = saldo esgotado, alerta com mensagem diferente
+      // Contas pré-pagas sem saldo (PENDING_BILLING_INFO) são tratadas exclusivamente
+      // pelo verificador de orçamento (alerta-orcamento), que conhece o valor real do
+      // saldo via spend_cap e alerta por conta de anúncio. Evita notificação duplicada.
       const isPrepago = conta.configuracoes?.prepago === true;
-      if (effectiveStatus === 'PENDING_BILLING_INFO' && isPrepago) {
-        await notificarSaldoEsgotado(conta, entidade, destinatarios);
-      } else {
-        await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatarios);
-      }
+      if (effectiveStatus === 'PENDING_BILLING_INFO' && isPrepago) return;
+
+      await notificarMudancaStatus(conta, entidade, effectiveStatus, destinatarios);
     }
     return;
   }
@@ -256,51 +256,6 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
   });
 
   logger.info({ msg: 'Alerta de mudança de status enviado', conta: conta.nome, campanha: campanhaRef.nome, novoStatus, status: envioStatus });
-}
-
-/** Conta pré-paga com saldo esgotado (PENDING_BILLING_INFO). */
-async function notificarSaldoEsgotado(conta, entidade, destinatarios) {
-  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-  const chaveAlerta = `saldo_esgotado_${String(conta._id)}`;
-
-  const jaAvisou = await Notificacao.exists({
-    contaId: conta._id,
-    tipo: 'alerta_orcamento',
-    canal: 'whatsapp',
-    conteudo: new RegExp(chaveAlerta),
-    enviadaEm: { $gte: desde },
-  });
-  if (jaAvisou) return;
-
-  const mensagem = [
-    `💳 *Saldo esgotado — ${conta.nome}*`,
-    ``,
-    `A conta de anúncios ficou sem saldo e as veiculações foram pausadas.`,
-    `Recarregue o saldo no Gerenciador de Anúncios para retomar as campanhas.`,
-    ``,
-    `<!-- ${chaveAlerta} -->`,
-  ].join('\n');
-
-  let envioStatus = 'enviada';
-  try {
-    await enviarMensagemWhatsapp(destinatarios, mensagem);
-  } catch (e) {
-    envioStatus = 'erro';
-    logger.error({ msg: 'Falha ao enviar alerta de saldo esgotado', conta: conta.nome, erro: e.message });
-  }
-
-  await Notificacao.create({
-    contaId: conta._id,
-    tipo: 'alerta_orcamento',
-    entidadeId: entidade._id,
-    canal: 'whatsapp',
-    destinatario: destinatarios.join(','),
-    conteudo: mensagem,
-    enviadaEm: new Date(),
-    status: envioStatus,
-  });
-
-  logger.info({ msg: 'Alerta de saldo esgotado enviado', conta: conta.nome, status: envioStatus });
 }
 
 /**

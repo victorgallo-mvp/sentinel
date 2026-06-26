@@ -21,6 +21,14 @@ const LIMIAR_REAIS_PADRAO = 30;   // R$30 restante (em qualquer cenário)
 const JANELA_RENOTIFICACAO_HORAS = 4;        // alertas transitórios (saldo baixo)
 const JANELA_RENOTIFICACAO_PERSISTENTE = 24; // alertas persistentes (zerado, bloqueado)
 
+// Aviso preventivo de esgotamento de saldo pré-pago por tempo de autonomia (runway),
+// não por valor fixo em R$ — assim a antecedência é consistente entre contas que
+// gastam pouco ou muito.
+const RUNWAY_CRITICO_HORAS = 6;            // saldo acaba em < 6h → alerta urgente
+const RUNWAY_ACABANDO_HORAS = 24;          // saldo acaba em < 24h → alerta preventivo
+const JANELA_RENOTIFICACAO_CRITICO = 4;    // renotifica "crítico" a cada 4h
+const JANELA_RENOTIFICACAO_ACABANDO = 12;  // renotifica "vai acabar" a cada 12h
+
 // account_status da Meta API que indicam problema de pagamento/bloqueio
 const STATUS_PROBLEMA = {
   2: 'desativada',
@@ -104,6 +112,10 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
+    // Reflete o bloqueio no dashboard (conta pré-paga)
+    if (conta.configuracoes?.prepago) {
+      await persistirSnapshotSaldo(conta._id, contaAnuncioId, { nivel: 'bloqueado' });
+    }
     return;
   }
 
@@ -114,13 +126,30 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     if (spendCap <= 0) return; // spend_cap não definido — não é pré-pago real
 
     const saldoEstimadoReais = (spendCap - amountSpent) / 100;
-    const limiar = conta.configuracoes?.limiarAlertaSaldoReais ?? 50;
-    if (saldoEstimadoReais >= limiar) return;
+    const ritmoHora = await estimarRitmoHoraPrepago(conta._id);
+    const limiarReais = conta.configuracoes?.limiarAlertaSaldoReais ?? 50;
+    const runwayHoras = (ritmoHora && ritmoHora > 0 && saldoEstimadoReais > 0)
+      ? saldoEstimadoReais / ritmoHora
+      : null;
 
-    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+    // Classifica o nível de saldo (usado no alerta e no snapshot do dashboard)
+    let nivel;
+    if (saldoEstimadoReais <= 0) nivel = 'zerado';
+    else if (runwayHoras != null && runwayHoras < RUNWAY_CRITICO_HORAS) nivel = 'critico';
+    else if (runwayHoras != null && runwayHoras < RUNWAY_ACABANDO_HORAS) nivel = 'acabando';
+    else if (runwayHoras == null && saldoEstimadoReais < limiarReais) nivel = 'acabando';
+    else nivel = 'ok';
 
-    // Saldo zerado — entrega interrompida (chave separada para não ser bloqueado pelo alerta de "baixo")
-    if (saldoEstimadoReais <= 0) {
+    // Persiste o snapshot para o dashboard ler sem chamar a Meta API
+    await persistirSnapshotSaldo(conta._id, contaAnuncioId, {
+      saldoReais: saldoEstimadoReais,
+      ritmoHora: ritmoHora ?? null,
+      runwayHoras,
+      nivel,
+    });
+
+    // 1. Saldo zerado — entrega interrompida (chave própria, 24h)
+    if (nivel === 'zerado') {
       const janelaSaldo = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
       const chaveZerado = `saldo_prepago_zerado_${contaAnuncioId}`;
       const jaAvisouZerado = await Notificacao.exists({
@@ -144,37 +173,41 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       return;
     }
 
-    // Saldo baixo (entre 0 e limiar)
-    const chaveAlerta = `saldo_prepago_${contaAnuncioId}`;
+    // 2. Saldo confortável — snapshot já persistido, nada a alertar
+    if (nivel === 'ok') return;
+
+    // 3. Projeção de esgotamento (runway): avisa com antecedência por tempo de autonomia
+    const janelaHoras = nivel === 'critico' ? JANELA_RENOTIFICACAO_CRITICO : JANELA_RENOTIFICACAO_ACABANDO;
+    const chaveAlerta = `saldo_prepago_${nivel}_${contaAnuncioId}`;
+    const desde = new Date(Date.now() - janelaHoras * 60 * 60 * 1000);
     const jaAvisou = await Notificacao.exists({
       contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
       conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde },
     });
     if (jaAvisou) return;
 
-    // Burn rate: estima horas restantes com base no gasto de ontem
-    let burnRateLinha = '';
-    try {
-      const gastoOntem = await calcularGastoDiarioOntem(conta._id);
-      if (gastoOntem && gastoOntem > 0) {
-        const taxaHoraria = gastoOntem / 24;
-        const horasRestantes = Math.round(saldoEstimadoReais / taxaHoraria);
-        burnRateLinha = `\nRitmo atual: *R$ ${taxaHoraria.toFixed(2)}/h* → saldo acaba em ~*${horasRestantes}h*`;
-      }
-    } catch { /* não crítico — mensagem enviada sem burn rate */ }
+    const linhaRitmo = (ritmoHora && runwayHoras != null)
+      ? `\nRitmo atual: *R$ ${ritmoHora.toFixed(2)}/h* → acaba em ~*${formatarRunway(runwayHoras)}*`
+      : '';
+    const titulo = nivel === 'critico'
+      ? `🟠 *Saldo crítico — ${conta.nome}*`
+      : `🟡 *Saldo vai acabar — ${conta.nome}*`;
+    const rodape = nivel === 'critico'
+      ? `Recarregue agora para não interromper as campanhas.`
+      : `Programe a recarga para evitar interrupção das campanhas.`;
 
     const mensagem = [
-      `💳 *Saldo pré-pago baixo — ${conta.nome}*`,
+      titulo,
       ``, `Conta: \`${contaAnuncioId}\``,
-      `Saldo estimado: *R$ ${saldoEstimadoReais.toFixed(2)}* (limite: R$ ${limiar.toFixed(2)})${burnRateLinha}`,
+      `Saldo estimado: *R$ ${saldoEstimadoReais.toFixed(2)}*${linhaRitmo}`,
       ``,
-      `Recarregue o saldo para evitar interrupção das campanhas.`,
+      rodape,
       `<!-- ${chaveAlerta} -->`,
     ].join('\n');
     let envioStatus = 'enviada';
-    try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo baixo', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
+    try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo pré-pago', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
     await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
-    logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, saldoEstimadoReais, status: envioStatus });
+    logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, nivel, saldoEstimadoReais, runwayHoras, status: envioStatus });
   }
 }
 
@@ -207,6 +240,72 @@ async function calcularGastoDiarioOntem(contaId) {
 
   const gasto = Number(res.rows[0]?.gasto_total ?? 0);
   return gasto > 0 ? gasto : null;
+}
+
+/**
+ * Estima o ritmo de gasto por hora (R$/h) de uma conta pré-paga, usado para
+ * projetar o tempo de autonomia (runway) do saldo.
+ * Usa a média do gasto diário dos últimos 3 dias completos (mais estável que
+ * só ontem); se não houver histórico, cai para o gasto de ontem.
+ * Retorna null se não houver dados suficientes.
+ */
+async function estimarRitmoHoraPrepago(contaId) {
+  const entidades = await Entidade.find({ contaId }).select('_id').lean();
+  if (!entidades.length) return null;
+
+  const entidadeIds = entidades.map((e) => String(e._id));
+  const hojeInicio = new Date();
+  hojeInicio.setUTCHours(0, 0, 0, 0);
+  const tresDiasAtras = new Date(hojeInicio);
+  tresDiasAtras.setDate(tresDiasAtras.getDate() - 3);
+
+  // Média do gasto diário (soma do máximo por entidade em cada dia, depois média entre dias)
+  const res = await query(
+    `SELECT AVG(dia_total)::float AS media_diaria
+       FROM (
+         SELECT dia, SUM(max_gasto) AS dia_total
+         FROM (
+           SELECT date_trunc('day', coletada_em) AS dia, entidade_id, MAX(valor) AS max_gasto
+           FROM metricas_serie_temporal
+           WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
+             AND coletada_em >= $2 AND coletada_em < $3
+           GROUP BY dia, entidade_id
+         ) por_entidade
+         GROUP BY dia
+       ) por_dia`,
+    [entidadeIds, tresDiasAtras, hojeInicio]
+  );
+
+  const mediaDiaria = Number(res.rows[0]?.media_diaria ?? 0);
+  if (mediaDiaria > 0) return mediaDiaria / 24;
+
+  // Fallback: gasto de ontem
+  const gastoOntem = await calcularGastoDiarioOntem(contaId);
+  return gastoOntem ? gastoOntem / 24 : null;
+}
+
+/**
+ * Persiste/atualiza o snapshot de saldo pré-pago de uma conta de anúncio no
+ * documento da Conta, para o dashboard ler sem chamar a Meta API.
+ */
+async function persistirSnapshotSaldo(contaId, contaAnuncioId, dados) {
+  const snapshot = { contaAnuncioId, atualizadoEm: new Date(), saldoReais: null, ritmoHora: null, runwayHoras: null, nivel: null, ...dados };
+  const r = await Conta.updateOne(
+    { _id: contaId, 'saldoPrepago.contaAnuncioId': contaAnuncioId },
+    { $set: { 'saldoPrepago.$': snapshot } }
+  );
+  if (r.matchedCount === 0) {
+    await Conta.updateOne({ _id: contaId }, { $push: { saldoPrepago: snapshot } });
+  }
+}
+
+/** Formata horas de autonomia em string amigável ("5h" ou "1d 4h"). */
+function formatarRunway(horas) {
+  const h = Math.max(0, Math.round(horas));
+  if (h < 24) return `${h}h`;
+  const dias = Math.floor(h / 24);
+  const resto = h % 24;
+  return resto > 0 ? `${dias}d ${resto}h` : `${dias}d`;
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {

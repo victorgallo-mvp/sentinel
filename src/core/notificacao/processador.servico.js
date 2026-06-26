@@ -42,7 +42,17 @@ export async function processarNotificacao(investigacaoId) {
     return { enviada: false, motivo: 'Destinatário WhatsApp não configurado para a conta.' };
   }
 
-  const mensagem = construirMensagem(investigacao, anomalia, entidade);
+  // Resolve a campanha pai para ancorar a mensagem na campanha (não no adset/ad)
+  let campanha = null;
+  if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
+    campanha = await Entidade.findOne({
+      contaId: conta._id,
+      metaId: entidade.hierarquia.campanhaId,
+      tipo: 'campaign',
+    }).lean();
+  }
+
+  const mensagem = construirMensagem(investigacao, anomalia, entidade, campanha);
 
   let idMensagemEnviada = null;
   let status = 'enviada';

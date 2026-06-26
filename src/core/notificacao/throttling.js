@@ -7,6 +7,7 @@
  */
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Anomalia } from '../../dominio/anomalia.modelo.js';
+import { Investigacao } from '../../dominio/investigacao.modelo.js';
 
 const JANELA_MINIMA_REPETICAO_HORAS = 4;
 
@@ -62,29 +63,41 @@ function estaSilenciada(entidade, metrica) {
   return silenciamentos.some((s) => s.metrica === metrica && new Date(s.ate) > agora);
 }
 
-/** Verifica se já houve notificação recente pra essa entidade+métrica. */
+/**
+ * Verifica se já houve notificação recente pra essa entidade+métrica.
+ * Considera TODAS as notificações enviadas na janela (não apenas a mais recente):
+ * resolve cada uma até a anomalia de origem e checa se alguma corresponde a esta
+ * combinação entidade+métrica. Ancorado no horário da notificação — assim funciona
+ * mesmo quando a conta teve várias notificações de entidades/métricas diferentes.
+ */
 async function notificacaoRecenteParaMetrica(contaId, entidadeId, metrica) {
   const limite = new Date(Date.now() - JANELA_MINIMA_REPETICAO_HORAS * 60 * 60 * 1000);
 
-  const anomaliasRecentes = await Anomalia.find({
-    entidadeId,
-    metrica,
-    detectadaEm: { $gte: limite },
-  }).select('_id');
-
-  if (anomaliasRecentes.length === 0) return false;
-
-  const notificacaoExistente = await Notificacao.findOne({
+  // Notificações de investigação enviadas para esta conta na janela
+  const notificacoes = await Notificacao.find({
     contaId,
     investigacaoId: { $exists: true },
     enviadaEm: { $gte: limite },
     status: { $ne: 'erro' },
-  }).populate({ path: 'investigacaoId', select: 'anomaliaId' });
+  }).select('investigacaoId');
 
-  if (!notificacaoExistente) return false;
+  if (notificacoes.length === 0) return false;
 
-  const idsAnomaliasRecentes = new Set(anomaliasRecentes.map((a) => String(a._id)));
-  return idsAnomaliasRecentes.has(String(notificacaoExistente.investigacaoId?.anomaliaId));
+  // Investigações correspondentes → anomalias de origem
+  const investigacaoIds = notificacoes.map((n) => n.investigacaoId);
+  const investigacoes = await Investigacao.find({ _id: { $in: investigacaoIds } }).select('anomaliaId');
+  if (investigacoes.length === 0) return false;
+
+  const anomaliaIds = investigacoes.map((i) => i.anomaliaId);
+
+  // Alguma dessas anomalias é desta entidade+métrica?
+  const existe = await Anomalia.exists({
+    _id: { $in: anomaliaIds },
+    entidadeId,
+    metrica,
+  });
+
+  return Boolean(existe);
 }
 
 export { JANELA_MINIMA_REPETICAO_HORAS };

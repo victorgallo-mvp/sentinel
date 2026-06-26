@@ -10,15 +10,23 @@ import { emojiSeveridade, labelUrgencia, formatarBullets, formatarConfianca } fr
  * @param {Object} investigacao - documento Investigacao (com diagnostico/recomendacao)
  * @param {Object} anomalia - documento Anomalia
  * @param {Object} entidade - documento Entidade
+ * @param {Object|null} campanha - campanha pai (quando a entidade é adset/ad)
  */
-export function construirMensagem(investigacao, anomalia, entidade) {
+export function construirMensagem(investigacao, anomalia, entidade, campanha = null) {
   const { diagnostico, recomendacao } = investigacao;
   const metadados = obterMetadadosMetrica(anomalia.metrica);
   const nomeMetrica = metadados?.nome ?? anomalia.metrica;
 
   const linhas = [];
 
-  linhas.push(`${emojiSeveridade(diagnostico.severidade)} *ANOMALIA EM ${entidade.nome.toUpperCase()}*`);
+  // Cabeçalho sempre ancorado na campanha. Se a anomalia for de um adset/ad,
+  // a campanha é o título e a entidade afetada aparece como subtítulo.
+  const nomeAlvo = campanha?.nome ?? entidade.nome;
+  linhas.push(`${emojiSeveridade(diagnostico.severidade)} *ANOMALIA — ${nomeAlvo.toUpperCase()}*`);
+  if (campanha && entidade.tipo !== 'campaign') {
+    const rotulo = entidade.tipo === 'adset' ? 'Conjunto' : entidade.tipo === 'ad' ? 'Anúncio' : 'Entidade';
+    linhas.push(`_${rotulo} afetado: ${entidade.nome}_`);
+  }
   linhas.push('');
   linhas.push(`*Métrica:* ${nomeMetrica}`);
   linhas.push(`*Variação:* ${arredondar(anomalia.valorAtual, 4)} (baseline: ${arredondar(anomalia.baselineMedia, 4)} ± ${arredondar(anomalia.baselineDesvio, 4)})`);

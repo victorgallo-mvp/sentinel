@@ -4,6 +4,47 @@ import './AccountCard.css';
 const STATUS_COR   = { critico: '#dc2626', atencao: '#f59e0b', pausado: '#9ca3af', normal: '#16a34a' };
 const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', pausado: 'Conta pausada', normal: 'Sem alertas' };
 
+// ── Saldo pré-pago: do mais grave ao mais tranquilo ──
+const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
+const SALDO_CLS   = { zerado: 'critico', bloqueado: 'critico', critico: 'critico', acabando: 'atencao', ok: 'normal' };
+
+function fmtRunway(h) {
+  if (h == null) return null;
+  const horas = Math.max(0, Math.round(h));
+  if (horas < 24) return `${horas}h`;
+  const d = Math.floor(horas / 24);
+  const r = horas % 24;
+  return r > 0 ? `${d}d ${r}h` : `${d}d`;
+}
+
+function piorSaldo(lista) {
+  if (!lista || !lista.length) return null;
+  return [...lista].sort((a, b) => (SALDO_ORDEM[a.nivel] ?? 9) - (SALDO_ORDEM[b.nivel] ?? 9))[0];
+}
+
+function textoSaldo(s) {
+  const runway = fmtRunway(s.runwayHoras);
+  const reais = s.saldoReais != null
+    ? `R$ ${s.saldoReais.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+    : null;
+  switch (s.nivel) {
+    case 'zerado':    return '🔴 saldo zerado';
+    case 'bloqueado': return '🚨 bloqueada';
+    case 'critico':   return runway ? `🟠 acaba ~${runway}` : '🟠 saldo crítico';
+    case 'acabando':  return runway ? `🟡 acaba ~${runway}` : (reais ? `🟡 ${reais}` : '🟡 saldo baixo');
+    default:          return reais ? `💰 ${reais}${runway ? ` · ~${runway}` : ''}` : null;
+  }
+}
+
+function tituloSaldo(s) {
+  const p = [];
+  if (s.saldoReais != null) p.push(`Saldo estimado: R$ ${s.saldoReais.toFixed(2)}`);
+  if (s.ritmoHora)          p.push(`Ritmo: R$ ${s.ritmoHora.toFixed(2)}/h`);
+  if (s.runwayHoras != null) p.push(`Autonomia: ~${fmtRunway(s.runwayHoras)}`);
+  if (s.atualizadoEm)       p.push(`Atualizado: ${new Date(s.atualizadoEm).toLocaleString('pt-BR')}`);
+  return p.join('\n');
+}
+
 export default function AccountCard({ conta, favorito, customName, onFavorito, onRename, onClick }) {
   const [editando, setEditando]   = useState(false);
   const [valorEdit, setValorEdit] = useState('');
@@ -17,7 +58,9 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { gastoHoje, status, alertas = [] } = conta.resumo;
+  const { gastoHoje, status, alertas = [], saldoPrepago = [] } = conta.resumo;
+  const saldo = piorSaldo(saldoPrepago);
+  const saldoTexto = saldo ? textoSaldo(saldo) : null;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -86,6 +129,14 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
           {gastoHoje > 0 && (
             <span className="ac-resumo-gasto">
               R$ {gastoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+          )}
+          {saldoTexto && (
+            <span
+              className={`ac-badge ac-saldo ac-badge--${SALDO_CLS[saldo.nivel] ?? 'normal'}`}
+              title={tituloSaldo(saldo)}
+            >
+              {saldoTexto}
             </span>
           )}
           {alertas.length > 0 && (

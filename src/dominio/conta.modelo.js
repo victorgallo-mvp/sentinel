@@ -19,6 +19,20 @@ const cargaSaldoSchema = new Schema(
   { _id: false }
 );
 
+// Snapshot do saldo pré-pago por conta de anúncio, atualizado pelo job horário
+// de orçamento. Lido pelo dashboard sem precisar chamar a Meta API.
+const saldoPrepagoSchema = new Schema(
+  {
+    contaAnuncioId: { type: String, required: true },
+    saldoReais: { type: Number, default: null },   // saldo estimado (spend_cap - amount_spent)
+    ritmoHora: { type: Number, default: null },     // R$/h estimado
+    runwayHoras: { type: Number, default: null },   // horas de autonomia projetadas
+    nivel: { type: String, default: null },         // 'ok'|'acabando'|'critico'|'zerado'|'bloqueado'
+    atualizadoEm: { type: Date },
+  },
+  { _id: false }
+);
+
 const metaConfigSchema = new Schema(
   {
     bmId: { type: String, required: true },
@@ -69,6 +83,7 @@ const contaSchema = new Schema(
     notificacao: { type: notificacaoSchema, default: () => ({}) },
     configuracoes: { type: configuracoesSchema, default: () => ({}) },
     cargas: { type: [cargaSaldoSchema], default: [] },
+    saldoPrepago: { type: [saldoPrepagoSchema], default: [] },
 
     ativo: { type: Boolean, default: true },
   },
