@@ -1,11 +1,7 @@
+import DateRangePicker from './DateRangePicker.jsx';
 import './Header.css';
 
-const PERIODOS = [
-  { id: 'hoje',  label: 'Hoje' },
-  { id: 'ontem', label: 'Ontem' },
-];
-
-export default function Header({ stats, ultimaAtualizacao, segundos, usuario, periodo, onPeriodoChange }) {
+export default function Header({ stats, ultimaAtualizacao, segundos, usuario, dataInicio, dataFim, onPeriodoChange }) {
   const atualStr = ultimaAtualizacao
     ? segundos < 5
       ? 'agora mesmo'
@@ -20,17 +16,11 @@ export default function Header({ stats, ultimaAtualizacao, segundos, usuario, pe
           <span className="header-title">Sentinela Ads</span>
         </div>
         <div className="header-top-right">
-          <div className="header-periodo">
-            {PERIODOS.map((p) => (
-              <button
-                key={p.id}
-                className={`header-periodo-btn ${periodo === p.id ? 'ativo' : ''}`}
-                onClick={() => onPeriodoChange?.(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <DateRangePicker
+            dataInicio={dataInicio}
+            dataFim={dataFim}
+            onChange={onPeriodoChange}
+          />
           {usuario?.nome && (
             <span className="header-usuario">{usuario.nome}</span>
           )}

@@ -26,19 +26,23 @@ export default function App() {
   const [erro,   setErro]   = useState(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
-  const [periodo, setPeriodo] = useState('hoje');
+
+  const isoHoje = new Date().toISOString().slice(0, 10);
+  const [dataInicio, setDataInicio] = useState(isoHoje);
+  const [dataFim,    setDataFim]    = useState(isoHoje);
 
   const [usuario,     setUsuario]     = useState(null);
   const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
   const [favoritos,   setFavoritos]   = useState(() => lerStorage(LS_FAVS,  []));
 
-  const periodoRef = useRef(periodo);
-  periodoRef.current = periodo;
+  const rangeRef = useRef({ dataInicio: isoHoje, dataFim: isoHoje });
+  rangeRef.current = { dataInicio, dataFim };
 
   const buscarDados = useCallback(async () => {
     if (!token) { setErro('Token não encontrado na URL. Adicione ?token=SEU_TOKEN'); return; }
     try {
-      const res = await fetch(`${API_URL}/dashboard/data?token=${token}&periodo=${periodoRef.current}`);
+      const { dataInicio: ini, dataFim: fim } = rangeRef.current;
+      const res = await fetch(`${API_URL}/dashboard/data?token=${token}&dataInicio=${ini}&dataFim=${fim}`);
       if (!res.ok) { setErro(`Erro ${res.status}: token inválido ou servidor indisponível.`); return; }
       const json = await res.json();
       setDados(json);
@@ -52,7 +56,7 @@ export default function App() {
   }, [token]);
 
   useEffect(() => { buscarDados(); }, [buscarDados]);
-  useEffect(() => { buscarDados(); }, [periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { buscarDados(); }, [dataInicio, dataFim]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const i = setInterval(buscarDados, REFRESH_MS);
     return () => clearInterval(i);
@@ -96,8 +100,12 @@ export default function App() {
         ultimaAtualizacao={ultimaAtualizacao}
         segundos={segundos}
         usuario={usuario}
-        periodo={periodo}
-        onPeriodoChange={(p) => setPeriodo(p)}
+        dataInicio={dataInicio}
+        dataFim={dataFim}
+        onPeriodoChange={({ dataInicio: ini, dataFim: fim }) => {
+          setDataInicio(ini);
+          setDataFim(fim);
+        }}
       />
 
       <main className="main">

@@ -15,6 +15,68 @@ import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 
+// Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
+const METRICAS_COUNTER = new Set(
+  Object.entries(CATALOGO_METRICAS)
+    .filter(([, m]) => m.tipo === 'counter')
+    .map(([k]) => k)
+);
+
+/**
+ * Busca métricas de uma entidade para um intervalo de datas.
+ * Para cada dia no intervalo, pega o último snapshot disponível.
+ * Counters → soma; Gauges → média.
+ * Retorna { atual: {métrica: valor}, anterior: {métrica: valor} }
+ * onde "anterior" é o período equivalente imediatamente anterior.
+ */
+async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
+  const ini  = new Date(dataInicio + 'T00:00:00Z');
+  const fim  = new Date(dataFim   + 'T00:00:00Z');
+  const fimEx = new Date(fim); fimEx.setUTCDate(fimEx.getUTCDate() + 1); // exclusive
+
+  const diffMs = fim - ini;
+  const compFim = new Date(ini); compFim.setUTCDate(compFim.getUTCDate() - 1);
+  const compIni = new Date(compFim); compIni.setUTCDate(compIni.getUTCDate() - Math.round(diffMs / 86400000));
+  const compFimEx = new Date(ini); // compFim exclusive = ini
+
+  async function agregarPeriodo(desde, ate) {
+    const r = await query(
+      `WITH dias AS (
+         SELECT MAX(coletada_em) AS ts
+         FROM metricas_serie_temporal
+         WHERE entidade_id = $1 AND janela_horas = 24
+           AND coletada_em >= $2 AND coletada_em < $3
+         GROUP BY date_trunc('day', coletada_em)
+       )
+       SELECT m.metrica, m.valor
+       FROM metricas_serie_temporal m
+       JOIN dias ON m.coletada_em = dias.ts
+       WHERE m.entidade_id = $1 AND m.janela_horas = 24`,
+      [entidadeId, desde, ate]
+    );
+    if (!r.rows.length) return {};
+
+    const soma = {}, contagem = {};
+    for (const { metrica, valor } of r.rows) {
+      soma[metrica]      = (soma[metrica]      ?? 0) + Number(valor);
+      contagem[metrica]  = (contagem[metrica]  ?? 0) + 1;
+    }
+    return Object.fromEntries(
+      Object.entries(soma).map(([k, v]) => [
+        k,
+        METRICAS_COUNTER.has(k) ? v : v / (contagem[k] || 1),
+      ])
+    );
+  }
+
+  const [atual, anterior] = await Promise.all([
+    agregarPeriodo(ini, fimEx),
+    agregarPeriodo(compIni, compFimEx),
+  ]);
+
+  return { atual, anterior };
+}
+
 export const rotaDashboard = Router();
 
 async function autenticarDashboard(req, res, next) {
@@ -98,7 +160,9 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       ? todasContas
       : todasContas.filter((c) => req.usuario.contaIds.includes(String(c._id)));
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const periodo = req.query.periodo ?? 'hoje'; // 'hoje' | 'ontem'
+    const isoHoje    = new Date().toISOString().slice(0, 10);
+    const dataInicio = req.query.dataInicio ?? isoHoje;
+    const dataFim    = req.query.dataFim    ?? isoHoje;
 
     const dadosContas = await Promise.all(
       contas.map(async (conta) => {
@@ -106,34 +170,11 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
         const dadosEntidades = await Promise.all(
           entidades.map(async (entidade) => {
-            const tsRes = periodo === 'ontem'
-              ? await query(
-                  `SELECT DISTINCT coletada_em FROM metricas_serie_temporal
-                   WHERE entidade_id = $1 AND janela_horas = 24
-                   AND coletada_em < date_trunc('day', NOW())
-                   ORDER BY coletada_em DESC LIMIT 2`,
-                  [String(entidade._id)]
-                )
-              : await query(
-                  `SELECT DISTINCT coletada_em FROM metricas_serie_temporal
-                   WHERE entidade_id = $1 AND janela_horas = 24
-                   ORDER BY coletada_em DESC LIMIT 2`,
-                  [String(entidade._id)]
-                );
-
-            const [tsAtual, tsAnterior] = tsRes.rows.map((r) => r.coletada_em);
-
-            async function buscarMetricas(ts) {
-              if (!ts) return {};
-              const r = await query(
-                `SELECT metrica, valor FROM metricas_serie_temporal
-                 WHERE entidade_id = $1 AND janela_horas = 24 AND coletada_em = $2`,
-                [String(entidade._id), ts]
-              );
-              return Object.fromEntries(r.rows.map((row) => [row.metrica, Number(row.valor)]));
-            }
-
-            const [atual, anterior] = await Promise.all([buscarMetricas(tsAtual), buscarMetricas(tsAnterior)]);
+            const { atual, anterior } = await buscarMetricasIntervalo(
+              String(entidade._id), dataInicio, dataFim
+            );
+            const tsAtual   = dataInicio; // referência textual para exibição
+            const tsAnterior = null;
 
             const metricasSelecionadas = conta.configuracoes?.metricasSelecionadas ?? [];
             const metricasEntidade = metricasSelecionadas.length > 0
@@ -171,24 +212,21 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
                 adsetId: entidade.hierarquia?.adsetId ?? null,
               },
               ultimaSincronizacao: entidade.ultimaSincronizacaoEm ?? null,
-              tsAtual: tsAtual ?? null,
-              tsAnterior: tsAnterior ?? null,
+              tsAtual: dataInicio,
+              tsAnterior: null,
               metricas,
               motivoStatus: entidade.motivoStatus ?? null,
               issues: entidade.issues ?? [],
-              dataReferencia: tsAtual ? new Date(tsAtual).toLocaleDateString('pt-BR') : null,
+              dataReferencia: dataInicio === dataFim
+                ? new Date(dataInicio + 'T12:00:00Z').toLocaleDateString('pt-BR')
+                : `${new Date(dataInicio + 'T12:00:00Z').toLocaleDateString('pt-BR')} – ${new Date(dataFim + 'T12:00:00Z').toLocaleDateString('pt-BR')}`,
             };
           })
         );
 
-        // Resumo por conta: spend de campanhas do dia corrente (UTC).
-        // Se a última coleta da entidade não for de hoje, contribui 0 — evita exibir
-        // gasto de dias anteriores como se fosse o gasto atual.
-        const hojeUtcInicio = new Date();
-        hojeUtcInicio.setUTCHours(0, 0, 0, 0);
-        const gastoHoje = dadosEntidades
+        // Spend total das campanhas no período selecionado
+        const gastoPeriodo = dadosEntidades
           .filter((e) => e.tipo === 'campaign')
-          .filter((e) => e.tsAtual && new Date(e.tsAtual) >= hojeUtcInicio)
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
         const statusConta = computarStatusConta(dadosEntidades);
@@ -206,7 +244,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
           entidades: dadosEntidades,
           resumo: {
-            gastoHoje,
+            gastoHoje: gastoPeriodo,
             status: statusConta,
             alertas,
           },
@@ -240,7 +278,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
     res.json({
       atualizadoEm: new Date(),
-      periodo,
+      periodo: { dataInicio, dataFim },
       usuario: { nome: req.usuario.nome, superAdmin: req.usuario.superAdmin },
       stats: {
         totalContas: contas.length,

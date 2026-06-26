@@ -1,0 +1,222 @@
+/* ── Trigger ── */
+.drp { position: relative; display: inline-block; }
+
+.drp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  white-space: nowrap;
+}
+.drp-trigger:hover, .drp-trigger.ativo {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.drp-trigger-icone { font-size: 14px; }
+.drp-trigger-seta  { font-size: 10px; color: #9ca3af; }
+
+/* ── Popover ── */
+.drp-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.14);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 580px;
+}
+
+/* ── Presets ── */
+.drp-presets {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  flex-wrap: wrap;
+}
+
+.drp-preset {
+  padding: 4px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  background: transparent;
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+}
+.drp-preset:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.drp-preset.ativo  { border-color: #2563eb; color: #fff; background: #2563eb; }
+
+/* ── Corpo com 2 calendários ── */
+.drp-corpo {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px;
+  gap: 0;
+}
+
+.drp-divisor {
+  width: 1px;
+  background: #f3f4f6;
+  align-self: stretch;
+  margin: 0 16px;
+}
+
+/* ── Mês ── */
+.drp-mes { flex: 1; min-width: 230px; }
+
+.drp-mes-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.drp-mes-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.drp-nav-btn {
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #6b7280;
+  cursor: pointer;
+  line-height: 1;
+  transition: background .12s, color .12s;
+}
+.drp-nav-btn:hover { background: #f3f4f6; color: #111827; }
+.drp-nav-ph { width: 28px; }
+
+/* ── Grade de dias ── */
+.drp-grade {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.drp-dia-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-align: center;
+  padding: 4px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.drp-dia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background .1s, color .1s;
+}
+.drp-dia:hover:not(:disabled) {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 50%;
+}
+
+.drp-dia--hoje::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.drp-dia--futuro {
+  color: #d1d5db;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Range highlight */
+.drp-dia--range {
+  background: #dbeafe;
+  border-radius: 0;
+  color: #1e40af;
+}
+
+/* Start/end capsule shape */
+.drp-dia--borda-inicio { border-radius: 50% 0 0 50%; }
+.drp-dia--borda-fim    { border-radius: 0 50% 50% 0; }
+.drp-dia--borda-inicio.drp-dia--borda-fim { border-radius: 50%; }
+
+.drp-dia--selecionado {
+  background: #2563eb !important;
+  color: #fff !important;
+  border-radius: 50%;
+  font-weight: 700;
+  z-index: 1;
+}
+.drp-dia--selecionado:hover { background: #1d4ed8 !important; }
+
+/* ── Rodapé ── */
+.drp-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.drp-instrucao {
+  flex: 1;
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.drp-btn {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background .15s;
+}
+.drp-btn--cancelar { background: #f3f4f6; color: #374151; }
+.drp-btn--cancelar:hover { background: #e5e7eb; }
+.drp-btn--aplicar  { background: #2563eb; color: #fff; }
+.drp-btn--aplicar:hover { background: #1d4ed8; }
+.drp-btn--aplicar:disabled { opacity: .5; cursor: not-allowed; }
