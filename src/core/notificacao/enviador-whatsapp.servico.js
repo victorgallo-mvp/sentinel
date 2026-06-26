@@ -27,17 +27,68 @@ export function resolverDestinatarios(conta) {
 /**
  * Envia uma mensagem de texto via Evolution API.
  * Aceita um único JID (string) ou múltiplos JIDs (string[]).
+ * Cada destinatário é tentado de forma independente: a falha de um não impede
+ * o envio aos demais. Só lança erro se TODOS os destinatários falharem.
  * @param {string|string[]} destinatario - JID(s) do(s) destinatário(s)
  * @param {string} texto - conteúdo da mensagem
- * @returns {Promise<{idMensagemEnviada: string|null}>} resultado do primeiro envio
+ * @returns {Promise<{idMensagemEnviada: string|null}>} resultado do último envio bem-sucedido
  */
 export async function enviarMensagemWhatsapp(destinatario, texto) {
   const jids = Array.isArray(destinatario) ? destinatario : [destinatario];
   let ultimo = { idMensagemEnviada: null };
+  let algumSucesso = false;
+  const falhas = [];
+
   for (const jid of jids) {
-    ultimo = await enviarParaJid(jid, texto);
+    try {
+      ultimo = await enviarParaJid(jid, texto);
+      algumSucesso = true;
+    } catch (e) {
+      falhas.push(jid);
+      logger.error({ msg: 'Falha ao enviar para destinatário — continuando com os demais', jid, erro: e.message });
+    }
+  }
+
+  if (!algumSucesso) {
+    throw new ErroAplicacao(`Falha ao enviar WhatsApp para todos os destinatários: ${falhas.join(', ')}`, 'ERRO_EVOLUTION_TODOS');
   }
   return ultimo;
+}
+
+// Cache em memória de número → JID real no WhatsApp (resolvido via Evolution).
+// Evita reconsultar a cada envio. Só guarda resoluções bem-sucedidas.
+const cacheJidReal = new Map();
+
+/**
+ * Resolve o JID real de um número no WhatsApp via Evolution (`whatsappNumbers`).
+ * Crucial para números BR: o WhatsApp frequentemente registra o JID SEM o
+ * nono dígito (ex.: 5537998409449 → 553798409449). Enviar para o JID errado
+ * faz a mensagem não chegar.
+ * Retorna o JID canônico, ou null se não encontrado/erro (fallback: usa o número como veio).
+ */
+async function resolverJidReal(numero) {
+  const limpo = String(numero).replace(/@.*/, '').replace(/\D/g, '');
+  if (!limpo) return null;
+  if (cacheJidReal.has(limpo)) return cacheJidReal.get(limpo);
+
+  try {
+    const url = `${config.evolution.apiUrl.replace(/\/$/, '')}/chat/whatsappNumbers/${config.evolution.instanceName}`;
+    const resposta = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: config.evolution.apiKey },
+      body: JSON.stringify({ numbers: [limpo] }),
+    });
+    if (!resposta.ok) return null;
+
+    const dados = await resposta.json();
+    const item = Array.isArray(dados) ? dados.find((d) => d?.exists && d?.jid) : null;
+    const jid = item?.jid ?? null;
+    if (jid) cacheJidReal.set(limpo, jid); // só cacheia sucesso
+    return jid;
+  } catch (e) {
+    logger.warn({ msg: 'Falha ao resolver JID real na Evolution — usando número original', numero: limpo, erro: e.message });
+    return null;
+  }
 }
 
 async function enviarParaJid(destinatario, texto) {
@@ -45,11 +96,16 @@ async function enviarParaJid(destinatario, texto) {
     throw new ErroAplicacao('Evolution API não configurada (EVOLUTION_API_URL/API_KEY/INSTANCE_NAME)', 'ERRO_CONFIG_EVOLUTION');
   }
 
-  // Normalização defensiva do JID: garante sufixo correto se não vier formatado
-  let jidNormalizado = destinatario;
-  if (!destinatario.includes('@')) {
+  // Resolve o JID real no WhatsApp (corrige o nono dígito BR). Fallback: número como veio.
+  const jidReal = await resolverJidReal(destinatario);
+  let jidNormalizado;
+  if (jidReal) {
+    jidNormalizado = jidReal;
+  } else if (!destinatario.includes('@')) {
     jidNormalizado = `${destinatario}@s.whatsapp.net`;
-    logger.warn({ msg: 'JID sem sufixo @, normalizado automaticamente', original: destinatario, normalizado: jidNormalizado });
+    logger.warn({ msg: 'JID não resolvido na Evolution, normalizado por sufixo', original: destinatario, normalizado: jidNormalizado });
+  } else {
+    jidNormalizado = destinatario;
   }
 
   const url = `${config.evolution.apiUrl.replace(/\/$/, '')}/message/sendText/${config.evolution.instanceName}`;
