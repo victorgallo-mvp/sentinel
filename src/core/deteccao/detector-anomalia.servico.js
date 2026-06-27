@@ -11,6 +11,7 @@ import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { calcularMagnitudeDesvios } from '../../shared/utils.js';
 import { resolverSensibilidade, metricaIgnorada } from './configurador-thresholds.js';
+import { metricaAcumulativa } from '../../config/metricas.config.js';
 import { foiDetectadaRecentemente } from './deduplicador-anomalias.js';
 import { adicionarJob, FILAS } from '../../infra/fila.js';
 import { logger } from '../../infra/logger.js';
@@ -41,6 +42,10 @@ export async function detectarAnomaliasConta(contaId) {
     if (!entidade) continue; // entidade não monitorada (mais) — ignora baseline órfão
 
     if (metricaIgnorada(entidade, baseline.metrica)) continue;
+
+    // Métricas acumulativas (gasto, impressões, conversões…) só geram anomalia
+    // na janela diária — evita alertas baseados em "gasto por hora", que é ruído.
+    if (metricaAcumulativa(baseline.metrica) && baseline.janela_horas !== 24) continue;
 
     try {
       analisadas++;

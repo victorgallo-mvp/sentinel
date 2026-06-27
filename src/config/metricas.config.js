@@ -258,6 +258,17 @@ export function metricasNumericas() {
   return Object.keys(CATALOGO_METRICAS).filter((chave) => CATALOGO_METRICAS[chave].tipo !== 'enum');
 }
 
+/**
+ * Indica se a métrica é acumulativa (counter — ex.: gasto, impressões, cliques,
+ * conversões). Counters crescem ao longo do período, então o valor de uma janela
+ * curta (1h/6h) é gasto/volume "por hora", volátil e pouco acionável. Para
+ * detecção de anomalia, counters só fazem sentido na janela diária (24h).
+ * Gauges (CTR, CPM, ROAS…) são taxas e valem em qualquer janela.
+ */
+export function metricaAcumulativa(chave) {
+  return CATALOGO_METRICAS[chave]?.tipo === 'counter';
+}
+
 /** Retorna metadados de uma métrica específica. */
 export function obterMetadadosMetrica(chave) {
   return CATALOGO_METRICAS[chave] ?? null;
