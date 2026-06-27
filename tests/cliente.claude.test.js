@@ -7,9 +7,15 @@ describe('calcularCusto', () => {
     expect(calcularCusto(usage, 'claude-sonnet-4-5')).toBeCloseTo(3 + 15, 5);
   });
 
-  it('calcula o custo pro Haiku considerando tokens de cache', () => {
-    const usage = { input_tokens: 500_000, cache_read_input_tokens: 500_000, output_tokens: 200_000 };
-    const esperado = (1_000_000 / 1_000_000) * 1.0 + (200_000 / 1_000_000) * 5.0;
+  it('cobra leitura de cache a 0,1x e escrita a 1,25x do preço de entrada', () => {
+    const usage = {
+      input_tokens: 500_000,
+      cache_creation_input_tokens: 200_000,
+      cache_read_input_tokens: 500_000,
+      output_tokens: 200_000,
+    };
+    const entrada = (500_000 + 200_000 * 1.25 + 500_000 * 0.1) / 1_000_000; // = 0,8 M-equivalente
+    const esperado = entrada * 1.0 + (200_000 / 1_000_000) * 5.0;
     expect(calcularCusto(usage, 'claude-haiku-4-5')).toBeCloseTo(esperado, 5);
   });
 

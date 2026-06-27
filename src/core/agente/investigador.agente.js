@@ -26,6 +26,31 @@ import { ErroNaoEncontrado, ErroLimiteCustoExcedido } from '../../shared/erros.j
 
 const MAX_TOKENS_RESPOSTA = 2048;
 
+const CACHE_EFEMERO = { type: 'ephemeral' };
+
+/**
+ * Marca o ponto de cache no prefixo da conversa: o conteúdo estático
+ * (tools + system) e todo o histórico até a última mensagem são reaproveitados
+ * entre iterações a 0,1× do preço de entrada, em vez de reenviados a preço cheio.
+ *
+ * A Anthropic permite até 4 breakpoints; mantemos só o da última mensagem,
+ * removendo os anteriores para que o ponto de cache avance a cada iteração.
+ */
+function aplicarCacheConversa(mensagens) {
+  for (const msg of mensagens) {
+    if (Array.isArray(msg.content)) {
+      for (const bloco of msg.content) delete bloco.cache_control;
+    }
+  }
+  const ultima = mensagens[mensagens.length - 1];
+  if (!ultima) return;
+  if (typeof ultima.content === 'string') {
+    ultima.content = [{ type: 'text', text: ultima.content, cache_control: CACHE_EFEMERO }];
+  } else if (Array.isArray(ultima.content) && ultima.content.length > 0) {
+    ultima.content[ultima.content.length - 1].cache_control = CACHE_EFEMERO;
+  }
+}
+
 /**
  * Executa a investigação completa de uma anomalia.
  * @param {string} anomaliaId - ObjectId da Anomalia
@@ -84,12 +109,16 @@ export async function investigarAnomalia(anomaliaId) {
     iteracao++;
     logger.info({ msg: 'Agente iterando', investigacaoId: String(investigacao._id), iteracao });
 
+    // Cacheia o prefixo estático (tools + system) e o histórico da conversa,
+    // reaproveitados entre iterações a 0,1× do preço de entrada.
+    aplicarCacheConversa(mensagens);
+
     let resposta;
     try {
       resposta = await anthropic.messages.create({
         model: config.anthropic.modeloAgente,
         max_tokens: MAX_TOKENS_RESPOSTA,
-        system: systemPrompt,
+        system: [{ type: 'text', text: systemPrompt, cache_control: CACHE_EFEMERO }],
         tools: TOOLS_REGISTRADAS,
         messages: mensagens,
       });

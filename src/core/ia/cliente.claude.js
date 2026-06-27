@@ -23,13 +23,26 @@ const PRECOS_POR_MILHAO_TOKENS = {
   'claude-haiku-4-5': { input: 1.0, output: 5.0 },
 };
 
+// Multiplicadores do prompt caching da Anthropic, relativos ao preço de input:
+// escrever no cache custa 1,25× e ler do cache custa 0,1×.
+const MULT_CACHE_ESCRITA = 1.25;
+const MULT_CACHE_LEITURA = 0.1;
+
 /** Calcula o custo em USD de uma chamada com base no `usage` retornado pela API. */
 export function calcularCusto(usage, modelo) {
   const precos = PRECOS_POR_MILHAO_TOKENS[modelo] ?? PRECOS_POR_MILHAO_TOKENS['claude-sonnet-4-5'];
-  const tokensEntrada = (usage?.input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0);
+
+  const tokensEntradaCheia = usage?.input_tokens ?? 0;
+  const tokensCacheEscrita = usage?.cache_creation_input_tokens ?? 0;
+  const tokensCacheLeitura = usage?.cache_read_input_tokens ?? 0;
   const tokensSaida = usage?.output_tokens ?? 0;
 
-  const custoEntrada = (tokensEntrada / 1_000_000) * precos.input;
+  const custoEntrada =
+    ((tokensEntradaCheia +
+      tokensCacheEscrita * MULT_CACHE_ESCRITA +
+      tokensCacheLeitura * MULT_CACHE_LEITURA) /
+      1_000_000) *
+    precos.input;
   const custoSaida = (tokensSaida / 1_000_000) * precos.output;
 
   return custoEntrada + custoSaida;
