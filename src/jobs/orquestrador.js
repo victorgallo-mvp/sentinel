@@ -7,7 +7,7 @@
  * - Coleta de métricas: a cada hora, no minuto 5
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
- * - Detecção de anomalias: a cada hora, no minuto 20 (após a coleta)
+ * - Detecção de anomalias: a cada 2 horas, no minuto 20 (após a coleta)
  * - Sincronização de entidades: a cada 2 horas (minuto 30)
  * - Atualização de baselines: diariamente às 02:00
  * - Resumo diário WhatsApp: todos os dias às 08:00
@@ -34,7 +34,7 @@ const TAREFAS_CRON = [
   { nome: 'coleta-metricas', expressao: '5 * * * *', executar: executarColetaMetricas },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },
-  { nome: 'deteccao-anomalias', expressao: '20 * * * *', executar: executarDeteccaoAnomalias },
+  { nome: 'deteccao-anomalias', expressao: '20 */2 * * *', executar: executarDeteccaoAnomalias },
   { nome: 'alerta-performance', expressao: '25 * * * *', executar: executarAlertaPerformance },
   { nome: 'sincronizar-entidades', expressao: '30 */2 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },

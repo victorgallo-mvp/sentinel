@@ -37,7 +37,7 @@ const esquemaEnv = z.object({
 
   // Limites
   LIMITE_CUSTO_DIARIO_USD: z.coerce.number().default(3.0),
-  MAX_ITERACOES_AGENTE: z.coerce.number().int().default(10),
+  MAX_ITERACOES_AGENTE: z.coerce.number().int().default(6),
 
   // Servidor
   URL_BASE: z.string().optional().default(''),
