@@ -101,15 +101,18 @@ async function notificacaoRecenteParaMetrica(contaId, entidadeId, metrica) {
   // Notificações de investigação enviadas para esta conta na janela
   const notificacoes = await Notificacao.find({
     contaId,
-    investigacaoId: { $exists: true },
     enviadaEm: { $gte: limite },
     status: { $ne: 'erro' },
-  }).select('investigacaoId');
+    $or: [{ investigacaoId: { $ne: null } }, { investigacaoIds: { $ne: [] } }],
+  }).select('investigacaoId investigacaoIds');
 
   if (notificacoes.length === 0) return false;
 
-  // Investigações correspondentes → anomalias de origem
-  const investigacaoIds = notificacoes.map((n) => n.investigacaoId);
+  // Investigações correspondentes → anomalias de origem. Considera tanto a
+  // investigação única quanto a lista consolidada (digest por conta).
+  const investigacaoIds = notificacoes
+    .flatMap((n) => [n.investigacaoId, ...(n.investigacaoIds ?? [])])
+    .filter(Boolean);
   const investigacoes = await Investigacao.find({ _id: { $in: investigacaoIds } }).select('anomaliaId');
   if (investigacoes.length === 0) return false;
 

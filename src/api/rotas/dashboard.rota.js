@@ -296,11 +296,19 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
     const idsDecidiramNotificar = investigacoes.filter((i) => i.decidiuNotificar).map((i) => i._id);
     const notificacoesDeInvestigacao = idsDecidiramNotificar.length > 0
       ? await Notificacao.find({
-          investigacaoId: { $in: idsDecidiramNotificar },
+          $or: [
+            { investigacaoId: { $in: idsDecidiramNotificar } },
+            { investigacaoIds: { $in: idsDecidiramNotificar } },
+          ],
           status: { $ne: 'erro' },
-        }).select('investigacaoId').lean()
+        }).select('investigacaoId investigacaoIds').lean()
       : [];
-    const idsComNotificacaoEnviada = new Set(notificacoesDeInvestigacao.map((n) => String(n.investigacaoId)));
+    const idsComNotificacaoEnviada = new Set(
+      notificacoesDeInvestigacao
+        .flatMap((n) => [n.investigacaoId, ...(n.investigacaoIds ?? [])])
+        .filter(Boolean)
+        .map(String)
+    );
 
     const totalEntidades = dadosContas.reduce((acc, c) => acc + c.entidades.length, 0);
 

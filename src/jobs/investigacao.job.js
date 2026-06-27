@@ -8,7 +8,7 @@
 import { FILAS, criarWorker } from '../infra/fila.js';
 import { triarAnomalia } from '../core/ia/triagem.servico.js';
 import { investigarAnomalia } from '../core/agente/investigador.agente.js';
-import { processarNotificacao } from '../core/notificacao/processador.servico.js';
+import { processarNotificacao, processarDigestConta } from '../core/notificacao/processador.servico.js';
 import { logger } from '../infra/logger.js';
 
 /**
@@ -31,8 +31,11 @@ export function criarWorkersInvestigacao() {
   );
 
   const workerNotificacao = criarWorker(FILAS.NOTIFICAR, async (job) => {
-    const { investigacaoId } = job.data;
-    return processarNotificacao(investigacaoId);
+    if (job.name === 'digest') {
+      return processarDigestConta(job.data.contaId);
+    }
+    // Retrocompat: jobs 'notificar' individuais ainda em voo após o deploy.
+    return processarNotificacao(job.data.investigacaoId);
   });
 
   logger.info({ msg: 'Workers do pipeline de investigação iniciados', filas: [FILAS.TRIAGEM, FILAS.INVESTIGACAO, FILAS.NOTIFICAR] });

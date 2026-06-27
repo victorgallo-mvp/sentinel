@@ -42,21 +42,29 @@ export async function registrarFeedback(notificacaoId, interpretacao) {
   return feedback;
 }
 
-/** Silencia a métrica da anomalia original por `DURACAO_SNOOZE_HORAS` na entidade afetada. */
+/**
+ * Silencia por `DURACAO_SNOOZE_HORAS` a(s) métrica(s) da notificação. Numa
+ * notificação consolidada (digest), silencia TODAS as anomalias da mensagem.
+ */
 async function aplicarSnooze(notificacao) {
-  const investigacao = await Investigacao.findById(notificacao.investigacaoId);
-  if (!investigacao) return;
+  const ids = (notificacao.investigacaoIds?.length
+    ? notificacao.investigacaoIds
+    : [notificacao.investigacaoId]).filter(Boolean);
+  if (ids.length === 0) return;
 
-  const anomalia = await Anomalia.findById(investigacao.anomaliaId);
-  if (!anomalia) return;
+  const investigacoes = await Investigacao.find({ _id: { $in: ids } }).select('anomaliaId');
+  const anomaliaIds = investigacoes.map((i) => i.anomaliaId);
+  const anomalias = await Anomalia.find({ _id: { $in: anomaliaIds } }).select('entidadeId metrica');
+  if (anomalias.length === 0) return;
 
   const ate = new Date(Date.now() + DURACAO_SNOOZE_HORAS * 60 * 60 * 1000);
 
-  await Entidade.findByIdAndUpdate(anomalia.entidadeId, {
-    $push: { 'configuracoes.silenciamentos': { metrica: anomalia.metrica, ate } },
-  });
-
-  logger.info({ msg: 'Snooze aplicado', entidadeId: String(anomalia.entidadeId), metrica: anomalia.metrica, ate });
+  for (const anomalia of anomalias) {
+    await Entidade.findByIdAndUpdate(anomalia.entidadeId, {
+      $push: { 'configuracoes.silenciamentos': { metrica: anomalia.metrica, ate } },
+    });
+    logger.info({ msg: 'Snooze aplicado', entidadeId: String(anomalia.entidadeId), metrica: anomalia.metrica, ate });
+  }
 }
 
 /**

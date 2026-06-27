@@ -20,8 +20,11 @@ const notificacaoSchema = new Schema(
       index: true,
     },
 
-    // Preenchido apenas para tipo='investigacao'
+    // Preenchido apenas para tipo='investigacao'. `investigacaoId` aponta para a
+    // primeira investigação (retrocompat); `investigacaoIds` lista todas quando a
+    // notificação é consolidada (várias anomalias da mesma conta numa só mensagem).
     investigacaoId: { type: Schema.Types.ObjectId, ref: 'Investigacao', default: null, index: true },
+    investigacaoIds: { type: [Schema.Types.ObjectId], ref: 'Investigacao', default: [], index: true },
     // Preenchido para alertas diretos (orcamento, etc)
     entidadeId: { type: Schema.Types.ObjectId, ref: 'Entidade', default: null, index: true },
 

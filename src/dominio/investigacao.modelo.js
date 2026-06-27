@@ -65,6 +65,9 @@ const investigacaoSchema = new Schema(
 
     decidiuNotificar: { type: Boolean, default: false },
     motivoNaoNotificar: { type: String, default: null },
+    // Marcado quando a investigação já entrou em uma notificação consolidada
+    // (digest por conta). Enquanto null + decidiuNotificar=true, está pendente.
+    notificadoEm: { type: Date, default: null, index: true },
 
     custoTokensUsd: { type: Number, default: 0 },
     modeloUsado: { type: String, default: null },

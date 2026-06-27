@@ -20,7 +20,7 @@ import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { config } from '../../config/index.js';
-import { adicionarJob, FILAS } from '../../infra/fila.js';
+import { agendarDigest } from '../notificacao/processador.servico.js';
 import { logger } from '../../infra/logger.js';
 import { ErroNaoEncontrado, ErroLimiteCustoExcedido } from '../../shared/erros.js';
 
@@ -165,7 +165,8 @@ export async function investigarAnomalia(anomaliaId) {
   await finalizarInvestigacao(investigacao, iteracao, custoTotal);
 
   if (investigacao.decidiuNotificar) {
-    await adicionarJob(FILAS.NOTIFICAR, 'notificar', { investigacaoId: String(investigacao._id) });
+    // Agenda o digest da conta (agrupa anomalias da mesma BM numa só mensagem).
+    await agendarDigest(investigacao.contaId);
   }
 
   await Anomalia.findByIdAndUpdate(anomalia._id, {

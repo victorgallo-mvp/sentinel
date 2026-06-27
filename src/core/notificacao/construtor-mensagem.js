@@ -58,3 +58,63 @@ export function construirMensagem(investigacao, anomalia, entidade, campanha = n
 
   return linhas.join('\n');
 }
+
+const RANK_SEVERIDADE = { critica: 3, urgente: 2, atencao: 1, info: 0 };
+const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
+
+/** Formata um valor numérico conforme a unidade da métrica, em PT-BR. */
+function formatarValorMetrica(v, unidade) {
+  if (v == null) return '—';
+  const n = Number(v);
+  switch (unidade) {
+    case 'currency':   return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    case 'percent':    return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+    case 'multiplier': return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}x`;
+    case 'decimal':    return n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    default:           return n.toLocaleString('pt-BR');
+  }
+}
+
+/**
+ * Monta UMA mensagem consolidada por conta/BM, agrupando várias anomalias numa
+ * só mensagem em linguagem simples (sem desvio-padrão/baseline). É o formato
+ * "BM X apresentou os problemas Y e Z".
+ *
+ * @param {Object} conta - documento Conta
+ * @param {Array<{investigacao:Object, anomalia:Object, entidade:Object, campanha:Object|null}>} itens
+ */
+export function construirMensagemConsolidada(conta, itens) {
+  const maisGrave = itens.reduce((acc, it) => {
+    const s = it.investigacao.diagnostico?.severidade ?? 'info';
+    return (RANK_SEVERIDADE[s] ?? 0) > (RANK_SEVERIDADE[acc] ?? 0) ? s : acc;
+  }, 'info');
+
+  const n = itens.length;
+  const linhas = [];
+  linhas.push(`${emojiSeveridade(maisGrave)} *${conta.nome.toUpperCase()} — ${n} ${n === 1 ? 'problema' : 'problemas'}*`);
+  linhas.push('');
+
+  itens.forEach((it, i) => {
+    const { investigacao, anomalia, entidade, campanha } = it;
+    const metadados = obterMetadadosMetrica(anomalia.metrica);
+    const nomeMetrica = metadados?.nome ?? anomalia.metrica;
+    const unidade = metadados?.unidade;
+
+    const rotuloTipo = TIPO_LABEL[entidade.tipo] ?? 'Entidade';
+    const sob = campanha && entidade.tipo !== 'campaign' ? ` _(campanha: ${campanha.nome})_` : '';
+
+    const subiu = Number(anomalia.valorAtual) >= Number(anomalia.baselineMedia);
+    const verbo = subiu ? 'subiu' : 'caiu';
+    const de = formatarValorMetrica(anomalia.baselineMedia, unidade);
+    const para = formatarValorMetrica(anomalia.valorAtual, unidade);
+
+    linhas.push(`*${i + 1}. ${rotuloTipo} "${entidade.nome}"*${sob}`);
+    linhas.push(`${nomeMetrica} ${verbo}: ${de} → ${para}`);
+    const acao = investigacao.recomendacao?.acao;
+    if (acao) linhas.push(`→ ${acao}`);
+    linhas.push('');
+  });
+
+  linhas.push('Responda: *1* útil · *2* ruído · *3* silenciar 4h');
+  return linhas.join('\n');
+}
