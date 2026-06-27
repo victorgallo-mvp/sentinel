@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header.jsx';
+import Footer from './components/Footer.jsx';
 import AccountList from './components/AccountList.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import './App.css';
@@ -103,7 +104,6 @@ export default function App() {
   return (
     <div className="app">
       <Header
-        stats={dados.stats}
         ultimaAtualizacao={ultimaAtualizacao}
         segundos={segundos}
         usuario={usuario}
@@ -132,6 +132,8 @@ export default function App() {
           stats={dados.stats}
         />
       </main>
+
+      <Footer stats={dados.stats} />
     </div>
   );
 }

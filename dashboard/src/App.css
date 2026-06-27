@@ -1,4 +1,4 @@
-.app { max-width: 1400px; margin: 0 auto; padding: 0 var(--sp-5) 48px; }
+.app { max-width: 1400px; margin: 0 auto; padding: 0 var(--sp-5); padding-bottom: 72px; }
 
 .main { display: flex; flex-direction: column; gap: var(--sp-6); }
 

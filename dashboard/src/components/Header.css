@@ -2,9 +2,6 @@
   padding: var(--sp-6) 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--sp-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
   background: var(--bg);
 }
 
@@ -30,28 +27,3 @@
   padding: 4px 12px;
   border-radius: 20px;
 }
-
-.stat-cards { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
-
-.stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--sp-4) var(--sp-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 140px;
-}
-
-.stat-value {
-  font-size: 26px;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.stat-value--warn { color: var(--warn); }
-.stat-value--crit { color: var(--crit); }
-
-.stat-label { font-size: var(--fs-sm); color: var(--text-muted); }

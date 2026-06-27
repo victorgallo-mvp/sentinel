@@ -10,7 +10,7 @@ function IconShield() {
   );
 }
 
-export default function Header({ stats, ultimaAtualizacao, segundos, usuario, dataInicio, dataFim, onPeriodoChange }) {
+export default function Header({ ultimaAtualizacao, segundos, usuario, dataInicio, dataFim, onPeriodoChange }) {
   const atualStr = ultimaAtualizacao
     ? segundos < 5
       ? 'agora mesmo'
@@ -36,34 +36,6 @@ export default function Header({ stats, ultimaAtualizacao, segundos, usuario, da
           <span className="header-refresh">{atualStr}</span>
         </div>
       </div>
-
-      <div className="stat-cards">
-        <StatCard label="Contas monitoradas" value={stats.totalContas} />
-        <StatCard label="Entidades ativas" value={stats.totalEntidades} />
-        <StatCard
-          label="Anomalias (24h)"
-          value={stats.anomalias24h}
-          tom={stats.anomalias24h > 0 ? 'warn' : null}
-        />
-        <StatCard label="Investigações (24h)" value={stats.investigacoes24h} />
-        <StatCard label="Notificações (24h)" value={stats.notificacoes24h} />
-        {stats.errosEnvio24h > 0 && (
-          <StatCard
-            label="Falhas de envio (24h)"
-            value={stats.errosEnvio24h}
-            tom="crit"
-          />
-        )}
-      </div>
     </header>
-  );
-}
-
-function StatCard({ label, value, tom }) {
-  return (
-    <div className="stat-card">
-      <span className={`stat-value ${tom ? `stat-value--${tom}` : ''}`}>{value}</span>
-      <span className="stat-label">{label}</span>
-    </div>
   );
 }
