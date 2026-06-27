@@ -6,23 +6,23 @@
 
 export const METRICAS_POR_OBJETIVO = {
   // Vendas / conversões
-  OUTCOME_SALES:      ['spend', 'purchase_roas', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'impressions'],
-  OUTCOME_LEADS:      ['spend', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'reach', 'impressions'],
+  OUTCOME_SALES:      ['spend', 'cost_per_result', 'purchase_roas', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'impressions'],
+  OUTCOME_LEADS:      ['spend', 'cost_per_result', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'reach', 'impressions'],
   // Tráfego
-  OUTCOME_TRAFFIC:    ['spend', 'clicks', 'ctr', 'cpc', 'cpm', 'impressions', 'reach'],
+  OUTCOME_TRAFFIC:    ['spend', 'cost_per_result', 'clicks', 'ctr', 'cpc', 'cpm', 'impressions', 'reach'],
   // Awareness / alcance
-  OUTCOME_AWARENESS:  ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
-  OUTCOME_REACH:      ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
-  // Engajamento
-  OUTCOME_ENGAGEMENT: ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpm'],
+  OUTCOME_AWARENESS:  ['spend', 'cost_per_result', 'impressions', 'reach', 'frequency', 'cpm'],
+  OUTCOME_REACH:      ['spend', 'cost_per_result', 'impressions', 'reach', 'frequency', 'cpm'],
+  // Engajamento / mensagens
+  OUTCOME_ENGAGEMENT: ['spend', 'cost_per_result', 'messaging_conversations_started', 'impressions', 'reach', 'clicks', 'ctr', 'cpm'],
   // Vídeo
-  VIDEO_VIEWS:        ['spend', 'impressions', 'video_p25_watched_actions', 'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p100_watched_actions', 'cpm'],
+  VIDEO_VIEWS:        ['spend', 'cost_per_result', 'impressions', 'video_p25_watched_actions', 'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p100_watched_actions', 'cpm'],
   // App
-  OUTCOME_APP_PROMOTION: ['spend', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'impressions'],
+  OUTCOME_APP_PROMOTION: ['spend', 'cost_per_result', 'conversions', 'cost_per_conversion', 'ctr', 'cpm', 'impressions'],
 };
 
 /** Fallback quando objetivo não é reconhecido. */
-const METRICAS_PADRAO = ['spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpm', 'conversions', 'cost_per_conversion', 'purchase_roas'];
+const METRICAS_PADRAO = ['spend', 'cost_per_result', 'impressions', 'reach', 'clicks', 'ctr', 'cpm', 'conversions', 'cost_per_conversion', 'purchase_roas'];
 
 /**
  * Retorna as métricas a exibir para uma entidade.

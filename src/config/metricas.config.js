@@ -158,6 +158,18 @@ export const CATALOGO_METRICAS = {
     campoApi: 'cost_per_action_type',
   },
 
+  cost_per_result: {
+    nome: 'Custo por resultado',
+    tipo: 'gauge',
+    unidade: 'currency',
+    direcaoBoa: 'menor',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'critica',
+    // Derivada no dashboard: gasto ÷ resultado (o "resultado" depende do
+    // objetivo da campanha — ver metricaResultado). Não é coletada da Meta.
+    derivada: true,
+  },
+
   // ===== Métricas de retorno =====
   purchase_roas: {
     nome: 'ROAS de compra',
@@ -253,9 +265,35 @@ export function metricasPorNivel(nivel) {
   );
 }
 
-/** Retorna apenas as métricas numéricas (exclui rankings 'enum') — usadas na detecção de anomalia. */
+/**
+ * Retorna as métricas numéricas COLETÁVEIS (exclui rankings 'enum' e métricas
+ * derivadas, que são calculadas no dashboard e não existem na série temporal).
+ * Usada por coleta e cálculo de baseline.
+ */
 export function metricasNumericas() {
-  return Object.keys(CATALOGO_METRICAS).filter((chave) => CATALOGO_METRICAS[chave].tipo !== 'enum');
+  return Object.keys(CATALOGO_METRICAS).filter(
+    (chave) => CATALOGO_METRICAS[chave].tipo !== 'enum' && !CATALOGO_METRICAS[chave].derivada
+  );
+}
+
+/**
+ * Métrica de "resultado" (contagem) correspondente a cada objetivo de campanha,
+ * usada para derivar o custo por resultado (gasto ÷ resultado).
+ */
+const RESULTADO_POR_OBJETIVO = {
+  OUTCOME_SALES:         'conversions',
+  OUTCOME_LEADS:         'conversions',
+  OUTCOME_APP_PROMOTION: 'conversions',
+  OUTCOME_ENGAGEMENT:    'messaging_conversations_started',
+  OUTCOME_TRAFFIC:       'clicks',
+  OUTCOME_AWARENESS:     'reach',
+  OUTCOME_REACH:         'reach',
+  VIDEO_VIEWS:           'video_p25_watched_actions',
+};
+
+/** Chave da métrica de resultado para um objetivo (fallback: conversões). */
+export function metricaResultado(objetivo) {
+  return RESULTADO_POR_OBJETIVO[String(objetivo || '').toUpperCase()] ?? 'conversions';
 }
 
 /**

@@ -12,7 +12,7 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { config } from '../../config/index.js';
-import { CATALOGO_METRICAS } from '../../config/metricas.config.js';
+import { CATALOGO_METRICAS, metricaResultado } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 
 // Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
@@ -21,6 +21,23 @@ const METRICAS_COUNTER = new Set(
     .filter(([, m]) => m.tipo === 'counter')
     .map(([k]) => k)
 );
+
+/**
+ * Deriva o custo por resultado do período: gasto ÷ resultado, ambos já somados
+ * no intervalo. Tenta o resultado do objetivo e, se não houver, cai para
+ * conversões/conversas — assim funciona mesmo quando o objetivo é ambíguo.
+ * Retorna null (exibe "—") quando não há resultado para dividir.
+ */
+function derivarCustoPorResultado(dados, resultadoKey) {
+  const gasto = dados?.spend;
+  if (gasto == null) return null;
+  const candidatos = [resultadoKey, 'conversions', 'messaging_conversations_started'];
+  for (const chave of candidatos) {
+    const resultado = dados[chave];
+    if (resultado && resultado > 0) return Number((gasto / resultado).toFixed(2));
+  }
+  return null;
+}
 
 /**
  * Busca métricas de uma entidade para um intervalo de datas.
@@ -182,11 +199,16 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             const metricasEntidade = metricasSelecionadas.length > 0
               ? metricasSelecionadas
               : resolverMetricasEntidade(entidade);
+            const resultadoKey = metricaResultado(entidade.objetivo);
             const metricas = metricasEntidade.map((chave) => {
               const meta = CATALOGO_METRICAS[chave];
               if (!meta || meta.tipo === 'enum') return null;
-              const vAtual = atual[chave] ?? null;
-              const vAnterior = anterior[chave] ?? null;
+              const vAtual = chave === 'cost_per_result'
+                ? derivarCustoPorResultado(atual, resultadoKey)
+                : atual[chave] ?? null;
+              const vAnterior = chave === 'cost_per_result'
+                ? derivarCustoPorResultado(anterior, resultadoKey)
+                : anterior[chave] ?? null;
               const variacaoPct =
                 vAtual !== null && vAnterior !== null && vAnterior !== 0
                   ? Number((((vAtual - vAnterior) / vAnterior) * 100).toFixed(1))
