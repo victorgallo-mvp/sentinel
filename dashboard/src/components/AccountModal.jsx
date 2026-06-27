@@ -27,7 +27,7 @@ const STATUS_LABEL = {
 
 const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
 
-export default function AccountModal({ conta, customName, onClose, onMetricasSalvas }) {
+export default function AccountModal({ conta, customName, onClose, onMetricasSalvas, onRefresh }) {
   const [filtroAtivo, setFiltroAtivo] = useState('todas');
   const [mostrarSelector, setMostrarSelector] = useState(false);
   const [alertas, setAlertas] = useState(conta.resumo?.alertas ?? []);
@@ -45,7 +45,10 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
         body: JSON.stringify({ chave: alerta.chave, reconhecer: true }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
+      // Remoção otimista no modal + refetch do pai para o card/status ficarem
+      // consistentes (senão o alerta reaparece ao reabrir o modal).
       setAlertas((prev) => prev.filter((a) => a.chave !== alerta.chave));
+      onRefresh?.();
     } catch {
       // mantém o alerta na lista; o usuário pode tentar de novo
     } finally {

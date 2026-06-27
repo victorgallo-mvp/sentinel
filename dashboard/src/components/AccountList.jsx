@@ -116,6 +116,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
           customName={customNames[contaModal.id] ?? null}
           onClose={() => setOpenModalContaId(null)}
           onMetricasSalvas={onRefresh}
+          onRefresh={onRefresh}
         />
       )}
     </div>
