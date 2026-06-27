@@ -7,6 +7,16 @@ const ABAS = [
   { id: 'notificacoes', label: 'Notificações' },
 ];
 
+function IconChevron({ aberto }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 function tempo(iso) {
   if (!iso) return '';
   const diff = (Date.now() - new Date(iso)) / 60000;
@@ -43,7 +53,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
           )}
           {stats.errosEnvio24h > 0 && (
             <span className="ap-erro-badge">
-              ⚠ {stats.errosEnvio24h} falha{stats.errosEnvio24h > 1 ? 's' : ''}
+              {stats.errosEnvio24h} falha{stats.errosEnvio24h > 1 ? 's' : ''}
             </span>
           )}
         </h3>
@@ -52,7 +62,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
           onClick={() => setColapsado((v) => !v)}
           title={colapsado ? 'Expandir' : 'Colapsar'}
         >
-          {colapsado ? '▾' : '▴'}
+          <IconChevron aberto={!colapsado} />
         </button>
       </div>
 
@@ -82,7 +92,7 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 : anomalias.map((a) => (
                     <div key={a.id} className="ap-item">
                       {a.contaNome && <span className="ap-conta-tag">{a.contaNome}</span>}
-                      <span className="ap-badge ap-badge--anomalia">{a.metrica}</span>
+                      <span className="ap-badge ap-badge--warn">{a.metrica}</span>
                       <span className="ap-detalhe">
                         {a.direcao === 'aumento' ? '↑' : a.direcao === 'queda' ? '↓' : ''}{' '}
                         atual {fmt(a.valorAtual)} · esp. {fmt(a.valorEsperado)}
@@ -99,10 +109,10 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 : investigacoes.map((i) => (
                     <div key={i.id} className="ap-item">
                       {i.contaNome && <span className="ap-conta-tag">{i.contaNome}</span>}
-                      <span className={`ap-badge ${i.decidiuNotificar ? (i.notificacaoEnviada === false ? 'ap-badge--erro' : 'ap-badge--notificou') : 'ap-badge--silencioso'}`}>
+                      <span className={`ap-badge ${i.decidiuNotificar ? (i.notificacaoEnviada === false ? 'ap-badge--crit' : 'ap-badge--neutral') : 'ap-badge--muted'}`}>
                         {i.decidiuNotificar
-                          ? (i.notificacaoEnviada === false ? '⚠ Falhou' : '🔔 Notificou')
-                          : '🔕 Silenciou'}
+                          ? (i.notificacaoEnviada === false ? 'Falhou' : 'Notificou')
+                          : 'Silenciou'}
                       </span>
                       <span className="ap-detalhe">
                         {i.recomendacao?.acao ?? i.motivoNaoNotificar ?? '—'}
@@ -118,8 +128,8 @@ export default function AlertsPanel({ anomalias = [], investigacoes = [], notifi
                 : notificacoes.map((n) => (
                     <div key={n.id} className="ap-item">
                       {n.contaNome && <span className="ap-conta-tag">{n.contaNome}</span>}
-                      <span className={`ap-badge ${n.status === 'enviada' ? 'ap-badge--ok' : 'ap-badge--erro'}`}>
-                        {n.status === 'enviada' ? '✓ Enviada' : '✗ Erro'}
+                      <span className={`ap-badge ${n.status === 'enviada' ? 'ap-badge--neutral' : 'ap-badge--crit'}`}>
+                        {n.status === 'enviada' ? 'Enviada' : 'Erro'}
                       </span>
                       <span className="ap-detalhe">{n.conteudo?.slice(0, 80)}…</span>
                       <span className="ap-tempo">{tempo(n.enviadaEm)}</span>

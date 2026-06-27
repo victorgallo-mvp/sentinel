@@ -2,6 +2,27 @@ import { useState } from 'react';
 import MetricCard from './MetricCard.jsx';
 import './HierarchyView.css';
 
+function IconCaret({ aberto }) {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: aberto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function IconExternal() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+  );
+}
+
 const STATUS_PAUSADO = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'ARCHIVED', 'DELETED']);
 const STATUS_ERRO    = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
 const isAtivo = (e) => !STATUS_PAUSADO.has(e.status ?? '');
@@ -158,7 +179,7 @@ function CampaignNode({ node, mostrarPausados, semAdAtivo, statusFiltro }) {
           aria-label={expandido ? 'Colapsar' : 'Expandir'}
           tabIndex={-1}
         >
-          {temFilhos ? (expandido ? '▾' : '▸') : '·'}
+          {temFilhos ? <IconCaret aberto={expandido} /> : <span className="hv-toggle-dot" />}
         </button>
         <EntidadeCard
           entidade={node}
@@ -204,7 +225,7 @@ function AdsetNode({ node, mostrarPausados, statusFiltro }) {
           onClick={(e) => { e.stopPropagation(); temFilhos && setExpandido((v) => !v); }}
           tabIndex={-1}
         >
-          {temFilhos ? (expandido ? '▾' : '▸') : '·'}
+          {temFilhos ? <IconCaret aberto={expandido} /> : <span className="hv-toggle-dot" />}
         </button>
         <EntidadeCard
           entidade={node}
@@ -217,7 +238,7 @@ function AdsetNode({ node, mostrarPausados, statusFiltro }) {
         <div className="hv-ad-list">
           {filhosVisiveis.map((ad) => (
             <div key={ad.id} className={`hv-ad-row ${!isAtivo(ad) ? 'hv-pausado' : ''}`}>
-              <span className="hv-ad-dot">·</span>
+              <span className="hv-ad-dot" />
               <EntidadeCard entidade={ad} variante="ad" />
             </div>
           ))}
@@ -270,7 +291,7 @@ function EntidadeCard({ entidade, variante, avisoSemAd, filhosCount }) {
             title="Abrir no Meta Ads Manager"
             onClick={(e) => e.stopPropagation()}
           >
-            ↗
+            <IconExternal />
           </a>
         )}
         <span className={`hv-card-tipo hv-card-tipo--${entidade.tipo}`}>
@@ -293,7 +314,7 @@ function EntidadeCard({ entidade, variante, avisoSemAd, filhosCount }) {
         )}
         {avisoSemAd && (
           <span className="hv-card-aviso" title="Campanha ativa sem nenhum anúncio veiculando">
-            ⚠ sem anúncio ativo
+            sem anúncio ativo
           </span>
         )}
         {entidade.dataReferencia ? (

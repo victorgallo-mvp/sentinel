@@ -167,9 +167,21 @@ export default function DateRangePicker({ dataInicio, dataFim, onChange }) {
   return (
     <div className="drp" ref={ref}>
       <button className={`drp-trigger ${aberto ? 'ativo' : ''}`} onClick={() => setAberto((v) => !v)}>
-        <span className="drp-trigger-icone">📅</span>
+        <span className="drp-trigger-icone">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+            strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4.5" width="18" height="16" rx="2" />
+            <path d="M3 9h18M8 2.5v4M16 2.5v4" />
+          </svg>
+        </span>
         <span className="drp-trigger-label">{labelAtual}</span>
-        <span className="drp-trigger-seta">{aberto ? '▴' : '▾'}</span>
+        <span className="drp-trigger-seta">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
       </button>
 
       {aberto && (

@@ -105,7 +105,7 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
             onClick={() => setMostrarSelector(true)}
             title="Configurar métricas"
           >
-            ⚙ Métricas
+            Métricas
           </button>
           <button className="am-close" onClick={onClose} title="Fechar (ESC)">×</button>
         </div>
@@ -126,7 +126,7 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
                   </div>
                   {(a.issues ?? []).map((iss, i) => (
                     <div key={i} className="am-alerta-issue">
-                      ⚠ {iss.error_summary || iss.error_message || iss.error_code}
+                      {iss.error_summary || iss.error_message || iss.error_code}
                     </div>
                   ))}
                 </div>
@@ -136,7 +136,7 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
                   disabled={reconhecendo === a.chave}
                   title="Marcar como ciente / resolvido — remove o alerta da visão"
                 >
-                  {reconhecendo === a.chave ? '…' : '✓ Ciente'}
+                  {reconhecendo === a.chave ? 'Salvando…' : 'Marcar ciente'}
                 </button>
               </div>
             ))}

@@ -1,27 +1,26 @@
 .metric-card {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
   display: flex;
   flex-direction: column;
   gap: 5px;
-  transition: border-color .15s, box-shadow .15s;
+  transition: border-color .15s, background .15s;
 }
 .metric-card:hover {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 
-.metric-nome   { font-size: 11px; color: #6b7280; font-weight: 500; }
-.metric-valor  { font-size: 19px; font-weight: 700; color: #111827; line-height: 1.1; }
+.metric-nome  { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 500; }
+.metric-valor { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1.1; font-variant-numeric: tabular-nums; }
 
 .metric-variacao {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 3px;
+  font-variant-numeric: tabular-nums;
 }
-
-.metric-hint { font-weight: 400; font-size: 11px; opacity: .65; }
+.metric-variacao--muted { color: var(--text-subtle); }
+.metric-variacao--warn  { color: var(--warn); }
+.metric-variacao--crit  { color: var(--crit); }

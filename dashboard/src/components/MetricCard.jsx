@@ -2,44 +2,33 @@ import './MetricCard.css';
 
 export default function MetricCard({ metrica }) {
   const { nome, unidade, direcaoBoa, atual, variacaoPct } = metrica;
-  const { seta, cor } = calcularTendencia(variacaoPct, direcaoBoa);
+  const { seta, tom } = calcularTendencia(variacaoPct, direcaoBoa);
 
   return (
     <div className="metric-card">
       <span className="metric-nome">{nome}</span>
       <span className="metric-valor">{formatarValor(atual, unidade)}</span>
       {variacaoPct !== null && (
-        <span className="metric-variacao" style={{ color: cor }}>
+        <span className={`metric-variacao metric-variacao--${tom}`}>
           {seta} {Math.abs(variacaoPct)}%
-          <span className="metric-hint">{labelDirecao(direcaoBoa, variacaoPct)}</span>
         </span>
       )}
     </div>
   );
 }
 
+// Tom: 'crit' (piorou) | 'warn' (oscilação relevante) | 'muted' (estável/melhorou)
+// Sem verde — minimalismo: melhora não recebe cor de destaque.
 function calcularTendencia(pct, direcaoBoa) {
-  if (pct === null) return { seta: '', cor: '#9ca3af' };
+  if (pct === null) return { seta: '', tom: 'muted' };
 
   const subiu = pct > 0;
+  const seta = subiu ? '↑' : '↓';
 
-  if (direcaoBoa === 'maior') {
-    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#16a34a' : '#dc2626' };
-  }
-  if (direcaoBoa === 'menor') {
-    return { seta: subiu ? '↑' : '↓', cor: subiu ? '#dc2626' : '#16a34a' };
-  }
-  if (direcaoBoa === 'estavel') {
-    const intenso = Math.abs(pct) > 15;
-    return { seta: subiu ? '↑' : '↓', cor: intenso ? '#ea580c' : '#ca8a04' };
-  }
-  return { seta: subiu ? '↑' : '↓', cor: '#6b7280' };
-}
-
-function labelDirecao(direcaoBoa, pct) {
-  if (direcaoBoa === 'estavel') return ' ⚡';
-  if (direcaoBoa === 'monitorar') return '';
-  return '';
+  if (direcaoBoa === 'maior')  return { seta, tom: subiu ? 'muted' : 'crit' };
+  if (direcaoBoa === 'menor')  return { seta, tom: subiu ? 'crit' : 'muted' };
+  if (direcaoBoa === 'estavel') return { seta, tom: Math.abs(pct) > 15 ? 'warn' : 'muted' };
+  return { seta, tom: 'muted' };
 }
 
 function formatarValor(v, unidade) {

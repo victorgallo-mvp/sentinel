@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import './AccountCard.css';
 
-const STATUS_COR   = { critico: '#dc2626', atencao: '#f59e0b', pausado: '#9ca3af', normal: '#16a34a' };
 const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', pausado: 'Conta pausada', normal: 'Sem alertas' };
 
 // ── Saldo pré-pago: do mais grave ao mais tranquilo ──
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
-const SALDO_CLS   = { zerado: 'critico', bloqueado: 'critico', critico: 'critico', acabando: 'atencao', ok: 'normal' };
+// Tom do saldo: 'crit' | 'warn' | 'muted' (sem cor de "ok" — minimalismo)
+const SALDO_TOM = { zerado: 'crit', bloqueado: 'crit', critico: 'crit', acabando: 'warn', ok: 'muted' };
 
 function fmtRunway(h) {
   if (h == null) return null;
@@ -28,11 +28,11 @@ function textoSaldo(s) {
     ? `R$ ${s.saldoReais.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
     : null;
   switch (s.nivel) {
-    case 'zerado':    return '🔴 saldo zerado';
-    case 'bloqueado': return '🚨 bloqueada';
-    case 'critico':   return runway ? `🟠 acaba ~${runway}` : '🟠 saldo crítico';
-    case 'acabando':  return runway ? `🟡 acaba ~${runway}` : (reais ? `🟡 ${reais}` : '🟡 saldo baixo');
-    default:          return reais ? `💰 ${reais}${runway ? ` · ~${runway}` : ''}` : null;
+    case 'zerado':    return 'saldo zerado';
+    case 'bloqueado': return 'conta bloqueada';
+    case 'critico':   return runway ? `acaba ~${runway}` : 'saldo crítico';
+    case 'acabando':  return runway ? `acaba ~${runway}` : (reais ? `${reais} restante` : 'saldo baixo');
+    default:          return reais ? `${reais}${runway ? ` · ~${runway}` : ''}` : null;
   }
 }
 
@@ -41,8 +41,37 @@ function tituloSaldo(s) {
   if (s.saldoReais != null) p.push(`Saldo estimado: R$ ${s.saldoReais.toFixed(2)}`);
   if (s.ritmoHora)          p.push(`Ritmo: R$ ${s.ritmoHora.toFixed(2)}/h`);
   if (s.runwayHoras != null) p.push(`Autonomia: ~${fmtRunway(s.runwayHoras)}`);
+  if (s.motivoBloqueio)     p.push(`Motivo: ${s.motivoBloqueio}`);
   if (s.atualizadoEm)       p.push(`Atualizado: ${new Date(s.atualizadoEm).toLocaleString('pt-BR')}`);
   return p.join('\n');
+}
+
+function IconStar({ filled }) {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+      fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"
+      strokeLinejoin="round">
+      <path d="M12 17.3l-5.4 3.1 1.4-6.1L3.2 10l6.2-.5L12 3.8l2.6 5.7 6.2.5-4.8 4.3 1.4 6.1z" />
+    </svg>
+  );
+}
+
+function IconPencil() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 20h4l10-10a2 2 0 0 0-3-3L5 17z" />
+    </svg>
+  );
+}
+
+function IconChevron() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
 }
 
 export default function AccountCard({ conta, favorito, customName, onFavorito, onRename, onClick }) {
@@ -89,25 +118,17 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
       onClick={handleCardClick}
       style={{ cursor: onClick ? 'pointer' : undefined }}
     >
-      {/* ── Linha do header ── */}
       <div className="ac-header">
-        {/* Status dot */}
-        <span
-          className="ac-status-dot"
-          style={{ background: STATUS_COR[status] ?? '#9ca3af' }}
-          title={STATUS_TITLE[status] ?? status}
-        />
+        <span className="ac-status-dot" title={STATUS_TITLE[status] ?? status} />
 
-        {/* Favorito */}
         <button
-          className="ac-favorito"
+          className={`ac-favorito ${favorito ? 'ac-favorito--on' : ''}`}
           onClick={(e) => { e.stopPropagation(); onFavorito(conta.id); }}
           title={favorito ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
         >
-          {favorito ? '★' : '☆'}
+          <IconStar filled={favorito} />
         </button>
 
-        {/* Nome (editável) */}
         <div className="ac-nome-wrapper" onClick={(e) => e.stopPropagation()}>
           {editando ? (
             <input
@@ -121,37 +142,34 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
           ) : (
             <span className="ac-nome">{nomeExibido}</span>
           )}
-          <button className="ac-rename-btn" onClick={iniciarEdicao} title="Renomear">✏</button>
+          <button className="ac-rename-btn" onClick={iniciarEdicao} title="Renomear">
+            <IconPencil />
+          </button>
         </div>
 
-        {/* Resumo */}
         <div className="ac-resumo">
           {saldoTexto && (
             <span
-              className={`ac-badge ac-saldo ac-badge--${SALDO_CLS[saldo.nivel] ?? 'normal'}`}
+              className={`ac-saldo ac-saldo--${SALDO_TOM[saldo.nivel] ?? 'muted'}`}
               title={tituloSaldo(saldo)}
             >
               {saldoTexto}
             </span>
           )}
           {alertas.length > 0 && (
-            <span className="ac-badge ac-badge--critico">
+            <span className="ac-tag ac-tag--crit">
               {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
             </span>
           )}
           {status === 'atencao' && alertas.length === 0 && (
-            <span className="ac-badge ac-badge--atencao">atenção</span>
+            <span className="ac-tag ac-tag--warn">atenção</span>
           )}
           {status === 'pausado' && (
-            <span className="ac-badge ac-badge--pausado">pausada</span>
-          )}
-          {status === 'normal' && (
-            <span className="ac-badge ac-badge--normal">sem alertas</span>
+            <span className="ac-tag ac-tag--muted">pausada</span>
           )}
         </div>
 
-        {/* Indicador clicável */}
-        <span className="ac-toggle">▸</span>
+        <span className="ac-toggle"><IconChevron /></span>
       </div>
     </div>
   );

@@ -3,6 +3,16 @@ import AccountCard from './AccountCard.jsx';
 import AccountModal from './AccountModal.jsx';
 import './AccountList.css';
 
+function IconSearch() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+
 const ORDEM_STATUS = { critico: 0, atencao: 1, pausado: 2, normal: 3 };
 
 const SORTS = [
@@ -53,7 +63,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
       {/* ── Barra de busca + sort ── */}
       <div className="al-toolbar">
         <div className="al-search-wrapper">
-          <span className="al-search-icon">🔍</span>
+          <span className="al-search-icon"><IconSearch /></span>
           <input
             className="al-search"
             type="text"
@@ -62,7 +72,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
             onChange={(e) => setBusca(e.target.value)}
           />
           {busca && (
-            <button className="al-search-clear" onClick={() => setBusca('')}>✕</button>
+            <button className="al-search-clear" onClick={() => setBusca('')} title="Limpar busca">×</button>
           )}
         </div>
 
