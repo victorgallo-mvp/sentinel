@@ -9,7 +9,7 @@
  */
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Conta } from '../../dominio/conta.modelo.js';
-import { metricasNumericas, metricaAcumulativa } from '../../config/metricas.config.js';
+import { metricasNumericas } from '../../config/metricas.config.js';
 import {
   MINIMO_OBSERVACOES_BASELINE,
   DIAS_HISTORICO_BASELINE_PADRAO,
@@ -18,7 +18,9 @@ import { query } from '../../infra/postgres.js';
 import { calcularMedia, calcularDesvioPadrao } from '../../shared/utils.js';
 import { logger } from '../../infra/logger.js';
 
-const JANELAS_HORAS = [1, 6, 24];
+// Só a janela diária: a detecção de anomalias opera apenas em 24h (janelas
+// curtas eram ruído), então calcular baselines de 1h/6h era trabalho desperdiçado.
+const JANELAS_HORAS = [24];
 const METRICAS = metricasNumericas();
 
 /**
@@ -38,9 +40,6 @@ export async function calcularBaselinesConta(contaId) {
   for (const entidade of entidades) {
     for (const janela of JANELAS_HORAS) {
       for (const metrica of METRICAS) {
-        // Counters (gasto, impressões…) só têm baseline na janela diária —
-        // espelha a regra do detector e evita baselines 1h/6h sem uso.
-        if (metricaAcumulativa(metrica) && janela !== 24) continue;
         try {
           const resultado = await calcularBaselineEntidadeMetrica(
             conta.identificador,

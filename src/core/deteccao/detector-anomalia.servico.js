@@ -11,7 +11,6 @@ import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { calcularMagnitudeDesvios } from '../../shared/utils.js';
 import { resolverSensibilidade, metricaIgnorada } from './configurador-thresholds.js';
-import { metricaAcumulativa } from '../../config/metricas.config.js';
 import { foiDetectadaRecentemente } from './deduplicador-anomalias.js';
 import { adicionarJob, FILAS } from '../../infra/fila.js';
 import { logger } from '../../infra/logger.js';
@@ -43,9 +42,12 @@ export async function detectarAnomaliasConta(contaId) {
 
     if (metricaIgnorada(entidade, baseline.metrica)) continue;
 
-    // Métricas acumulativas (gasto, impressões, conversões…) só geram anomalia
-    // na janela diária — evita alertas baseados em "gasto por hora", que é ruído.
-    if (metricaAcumulativa(baseline.metrica) && baseline.janela_horas !== 24) continue;
+    // A detecção opera apenas na janela diária (24h). Métricas em janelas curtas
+    // (1h/6h) — sobretudo taxas como CPC/CPM/CTR — oscilam demais com poucas
+    // amostras e geravam a maior parte das investigações (ruído). Alertas urgentes
+    // ficam a cargo dos jobs por regra (orçamento/entrega/performance), que rodam
+    // de hora em hora sem LLM.
+    if (baseline.janela_horas !== 24) continue;
 
     try {
       analisadas++;
