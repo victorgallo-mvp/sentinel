@@ -29,6 +29,13 @@ const RUNWAY_ACABANDO_HORAS = 24;          // saldo acaba em < 24h → alerta pr
 const JANELA_RENOTIFICACAO_CRITICO = 4;    // renotifica "crítico" a cada 4h
 const JANELA_RENOTIFICACAO_ACABANDO = 12;  // renotifica "vai acabar" a cada 12h
 
+// Guarda anti-falso-positivo de runway: só alerta "vai acabar/crítico" se o saldo
+// realmente caiu desde a última leitura. Se ficou parado (campanha ACTIVE mas sem
+// entrega — ex.: agendada para não rodar no fim de semana), o dinheiro não está
+// saindo e não há por que avisar, mesmo que a projeção pelo orçamento diga o contrário.
+const LEITURA_RECENTE_MAX_HORAS = 3;  // só compara saldo se a leitura anterior é recente
+const QUEDA_MINIMA_REAIS = 0.50;      // abaixo disso considera-se "saldo parado" (ruído)
+
 // account_status da Meta API que indicam problema de pagamento/bloqueio
 const STATUS_PROBLEMA = {
   2: 'desativada',
@@ -156,6 +163,14 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
 
     // 2. Saldo confortável — snapshot já persistido, nada a alertar
     if (nivel === 'ok') return;
+
+    // 2b. Saldo parado — não está caindo desde a última leitura. Suprime o alerta
+    // de runway (mantém o snapshot do dashboard com a projeção real). Evita o
+    // falso positivo de campanha agendada para não rodar no fim de semana.
+    if (!saldoEstaCaindo(conta, contaAnuncioId, saldoEstimadoReais)) {
+      logger.info({ msg: 'Alerta de saldo suprimido — saldo estável (não está caindo)', conta: conta.nome, contaAnuncioId, nivel, saldoEstimadoReais });
+      return;
+    }
 
     // 3. Projeção de esgotamento (runway): avisa com antecedência por tempo de autonomia
     const janelaHoras = nivel === 'critico' ? JANELA_RENOTIFICACAO_CRITICO : JANELA_RENOTIFICACAO_ACABANDO;
@@ -428,6 +443,26 @@ function formatarRunway(horas) {
   const dias = Math.floor(h / 24);
   const resto = h % 24;
   return resto > 0 ? `${dias}d ${resto}h` : `${dias}d`;
+}
+
+/**
+ * Decide se o saldo pré-pago está de fato caindo entre leituras consecutivas.
+ * Compara o saldo atual com o último snapshot persistido em `conta.saldoPrepago`
+ * (ainda não atualizado em memória neste ponto do ciclo). Retorna false quando o
+ * saldo ficou estável ou subiu — caso típico de campanha ACTIVE que não entrega
+ * (agendada para não rodar no fim de semana): a projeção de runway diz que "vai
+ * acabar", mas o dinheiro está parado e não há por que alertar.
+ * Em caso de dúvida (sem leitura anterior recente) retorna true — não suprime.
+ */
+function saldoEstaCaindo(conta, contaAnuncioId, saldoAtual) {
+  const anterior = (conta.saldoPrepago ?? []).find(
+    (s) => s.contaAnuncioId === contaAnuncioId && s.saldoReais != null && s.atualizadoEm
+  );
+  if (!anterior) return true; // sem histórico — não dá pra afirmar que está parado
+  const horasDesde = (Date.now() - new Date(anterior.atualizadoEm).getTime()) / 36e5;
+  if (!(horasDesde > 0 && horasDesde <= LEITURA_RECENTE_MAX_HORAS)) return true; // leitura velha — cadência não confiável
+  const queda = Number(anterior.saldoReais) - Number(saldoAtual);
+  return queda > QUEDA_MINIMA_REAIS;
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {
