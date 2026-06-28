@@ -15,6 +15,10 @@ const esquemaEnv = z.object({
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY é obrigatório'),
   MODELO_TRIAGEM: z.string().default('claude-haiku-4-5'),
   MODELO_AGENTE: z.string().default('claude-sonnet-4-5'),
+  // Liga/desliga todo o pipeline de IA (detecção→triagem→investigação→notificação
+  // e relatório semanal). Desligado por padrão — o sistema roda só com os alertas
+  // determinísticos. (z.enum em vez de z.coerce.boolean: "false" coage para true.)
+  IA_INVESTIGACAO_ATIVA: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 
   // Meta
   META_APP_ID: z.string().optional().default(''),
@@ -85,6 +89,8 @@ export const config = {
     modeloTriagem: env.MODELO_TRIAGEM,
     modeloAgente: env.MODELO_AGENTE,
   },
+
+  iaInvestigacaoAtiva: env.IA_INVESTIGACAO_ATIVA,
 
   meta: {
     appId: env.META_APP_ID,

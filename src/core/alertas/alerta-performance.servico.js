@@ -21,6 +21,13 @@ const THRESHOLD_FREQUENCIA = 3.0;
 const LIMIAR_GASTO_ZERO_CONVERSOES = 30; // R$
 const JANELA_RENOTIFICACAO_HORAS = 24;
 
+// A métrica de 24h é o acumulado de HOJE (date_preset 'today') e zera à meia-noite.
+// Só alertamos com base na coleta mais recente — a coleta roda de hora em hora, então
+// uma janela de 2h cobre um eventual tick perdido. Sem isso, uma leitura velha (ex.: a
+// frequência acumulada do fim de ontem) dispararia alerta falso enquanto o valor real
+// de hoje já zerou/está baixo. Espelha o filtro por dia que o dashboard usa.
+const FRESCOR_MAX_HORAS = 2;
+
 const OBJETIVOS_CONVERSAO = new Set(['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_APP_PROMOTION']);
 
 export async function verificarPerformance() {
@@ -60,13 +67,15 @@ async function verificarPerformanceConta(conta) {
 }
 
 async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
+  const frescorCutoff = new Date(Date.now() - FRESCOR_MAX_HORAS * 60 * 60 * 1000);
   const res = await query(
     `SELECT valor FROM metricas_serie_temporal
      WHERE entidade_id = $1 AND metrica = 'frequency' AND janela_horas = 24
+       AND coletada_em >= $2
      ORDER BY coletada_em DESC LIMIT 1`,
-    [String(entidade._id)]
+    [String(entidade._id), frescorCutoff]
   );
-  if (!res.rows.length) return;
+  if (!res.rows.length) return; // sem coleta recente — não alerta com dado velho
 
   const frequencia = Number(res.rows[0].valor);
   const threshold = entidade.configuracoes?.thresholdFrequenciaSaturacao ?? THRESHOLD_FREQUENCIA;
@@ -121,12 +130,14 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
 async function verificarZeroConversoes(conta, entidade, destinatarios) {
   const limiarGasto = conta.configuracoes?.limiarGastoZeroConversoes ?? LIMIAR_GASTO_ZERO_CONVERSOES;
 
+  const frescorCutoff = new Date(Date.now() - FRESCOR_MAX_HORAS * 60 * 60 * 1000);
   const res = await query(
     `SELECT DISTINCT ON (metrica) metrica, valor
      FROM metricas_serie_temporal
      WHERE entidade_id = $1 AND metrica IN ('spend', 'conversions') AND janela_horas = 24
+       AND coletada_em >= $2
      ORDER BY metrica, coletada_em DESC`,
-    [String(entidade._id)]
+    [String(entidade._id), frescorCutoff]
   );
 
   const metricas = Object.fromEntries(res.rows.map((r) => [r.metrica, Number(r.valor)]));
