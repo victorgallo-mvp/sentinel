@@ -22,6 +22,27 @@ const METRICAS_COUNTER = new Set(
     .map(([k]) => k)
 );
 
+// Razões que devem ser RECALCULADAS a partir dos componentes somados do período
+// ([numerador, denominador, fator]) — média ponderada correta, em vez da média
+// simples das razões diárias (que pesa igual um dia de muito e um de pouco tráfego).
+const RATIOS_RECALCULAVEIS = {
+  ctr:                 ['clicks',        'impressions', 100],
+  unique_ctr:          ['unique_clicks', 'reach',       100],
+  cpc:                 ['spend',         'clicks',      1],
+  cpm:                 ['spend',         'impressions', 1000],
+  cpp:                 ['spend',         'reach',       1000],
+  cost_per_conversion: ['spend',         'conversions', 1],
+  conversion_rate:     ['conversions',   'impressions', 100],
+  // purchase_roas fica de fora: não guardamos a receita como componente, então
+  // não há como recompor de soma÷soma — segue como média (aproximação).
+};
+
+// Métricas deduplicadas: NÃO podem ser somadas/mediadas a partir de snapshots
+// diários (a Meta deduplica a mesma pessoa entre dias). São coletadas 1×/dia como
+// agregado real de 30d (janela_horas=720) e exibidas como bloco fixo "Últimos 30 dias".
+const METRICAS_30D = ['frequency', 'reach', 'unique_clicks', 'unique_ctr'];
+const JANELA_30D_HORAS = 720;
+
 /**
  * Deriva o custo por resultado do período: gasto ÷ resultado, ambos já somados
  * no intervalo. Tenta o resultado do objetivo e, se não houver, cai para
@@ -78,12 +99,21 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
       soma[metrica]      = (soma[metrica]      ?? 0) + Number(valor);
       contagem[metrica]  = (contagem[metrica]  ?? 0) + 1;
     }
-    return Object.fromEntries(
+    const resultado = Object.fromEntries(
       Object.entries(soma).map(([k, v]) => [
         k,
         METRICAS_COUNTER.has(k) ? v : v / (contagem[k] || 1),
       ])
     );
+
+    // Recalcula as razões a partir dos componentes somados do período.
+    for (const [metrica, [num, den, fator]] of Object.entries(RATIOS_RECALCULAVEIS)) {
+      if (soma[den] > 0 && soma[num] != null) {
+        resultado[metrica] = (soma[num] / soma[den]) * fator;
+      }
+    }
+
+    return resultado;
   }
 
   const [atual, anterior] = await Promise.all([
@@ -92,6 +122,22 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
   ]);
 
   return { atual, anterior };
+}
+
+/**
+ * Lê o último snapshot real de 30 dias (janela_horas=720) das métricas
+ * deduplicadas (frequência, alcance, únicos) — coletado 1×/dia direto da Meta,
+ * que faz a deduplicação correta entre dias. Retorna {} se ainda não houver coleta.
+ */
+async function buscarDeduplicadas30d(entidadeId) {
+  const r = await query(
+    `SELECT DISTINCT ON (metrica) metrica, valor
+     FROM metricas_serie_temporal
+     WHERE entidade_id = $1 AND janela_horas = $2 AND metrica = ANY($3)
+     ORDER BY metrica, coletada_em DESC`,
+    [entidadeId, JANELA_30D_HORAS, METRICAS_30D]
+  );
+  return Object.fromEntries(r.rows.map((row) => [row.metrica, Number(row.valor)]));
 }
 
 export const rotaDashboard = Router();
@@ -189,9 +235,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
 
         const dadosEntidades = await Promise.all(
           entidades.map(async (entidade) => {
-            const { atual, anterior } = await buscarMetricasIntervalo(
-              String(entidade._id), dataInicio, dataFim
-            );
+            const [{ atual, anterior }, dados30d] = await Promise.all([
+              buscarMetricasIntervalo(String(entidade._id), dataInicio, dataFim),
+              buscarDeduplicadas30d(String(entidade._id)),
+            ]);
             const tsAtual   = dataInicio; // referência textual para exibição
             const tsAnterior = null;
 
@@ -203,6 +250,22 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             const metricas = metricasEntidade.map((chave) => {
               const meta = CATALOGO_METRICAS[chave];
               if (!meta || meta.tipo === 'enum') return null;
+
+              // Métricas deduplicadas: valor real de 30d (não respeita o seletor de
+              // período); sem comparação por ser um valor fixo que atualiza 1×/dia.
+              if (METRICAS_30D.includes(chave)) {
+                return {
+                  chave,
+                  nome: meta.nome,
+                  unidade: meta.unidade,
+                  direcaoBoa: meta.direcaoBoa,
+                  atual: dados30d[chave] ?? null,
+                  anterior: null,
+                  variacaoPct: null,
+                  janela: '30d',
+                };
+              }
+
               const vAtual = chave === 'cost_per_result'
                 ? derivarCustoPorResultado(atual, resultadoKey)
                 : atual[chave] ?? null;
@@ -221,6 +284,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
                 atual: vAtual,
                 anterior: vAnterior,
                 variacaoPct,
+                janela: 'periodo',
               };
             }).filter(Boolean);
 

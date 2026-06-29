@@ -168,6 +168,23 @@
   gap: var(--sp-2);
 }
 
+.hv-metricas-divisor {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.hv-metricas-divisor::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+}
+
 /* ── Toggle pausados ── */
 .hv-pausados-toggle {
   margin-bottom: var(--sp-3);

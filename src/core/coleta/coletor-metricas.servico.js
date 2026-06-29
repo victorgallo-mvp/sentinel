@@ -17,6 +17,7 @@ import { arredondarParaIntervalo } from '../../shared/utils.js';
 
 const JANELA_ARREDONDAMENTO_MINUTOS = 5;
 const CONJUNTO_METRICAS_NUMERICAS = new Set(metricasNumericas());
+const JANELA_30D_HORAS = 720; // 30 dias — usado pelas métricas deduplicadas (freq/alcance/únicos)
 
 /**
  * Coleta métricas de todas as entidades monitoradas de uma conta.
@@ -50,6 +51,48 @@ export async function coletarMetricasConta(contaId) {
   }
 
   logger.info({ msg: 'Coleta de métricas concluída', contaId: String(contaId), sucesso, falhas, total: entidades.length });
+  return { sucesso, falhas, total: entidades.length };
+}
+
+/**
+ * Coleta o agregado REAL de 30 dias (`last_30d`, linha única) de uma entidade e
+ * persiste em `metricas_serie_temporal` com janela_horas=720. A Meta deduplica
+ * alcance/frequência entre dias — algo impossível de reconstruir dos snapshots
+ * diários. Usado pelas métricas deduplicadas no dashboard. Roda 1×/dia.
+ */
+export async function coletarMetricas30dEntidade(conta, entidade, coletadaEm = new Date()) {
+  const token = conta.metaConfig?.systemUserToken || undefined;
+  const linhas = await obterInsights(entidade.tipo, entidade.metaId, {
+    datePreset: 'last_30d',
+    timeIncrement: 'all_days', // uma única linha agregada do período inteiro
+    token,
+  });
+  if (linhas.length > 0) {
+    await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas[0]), JANELA_30D_HORAS, coletadaEm);
+  }
+}
+
+/** Coleta o agregado de 30d de todas as entidades monitoradas de uma conta. */
+export async function coletarMetricas30dConta(contaId) {
+  const conta = await Conta.findById(contaId);
+  if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
+
+  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true });
+  const agora = arredondarParaIntervalo(new Date(), JANELA_ARREDONDAMENTO_MINUTOS);
+  let sucesso = 0;
+  let falhas = 0;
+
+  for (const entidade of entidades) {
+    try {
+      await coletarMetricas30dEntidade(conta, entidade, agora);
+      sucesso++;
+    } catch (erro) {
+      falhas++;
+      logger.error({ msg: 'Falha ao coletar 30d de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, erro: erro.message });
+    }
+  }
+
+  logger.info({ msg: 'Coleta 30d concluída', contaId: String(contaId), sucesso, falhas, total: entidades.length });
   return { sucesso, falhas, total: entidades.length };
 }
 

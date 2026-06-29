@@ -36,3 +36,20 @@
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
   gap: 10px;
 }
+
+.metricas-divisor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.metricas-divisor::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+}

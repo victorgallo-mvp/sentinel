@@ -263,6 +263,8 @@ function urlMetaAds(entidade) {
 function EntidadeCard({ entidade, variante, avisoSemAd, filhosCount }) {
   const semDados = entidade.metricas.every((m) => m.atual === null);
   const metricasVisiveis = entidade.metricas.filter((m) => m.atual !== null);
+  const metricasPeriodo = metricasVisiveis.filter((m) => m.janela !== '30d');
+  const metricas30d = metricasVisiveis.filter((m) => m.janela === '30d');
   const pausado = !isAtivo(entidade);
   const temErro = STATUS_ERRO.has(entidade.status) || (entidade.issues?.length > 0);
   const linkMeta = urlMetaAds(entidade);
@@ -352,11 +354,23 @@ function EntidadeCard({ entidade, variante, avisoSemAd, filhosCount }) {
           {pausado ? 'Pausada — sem dados de veiculação.' : 'Sem dados — aguardando coleta.'}
         </p>
       ) : (
-        <div className="hv-metricas">
-          {metricasVisiveis.map((m) => (
-            <MetricCard key={m.chave} metrica={m} />
-          ))}
-        </div>
+        <>
+          <div className="hv-metricas">
+            {metricasPeriodo.map((m) => (
+              <MetricCard key={m.chave} metrica={m} />
+            ))}
+          </div>
+          {metricas30d.length > 0 && (
+            <>
+              <div className="hv-metricas-divisor">Últimos 30 dias · atualiza 1×/dia</div>
+              <div className="hv-metricas">
+                {metricas30d.map((m) => (
+                  <MetricCard key={m.chave} metrica={m} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
