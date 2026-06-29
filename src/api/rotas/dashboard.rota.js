@@ -140,6 +140,25 @@ async function buscarDeduplicadas30d(entidadeId) {
   return Object.fromEntries(r.rows.map((row) => [row.metrica, Number(row.valor)]));
 }
 
+/**
+ * Gasto total dos últimos 30 dias de uma conta — soma o último snapshot de spend
+ * (janela_horas=720) APENAS das campanhas (nível campanha já totaliza o dinheiro;
+ * somar adset/ad contaria 2-3×). Reaproveita o dado do job diário de 30d.
+ */
+async function buscarGasto30d(campanhaIds) {
+  if (!campanhaIds?.length) return 0;
+  const r = await query(
+    `SELECT COALESCE(SUM(s), 0)::float AS total FROM (
+       SELECT DISTINCT ON (entidade_id) valor AS s
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = $2
+       ORDER BY entidade_id, coletada_em DESC
+     ) x`,
+    [campanhaIds, JANELA_30D_HORAS]
+  );
+  return Number(r.rows[0]?.total ?? 0);
+}
+
 export const rotaDashboard = Router();
 
 async function autenticarDashboard(req, res, next) {
@@ -317,6 +336,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tipo === 'campaign')
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
+        // Gasto real dos últimos 30 dias (snapshot do job de 30d, nível campanha)
+        const campanhaIds = entidades.filter((e) => e.tipo === 'campaign').map((e) => String(e._id));
+        const gasto30d = await buscarGasto30d(campanhaIds);
+
         // Alertas: entidades com status crítico. Cada alerta tem uma `chave` estável
         // (entidade + status) para o usuário marcar como "ciente" no dashboard.
         const STATUS_ALERTAS = new Set(['WITH_ISSUES', 'DISAPPROVED', 'PENDING_BILLING_INFO']);
@@ -361,6 +384,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           entidades: dadosEntidades,
           resumo: {
             gastoHoje: gastoPeriodo,
+            gasto30d,
             status: statusConta,
             alertas,
             saldoPrepago,

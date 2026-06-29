@@ -124,6 +124,14 @@
 .ac-saldo--warn  { color: var(--warn); font-weight: 600; }
 .ac-saldo--crit  { color: var(--crit); font-weight: 600; }
 
+/* Gasto dos últimos 30 dias — informativo, discreto */
+.ac-gasto30d {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-subtle);
+}
+
 /* Tags textuais discretas */
 .ac-tag {
   font-size: var(--fs-xs);

@@ -87,9 +87,12 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { status, alertas = [], saldoPrepago = [] } = conta.resumo;
+  const { status, alertas = [], saldoPrepago = [], gasto30d } = conta.resumo;
   const saldo = piorSaldo(saldoPrepago);
   const saldoTexto = saldo ? textoSaldo(saldo) : null;
+  const gasto30dTexto = gasto30d > 0
+    ? `30d: R$ ${gasto30d.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+    : null;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -154,6 +157,11 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
               title={tituloSaldo(saldo)}
             >
               {saldoTexto}
+            </span>
+          )}
+          {gasto30dTexto && (
+            <span className="ac-gasto30d" title="Gasto nos últimos 30 dias">
+              {gasto30dTexto}
             </span>
           )}
           {alertas.length > 0 && (
