@@ -466,9 +466,15 @@ function saldoEstaCaindo(conta, contaAnuncioId, saldoAtual) {
 }
 
 async function avaliarSaldoAdset(conta, adset, token) {
-  const { budgetRemaining, budgetTotal, origemOrcamento } = await obterSaldo(adset, token);
+  const { budgetRemaining, budgetTotal, origemOrcamento, ehDiario } = await obterSaldo(adset, token);
 
   if (budgetRemaining === null || budgetTotal === null || budgetTotal === 0) return;
+
+  // Orçamento DIÁRIO se esgota todo dia por design e reseta à meia-noite — o
+  // "restante baixo" no fim do dia é normal, não um problema. Alertar isso gera
+  // falso positivo diário (e em massa quando há muitos adsets ativos). Só faz
+  // sentido alertar orçamento TOTAL/lifetime, que de fato se esgota de vez.
+  if (ehDiario) return;
 
   const limiarPct = conta.configuracoes?.limiarAlertaOrcamentoPct ?? LIMIAR_PCT_PADRAO;
   const limiarReais = conta.configuracoes?.limiarAlertaOrcamentoReais ?? LIMIAR_REAIS_PADRAO;
@@ -548,19 +554,21 @@ async function obterSaldo(adset, token) {
       budgetRemaining: Number(cfgAdset.budget_remaining) / 100,
       budgetTotal: Number(cfgAdset.daily_budget || cfgAdset.lifetime_budget) / 100,
       origemOrcamento: cfgAdset.daily_budget ? 'diário (adset)' : 'total (adset)',
+      ehDiario: !!cfgAdset.daily_budget,
     };
   }
 
   // CBO — orçamento está na campanha
   const campanhaId = adset.hierarquia?.campanhaId;
-  if (!campanhaId) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null };
+  if (!campanhaId) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null, ehDiario: false };
 
   const cfgCampanha = await obterConfiguracaoCampanha(campanhaId, token);
-  if (cfgCampanha.budget_remaining == null) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null };
+  if (cfgCampanha.budget_remaining == null) return { budgetRemaining: null, budgetTotal: null, origemOrcamento: null, ehDiario: false };
 
   return {
     budgetRemaining: Number(cfgCampanha.budget_remaining) / 100,
     budgetTotal: Number(cfgCampanha.daily_budget || cfgCampanha.lifetime_budget) / 100,
     origemOrcamento: cfgCampanha.daily_budget ? 'diário (campanha CBO)' : 'total (campanha CBO)',
+    ehDiario: !!cfgCampanha.daily_budget,
   };
 }
