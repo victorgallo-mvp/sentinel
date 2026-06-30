@@ -48,77 +48,106 @@ export async function descobrirContasAnuncio(bmId, token) {
  * @param {string} contaAnuncioId - `act_<id>`
  * @returns {Promise<{criadas: number, atualizadas: number, total: number}>}
  */
-export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { apenasAtivos = false, token } = {}) {
-  // Busca ACTIVE + PAUSED (Meta API default quando não há filtro)
-  const arvore = await descobrirHierarquiaConta(contaAnuncioId, { apenasAtivos: false, token });
+// Acima deste nº de campanhas (ACTIVE+PAUSED), a conta é considerada "grande":
+// sincroniza só as ACTIVE para não disparar centenas de chamadas (rate limit).
+const LIMITE_CONTA_GRANDE = 15;
+
+const ehAtiva = (e) => (e.statusEfetivo ?? e.status) === 'ACTIVE';
+
+export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { token } = {}) {
+  // Lista campanhas ACTIVE + PAUSED (filtro STATUS_SYNC). Em contas grandes,
+  // restringe às ACTIVE — campanhas pausadas não entregam, e o crawl completo
+  // (campanha→adsets→ads) de dezenas delas estoura rate limit e fazia o sync
+  // inteiro falhar, deixando a conta com 0 entidades.
+  const campanhasTodas = await listarCampanhas(contaAnuncioId, { token });
+  const contaGrande = campanhasTodas.length > LIMITE_CONTA_GRANDE;
+  const campanhas = contaGrande ? campanhasTodas.filter(ehAtiva) : campanhasTodas;
+  if (contaGrande) {
+    logger.info({ msg: 'Conta grande — sincronizando só campanhas ACTIVE', contaAnuncioId, totalCampanhas: campanhasTodas.length, ativas: campanhas.length });
+  }
 
   let criadas = 0;
   let atualizadas = 0;
+  let falhasCampanha = 0;
   const metaIdsSeen = new Set(); // rastreia todos os metaIds vistos
 
-  for (const campanha of arvore) {
-    metaIdsSeen.add(campanha.id);
-    const { criada: criadaCampanha } = await upsertEntidade(contaId, {
-      tipo: 'campaign',
-      metaId: campanha.id,
-      nome: campanha.nome,
-      hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: null },
-      objetivo: campanha.objetivo,
-      status: campanha.statusEfetivo ?? campanha.status,
-    });
-    criadaCampanha ? criadas++ : atualizadas++;
-
-    for (const adset of campanha.adsets) {
-      metaIdsSeen.add(adset.id);
-      const { criada: criadaAdset } = await upsertEntidade(contaId, {
-        tipo: 'adset',
-        metaId: adset.id,
-        nome: adset.nome,
-        hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: adset.id },
+  // Crawl + persistência INCREMENTAL por campanha: uma falha numa campanha não
+  // aborta as demais nem descarta o que já foi salvo (antes, montava a árvore
+  // toda em memória e qualquer erro zerava a sincronização inteira).
+  for (const campanha of campanhas) {
+    try {
+      metaIdsSeen.add(campanha.id);
+      const { criada: criadaCampanha } = await upsertEntidade(contaId, {
+        tipo: 'campaign',
+        metaId: campanha.id,
+        nome: campanha.nome,
+        hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: null },
         objetivo: campanha.objetivo,
-        status: adset.statusEfetivo ?? adset.status,
+        status: campanha.statusEfetivo ?? campanha.status,
       });
-      criadaAdset ? criadas++ : atualizadas++;
+      criadaCampanha ? criadas++ : atualizadas++;
 
-      for (const ad of adset.ads) {
-        metaIdsSeen.add(ad.id);
-        const { criada: criadaAd } = await upsertEntidade(contaId, {
-          tipo: 'ad',
-          metaId: ad.id,
-          nome: ad.nome,
+      const adsets = await listarAdsets(campanha.id, { token });
+      for (const adset of adsets) {
+        metaIdsSeen.add(adset.id);
+        const { criada: criadaAdset } = await upsertEntidade(contaId, {
+          tipo: 'adset',
+          metaId: adset.id,
+          nome: adset.nome,
           hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: adset.id },
           objetivo: campanha.objetivo,
-          status: ad.statusEfetivo ?? ad.status,
+          status: adset.statusEfetivo ?? adset.status,
         });
-        criadaAd ? criadas++ : atualizadas++;
+        criadaAdset ? criadas++ : atualizadas++;
+
+        const ads = await listarAds(adset.id, { token });
+        for (const ad of ads) {
+          metaIdsSeen.add(ad.id);
+          const { criada: criadaAd } = await upsertEntidade(contaId, {
+            tipo: 'ad',
+            metaId: ad.id,
+            nome: ad.nome,
+            hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: adset.id },
+            objetivo: campanha.objetivo,
+            status: ad.statusEfetivo ?? ad.status,
+          });
+          criadaAd ? criadas++ : atualizadas++;
+        }
       }
+    } catch (erro) {
+      falhasCampanha++;
+      logger.warn({ msg: 'Falha ao sincronizar campanha — seguindo com as demais', contaAnuncioId, campanhaId: campanha.id, erro: erro.message });
     }
   }
 
-  // Desativa entidades monitoradas que não foram vistas na sincronização (removidas/arquivadas na Meta)
-  const entidadesMonitoradas = await Entidade.find({
-    contaId,
-    'hierarquia.contaAnuncioId': contaAnuncioId,
-    'configuracoes.monitorada': true,
-  }).select('metaId _id tipo').lean();
-
-  const idsOrfas = entidadesMonitoradas
-    .filter((e) => !metaIdsSeen.has(e.metaId))
-    .map((e) => e._id);
-
+  // Desativa entidades órfãs (sumiram da Meta) APENAS quando o crawl foi completo
+  // e sem falhas — caso contrário (conta grande filtrada por ACTIVE, ou falha em
+  // alguma campanha) o metaIdsSeen é parcial e desativaria entidades válidas.
   let desativadas = 0;
-  if (idsOrfas.length > 0) {
-    const result = await Entidade.updateMany(
-      { _id: { $in: idsOrfas } },
-      { $set: { 'configuracoes.monitorada': false, status: 'DELETED', motivoStatus: null } }
-    );
-    desativadas = result.modifiedCount ?? idsOrfas.length;
-    logger.info({ msg: 'Entidades órfãs desativadas', contaAnuncioId, desativadas, ids: idsOrfas.map(String) });
+  if (!contaGrande && falhasCampanha === 0) {
+    const entidadesMonitoradas = await Entidade.find({
+      contaId,
+      'hierarquia.contaAnuncioId': contaAnuncioId,
+      'configuracoes.monitorada': true,
+    }).select('metaId _id tipo').lean();
+
+    const idsOrfas = entidadesMonitoradas
+      .filter((e) => !metaIdsSeen.has(e.metaId))
+      .map((e) => e._id);
+
+    if (idsOrfas.length > 0) {
+      const result = await Entidade.updateMany(
+        { _id: { $in: idsOrfas } },
+        { $set: { 'configuracoes.monitorada': false, status: 'DELETED', motivoStatus: null } }
+      );
+      desativadas = result.modifiedCount ?? idsOrfas.length;
+      logger.info({ msg: 'Entidades órfãs desativadas', contaAnuncioId, desativadas, ids: idsOrfas.map(String) });
+    }
   }
 
   const total = criadas + atualizadas;
-  logger.info({ msg: 'Sincronização de entidades concluída', contaAnuncioId, criadas, atualizadas, desativadas, total });
-  return { criadas, atualizadas, desativadas, total };
+  logger.info({ msg: 'Sincronização de entidades concluída', contaAnuncioId, criadas, atualizadas, desativadas, falhasCampanha, total });
+  return { criadas, atualizadas, desativadas, falhasCampanha, total };
 }
 
 function computarMotivoStatus(status, tipo) {
