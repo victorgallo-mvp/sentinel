@@ -17,7 +17,14 @@ import { arredondarParaIntervalo } from '../../shared/utils.js';
 
 const JANELA_ARREDONDAMENTO_MINUTOS = 5;
 const CONJUNTO_METRICAS_NUMERICAS = new Set(metricasNumericas());
-const JANELA_30D_HORAS = 720; // 30 dias — usado pelas métricas deduplicadas (freq/alcance/únicos)
+
+// Períodos agregados coletados 1×/dia (agregado real da Meta, uma linha por período).
+// 30d é usado pelas métricas deduplicadas (freq/alcance/únicos) e pelo gasto de 30d;
+// 7d é usado pelo gasto de 7d no dashboard.
+const PERIODOS_AGREGADOS = [
+  { datePreset: 'last_7d', janelaHoras: 168 },
+  { datePreset: 'last_30d', janelaHoras: 720 },
+];
 
 /**
  * Coleta métricas de todas as entidades monitoradas de uma conta.
@@ -55,25 +62,25 @@ export async function coletarMetricasConta(contaId) {
 }
 
 /**
- * Coleta o agregado REAL de 30 dias (`last_30d`, linha única) de uma entidade e
- * persiste em `metricas_serie_temporal` com janela_horas=720. A Meta deduplica
- * alcance/frequência entre dias — algo impossível de reconstruir dos snapshots
- * diários. Usado pelas métricas deduplicadas no dashboard. Roda 1×/dia.
+ * Coleta o agregado REAL de um período (`last_Nd`, linha única) de uma entidade e
+ * persiste em `metricas_serie_temporal` com a `janelaHoras` do período. A Meta
+ * deduplica alcance/frequência entre dias — algo impossível de reconstruir dos
+ * snapshots diários. Usado pelas métricas deduplicadas e pelo gasto 7d/30d. Roda 1×/dia.
  */
-export async function coletarMetricas30dEntidade(conta, entidade, coletadaEm = new Date()) {
+export async function coletarMetricasPeriodoEntidade(conta, entidade, { datePreset, janelaHoras }, coletadaEm = new Date()) {
   const token = conta.metaConfig?.systemUserToken || undefined;
   const linhas = await obterInsights(entidade.tipo, entidade.metaId, {
-    datePreset: 'last_30d',
+    datePreset,
     timeIncrement: 'all_days', // uma única linha agregada do período inteiro
     token,
   });
   if (linhas.length > 0) {
-    await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas[0]), JANELA_30D_HORAS, coletadaEm);
+    await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas[0]), janelaHoras, coletadaEm);
   }
 }
 
-/** Coleta o agregado de 30d de todas as entidades monitoradas de uma conta. */
-export async function coletarMetricas30dConta(contaId) {
+/** Coleta os agregados de período (7d e 30d) de todas as entidades monitoradas de uma conta. */
+export async function coletarMetricasPeriodosConta(contaId) {
   const conta = await Conta.findById(contaId);
   if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
 
@@ -83,16 +90,18 @@ export async function coletarMetricas30dConta(contaId) {
   let falhas = 0;
 
   for (const entidade of entidades) {
-    try {
-      await coletarMetricas30dEntidade(conta, entidade, agora);
-      sucesso++;
-    } catch (erro) {
-      falhas++;
-      logger.error({ msg: 'Falha ao coletar 30d de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, erro: erro.message });
+    for (const periodo of PERIODOS_AGREGADOS) {
+      try {
+        await coletarMetricasPeriodoEntidade(conta, entidade, periodo, agora);
+        sucesso++;
+      } catch (erro) {
+        falhas++;
+        logger.error({ msg: 'Falha ao coletar período de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, periodo: periodo.datePreset, erro: erro.message });
+      }
     }
   }
 
-  logger.info({ msg: 'Coleta 30d concluída', contaId: String(contaId), sucesso, falhas, total: entidades.length });
+  logger.info({ msg: 'Coleta de períodos (7d/30d) concluída', contaId: String(contaId), sucesso, falhas, entidades: entidades.length });
   return { sucesso, falhas, total: entidades.length };
 }
 

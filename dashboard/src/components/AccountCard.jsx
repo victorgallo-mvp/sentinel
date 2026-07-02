@@ -87,12 +87,15 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { status, alertas = [], saldoPrepago = [], gasto30d } = conta.resumo;
+  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d } = conta.resumo;
   const saldo = piorSaldo(saldoPrepago);
   const saldoTexto = saldo ? textoSaldo(saldo) : null;
-  const gasto30dTexto = gasto30d > 0
-    ? `30d: R$ ${gasto30d.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
-    : null;
+  const fmtGasto = (v) => `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+  const partesGasto = [
+    gasto7d > 0 ? `7d: ${fmtGasto(gasto7d)}` : null,
+    gasto30d > 0 ? `30d: ${fmtGasto(gasto30d)}` : null,
+  ].filter(Boolean);
+  const gastoTexto = partesGasto.length ? partesGasto.join(' · ') : null;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -159,9 +162,9 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
               {saldoTexto}
             </span>
           )}
-          {gasto30dTexto && (
-            <span className="ac-gasto30d" title="Gasto nos últimos 30 dias">
-              {gasto30dTexto}
+          {gastoTexto && (
+            <span className="ac-gasto30d" title="Gasto nos últimos 7 e 30 dias">
+              {gastoTexto}
             </span>
           )}
           {alertas.length > 0 && (

@@ -42,6 +42,7 @@ const RATIOS_RECALCULAVEIS = {
 // agregado real de 30d (janela_horas=720) e exibidas como bloco fixo "Últimos 30 dias".
 const METRICAS_30D = ['frequency', 'reach', 'unique_clicks', 'unique_ctr'];
 const JANELA_30D_HORAS = 720;
+const JANELA_7D_HORAS = 168;
 
 /**
  * Deriva o custo por resultado do período: gasto ÷ resultado, ambos já somados
@@ -141,11 +142,11 @@ async function buscarDeduplicadas30d(entidadeId) {
 }
 
 /**
- * Gasto total dos últimos 30 dias de uma conta — soma o último snapshot de spend
- * (janela_horas=720) APENAS das campanhas (nível campanha já totaliza o dinheiro;
- * somar adset/ad contaria 2-3×). Reaproveita o dado do job diário de 30d.
+ * Gasto total de um período (janela_horas: 168=7d, 720=30d) de uma conta — soma o
+ * último snapshot de spend APENAS das campanhas (nível campanha já totaliza o dinheiro;
+ * somar adset/ad contaria 2-3×). Reaproveita o dado do job diário de períodos.
  */
-async function buscarGasto30d(campanhaIds) {
+async function buscarGastoPeriodo(campanhaIds, janelaHoras) {
   if (!campanhaIds?.length) return 0;
   const r = await query(
     `SELECT COALESCE(SUM(s), 0)::float AS total FROM (
@@ -154,7 +155,7 @@ async function buscarGasto30d(campanhaIds) {
        WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = $2
        ORDER BY entidade_id, coletada_em DESC
      ) x`,
-    [campanhaIds, JANELA_30D_HORAS]
+    [campanhaIds, janelaHoras]
   );
   return Number(r.rows[0]?.total ?? 0);
 }
@@ -336,9 +337,12 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tipo === 'campaign')
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
-        // Gasto real dos últimos 30 dias (snapshot do job de 30d, nível campanha)
+        // Gasto real de 7d e 30d (snapshots do job de períodos, nível campanha)
         const campanhaIds = entidades.filter((e) => e.tipo === 'campaign').map((e) => String(e._id));
-        const gasto30d = await buscarGasto30d(campanhaIds);
+        const [gasto7d, gasto30d] = await Promise.all([
+          buscarGastoPeriodo(campanhaIds, JANELA_7D_HORAS),
+          buscarGastoPeriodo(campanhaIds, JANELA_30D_HORAS),
+        ]);
 
         // Alertas: entidades com status crítico. Cada alerta tem uma `chave` estável
         // (entidade + status) para o usuário marcar como "ciente" no dashboard.
@@ -384,6 +388,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           entidades: dadosEntidades,
           resumo: {
             gastoHoje: gastoPeriodo,
+            gasto7d,
             gasto30d,
             status: statusConta,
             alertas,

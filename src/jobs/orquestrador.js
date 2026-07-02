@@ -16,7 +16,7 @@
  */
 import cron from 'node-cron';
 import { executarColetaMetricas } from './coleta-metricas.job.js';
-import { executarColeta30d } from './coleta-30d.job.js';
+import { executarColetaPeriodos } from './coleta-periodos.job.js';
 import { executarDeteccaoAnomalias } from './deteccao-anomalias.job.js';
 import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
 import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
@@ -36,7 +36,7 @@ import { logger } from '../infra/logger.js';
 const TAREFAS_CRON = [
   { nome: 'health-check-evolution', expressao: '*/5 * * * *', executar: verificarSaudeEvolution },
   { nome: 'coleta-metricas', expressao: '5 * * * *', executar: executarColetaMetricas },
-  { nome: 'coleta-30d', expressao: '40 4 * * *', executar: executarColeta30d },
+  { nome: 'coleta-periodos', expressao: '40 4 * * *', executar: executarColetaPeriodos },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },
   { nome: 'deteccao-anomalias', expressao: '20 */2 * * *', executar: executarDeteccaoAnomalias, requerIA: true },
@@ -79,10 +79,10 @@ export function iniciarOrquestrador() {
   }
   logger.info({ msg: 'Orquestrador iniciado', iaAtiva, totalWorkers: workers.length, totalTarefasCron: tarefasCron.length });
 
-  // Dispara a coleta de 30d uma vez no startup (não-bloqueante) para o dashboard
-  // já ter as métricas deduplicadas sem esperar o cron diário (ex.: após um deploy).
-  executarColeta30d().catch((erro) =>
-    logger.error({ msg: 'Coleta 30d inicial falhou', erro: erro.message })
+  // Dispara a coleta de períodos (7d/30d) uma vez no startup (não-bloqueante) para o
+  // dashboard já ter os agregados sem esperar o cron diário (ex.: após um deploy).
+  executarColetaPeriodos().catch((erro) =>
+    logger.error({ msg: 'Coleta de períodos inicial falhou', erro: erro.message })
   );
 
   return { workers, tarefasCron };
