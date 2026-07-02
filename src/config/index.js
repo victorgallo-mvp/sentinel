@@ -19,6 +19,11 @@ const esquemaEnv = z.object({
   // e relatório semanal). Desligado por padrão — o sistema roda só com os alertas
   // determinísticos. (z.enum em vez de z.coerce.boolean: "false" coage para true.)
   IA_INVESTIGACAO_ATIVA: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  // Resumo diário com IA: independente do pipeline de investigação acima. Quando
+  // ligado, o resumo diário é redigido pela Claude (com fallback determinístico se
+  // a chamada falhar). Modelo barato por padrão — é só resumir números já calculados.
+  IA_RESUMO_DIARIO_ATIVA: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  MODELO_RESUMO_DIARIO: z.string().default('claude-haiku-4-5'),
 
   // Meta
   META_APP_ID: z.string().optional().default(''),
@@ -91,6 +96,8 @@ export const config = {
   },
 
   iaInvestigacaoAtiva: env.IA_INVESTIGACAO_ATIVA,
+  iaResumoDiarioAtivo: env.IA_RESUMO_DIARIO_ATIVA,
+  modeloResumoDiario: env.MODELO_RESUMO_DIARIO,
 
   meta: {
     appId: env.META_APP_ID,

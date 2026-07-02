@@ -1,0 +1,42 @@
+/**
+ * Agente do resumo diário — uma única chamada à Claude (modelo barato, ex. Haiku)
+ * que recebe os totais já agregados de uma BM + os pontos de atenção e devolve um
+ * texto curto e coeso para WhatsApp. Sem tool use, sem thinking. Se falhar, o
+ * chamador cai para o resumo determinístico (a notificação nunca depende só da IA).
+ */
+import { anthropic, calcularCusto } from '../ia/cliente.claude.js';
+import { config } from '../../config/index.js';
+import { logger } from '../../infra/logger.js';
+
+const SYSTEM_PROMPT = [
+  'Você é um analista de tráfego pago escrevendo o resumo DIÁRIO de uma Business Manager (BM) para o gestor, via WhatsApp.',
+  'Receberá um JSON com os totais do dia (já agregados no nível da BM) e os pontos de atenção.',
+  '',
+  'Escreva em português do Brasil, tom direto e profissional. Regras:',
+  '- Comece pelo panorama (gasto do dia e o resultado principal). Uma ou duas frases.',
+  '- Depois, destaque os PONTOS DE ATENÇÃO que existirem (saldo baixo/crítico, campanhas gastando sem converter, alertas, quedas). Se não houver, diga que está tudo tranquilo.',
+  '- Seja COMPACTO: no máximo ~6 linhas. Nada de repetir todos os números crus — foque no que importa para decidir.',
+  '- Formatação de WhatsApp: use *asteriscos* para negrito (não use markdown com # ou **). Pode usar 1-2 emojis com moderação.',
+  '- Não invente dados que não estão no JSON. Se um número não veio, não cite.',
+  '- Não use saudações genéricas longas nem assinatura.',
+].join('\n');
+
+/**
+ * @param {object} dados - { bm, data, totais, campanhasAtivas, semConversao, saldo, alertas24h, gasto30d }
+ * @returns {Promise<{texto: string, custoUsd: number, modelo: string}>}
+ */
+export async function redigirResumoDiario(dados) {
+  const modelo = config.modeloResumoDiario;
+  const resposta = await anthropic.messages.create({
+    model: modelo,
+    max_tokens: 700,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `Dados do dia:\n\n${JSON.stringify(dados, null, 2)}` }],
+  });
+
+  const bloco = resposta.content.find((c) => c.type === 'text');
+  const texto = (bloco?.text ?? '').trim();
+  const custoUsd = calcularCusto(resposta.usage, modelo);
+  logger.info({ msg: 'Resumo diário IA gerado', bm: dados.bm, modelo, custoUsd: custoUsd.toFixed(5) });
+  return { texto, custoUsd, modelo };
+}
