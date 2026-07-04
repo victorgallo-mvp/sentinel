@@ -12,7 +12,9 @@
  *
  * Bug 1C: detecta campanha ACTIVE sem nenhum ad ACTIVE (todos pausados/reprovados).
  *
- * Throttle: 24h por (entidade + tipo de evento).
+ * Anti-repetição: mudança de status notifica só quando o estado MUDA; erro de entrega
+ * em entidade ACTIVE usa janela longa (7d); Bug 1C usa flag de estado (notifica na
+ * transição, re-arma na recuperação). Em todos, "ciente" no dashboard suprime.
  */
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
@@ -21,8 +23,15 @@ import { obterStatusEIssues } from '../coleta/meta-api.cliente.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 
-const JANELA_RENOTIFICACAO_HORAS = 24;
+// Estados persistentes (erro de entrega em entidade ACTIVE): não repetir todo dia.
+// Renotifica no máximo a cada 7 dias como rede de segurança; "ciente" para de vez.
+const JANELA_RENOTIFICACAO_PERSISTENTE_HORAS = 168;
 const TIPOS_VERIFICADOS = ['campaign', 'adset', 'ad'];
+
+/** True se o usuário marcou `entidade:status` como "ciente" no dashboard. */
+function reconhecido(conta, chave) {
+  return (conta.configuracoes?.alertasReconhecidos ?? []).some((a) => a.chave === chave);
+}
 
 const STATUS_LABEL = {
   PAUSED:               'pausada',
@@ -146,6 +155,10 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
 
   if (!issues.length) return;
 
+  // Respeita "ciente": se o usuário já reconheceu o problema desta entidade no
+  // dashboard, não re-notifica.
+  if (reconhecido(conta, `${String(entidade._id)}:${entidade.status}`)) return;
+
   // Resolve campanha de referência — throttle e notificação sempre no nível campanha
   let campanhaRef = entidade;
   if (entidade.tipo !== 'campaign' && entidade.hierarquia?.campanhaId) {
@@ -157,8 +170,10 @@ async function verificarEntidadeIndividual(conta, entidade, token, destinatarios
     if (campanhaPai) campanhaRef = campanhaPai;
   }
 
-  // 1 alerta por campanha/24h — todos os adsets/ads da mesma campanha usam a mesma chave
-  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  // 1 alerta por campanha — erro de entrega em entidade ACTIVE é persistente (a
+  // entidade continua sendo verificada a cada hora), então usa a janela longa para
+  // não repetir todo dia. "Ciente" (acima) para de vez.
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE_HORAS * 60 * 60 * 1000);
   const chaveAlerta = `erroentrega_camp_${String(campanhaRef._id)}`;
   const jaAvisou = await Notificacao.exists({
     contaId: conta._id,
@@ -212,18 +227,23 @@ async function notificarMudancaStatus(conta, entidade, novoStatus, destinatarios
     if (campanhaPai) campanhaRef = campanhaPai;
   }
 
-  // Throttle por campanha: adset1 e adset2 da mesma campanha com mesmo status → 1 alerta/24h
-  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  // Respeita "ciente": problema já reconhecido no dashboard não re-notifica.
+  if (reconhecido(conta, `${String(entidade._id)}:${novoStatus}`)) return;
+
   const chaveAlerta = `status_change_camp_${String(campanhaRef._id)}_${novoStatus}`;
 
-  const jaAvisou = await Notificacao.exists({
+  // Só notifica quando o estado MUDA: se a última notificação de status desta campanha
+  // já foi o mesmo status, não repete (independe de tempo). Uma mudança real (status
+  // diferente) gera uma chave nova e dispara.
+  const ultima = await Notificacao.findOne({
     contaId: conta._id,
-    tipo: 'alerta_orcamento',
     canal: 'whatsapp',
-    conteudo: new RegExp(chaveAlerta),
-    enviadaEm: { $gte: desde },
-  });
-  if (jaAvisou) return;
+    conteudo: new RegExp(`status_change_camp_${String(campanhaRef._id)}_`),
+  }).sort({ enviadaEm: -1 }).select('conteudo').lean();
+  if (ultima) {
+    const m = ultima.conteudo.match(new RegExp(`status_change_camp_${String(campanhaRef._id)}_([A-Z_]+)`));
+    if (m && m[1] === novoStatus) return; // mesmo estado já notificado — não repete
+  }
 
   const statusLabel = STATUS_LABEL[novoStatus] ?? novoStatus;
   const mensagem = [
@@ -280,18 +300,21 @@ async function verificarCampanhasAtivas(conta, destinatarios) {
     if (ads.length === 0) continue; // ads não sincronizados — não é possível saber
 
     const adsAtivos = ads.filter((a) => a.status === 'ACTIVE');
-    if (adsAtivos.length > 0) continue;
+    if (adsAtivos.length > 0) {
+      // Recuperou (voltou a ter ad ativo): re-arma o alerta para a próxima vez.
+      if (campanha.semAdAtivoNotificado) {
+        await Entidade.findByIdAndUpdate(campanha._id, { semAdAtivoNotificado: false });
+      }
+      continue;
+    }
+
+    // Sem ad ativo. Notifica só na TRANSIÇÃO para esse estado (state-change): se já
+    // notificou e o estado persiste (ex.: você pausou os ads de propósito), não repete.
+    // "Ciente" no dashboard também suprime.
+    if (campanha.semAdAtivoNotificado) continue;
+    if (reconhecido(conta, `${String(campanha._id)}:${campanha.status}`)) continue;
 
     const chaveAlerta = `sem_ad_ativo_${String(campanha._id)}`;
-    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-    const jaAvisou = await Notificacao.exists({
-      contaId: conta._id,
-      tipo: 'alerta_orcamento',
-      canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta),
-      enviadaEm: { $gte: desde },
-    });
-    if (jaAvisou) continue;
 
     const adsPausados = ads.filter((a) => a.status === 'PAUSED').length;
     const adsReprovados = ads.filter((a) => a.status === 'DISAPPROVED').length;
@@ -328,6 +351,9 @@ async function verificarCampanhasAtivas(conta, destinatarios) {
       enviadaEm: new Date(),
       status: envioStatus,
     });
+
+    // Marca o estado como notificado — só volta a alertar após recuperar (ter ad ativo).
+    await Entidade.findByIdAndUpdate(campanha._id, { semAdAtivoNotificado: true });
 
     logger.info({ msg: 'Alerta de campanha sem ad ativo enviado', conta: conta.nome, campanha: campanha.nome, total: ads.length, ativos: 0 });
   }

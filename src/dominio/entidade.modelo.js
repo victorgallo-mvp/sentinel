@@ -54,6 +54,11 @@ const entidadeSchema = new Schema(
     issues:       { type: Array, default: [] },        // issues_info from Meta API
     motivoStatus: { type: String, default: null },     // human-readable reason
 
+    // Flag de estado do alerta "campanha ativa sem anúncio veiculando" (Bug 1C):
+    // notifica só na TRANSIÇÃO para o estado ruim; re-arma quando volta a ter ad ativo.
+    // Evita repetir o alerta a cada 24h para anúncios que o usuário já pausou de propósito.
+    semAdAtivoNotificado: { type: Boolean, default: false },
+
     configuracoes: { type: configuracoesEntidadeSchema, default: () => ({}) },
 
     ultimaSincronizacaoEm: { type: Date, default: null },
