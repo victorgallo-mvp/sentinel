@@ -72,14 +72,20 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
     `SELECT valor FROM metricas_serie_temporal
      WHERE entidade_id = $1 AND metrica = 'frequency' AND janela_horas = 24
        AND coletada_em >= $2
-     ORDER BY coletada_em DESC LIMIT 1`,
+     ORDER BY coletada_em DESC LIMIT 2`,
     [String(entidade._id), frescorCutoff]
   );
-  if (!res.rows.length) return; // sem coleta recente — não alerta com dado velho
 
-  const frequencia = Number(res.rows[0].valor);
+  // Persistência: só alerta se as DUAS últimas coletas recentes estiverem acima do
+  // limite. Saturação real é sustentada; picos transitórios da Meta (ex.: campanha
+  // recém-reativada com alcance minúsculo devolvendo freq alta numa única coleta,
+  // que se corrige na coleta seguinte) não devem disparar.
+  if (res.rows.length < 2) return;
+  const [atual, anterior] = res.rows.map((r) => Number(r.valor));
   const threshold = entidade.configuracoes?.thresholdFrequenciaSaturacao ?? THRESHOLD_FREQUENCIA;
-  if (frequencia < threshold) return;
+  if (atual < threshold || anterior < threshold) return;
+
+  const frequencia = atual;
 
   const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
   const chaveAlerta = `frequencia_saturacao_${String(entidade._id)}`;
