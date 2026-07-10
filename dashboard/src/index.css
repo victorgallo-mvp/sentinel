@@ -1,23 +1,24 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Neutros (escala única) ── */
-  --bg:            #fafafa;
+  /* ── Neutros (branco + leve tint esverdeado) ── */
+  --bg:            #f3f8f4;
   --surface:       #ffffff;
-  --surface-2:     #f6f6f7;
-  --border:        #eaeaec;
-  --border-strong: #dcdcdf;
-  --text:          #18181b;
-  --text-muted:    #71717a;
-  --text-subtle:   #a1a1aa;
+  --surface-2:     #edf5ef;
+  --border:        #e1ece5;
+  --border-strong: #cfe0d5;
+  --text:          #16211a;
+  --text-muted:    #5e716a;
+  --text-subtle:   #97a89f;
 
-  /* ── Acento grafite (botões, links, seleção) ── */
-  --accent:        #18181b;
-  --accent-hover:  #000000;
+  /* ── Acento verde (botões, links, seleção) ── */
+  --accent:        #16a34a;
+  --accent-hover:  #15803d;
   --on-accent:     #ffffff;
 
-  /* ── Status: usados só como ponto/borda/texto pontual, nunca preenchimento ── */
-  --ok:        #a1a1aa;   /* neutro */
+  /* ── Status: verde=positivo; âmbar/vermelho=problema ── */
+  --ok:        #16a34a;   /* verde vivo */
+  --ok-soft:   #e7f5ec;   /* fundo verde bem sutil */
   --warn:      #b45309;   /* âmbar sóbrio */
   --crit:      #b91c1c;   /* vermelho sóbrio */
   --warn-soft: #faf3ea;   /* fundo muito sutil, quando indispensável */

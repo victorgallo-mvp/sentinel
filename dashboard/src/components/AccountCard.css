@@ -16,7 +16,7 @@
 .ac-card--critico { border-left-color: var(--crit); }
 .ac-card--atencao { border-left-color: var(--warn); }
 .ac-card--pausado { border-left-color: var(--border-strong); }
-.ac-card--normal  { border-left-color: var(--border); }
+.ac-card--normal  { border-left-color: var(--ok); }
 
 /* ── Header ── */
 .ac-header {
@@ -34,6 +34,7 @@
   flex-shrink: 0;
   background: var(--text-subtle);
 }
+.ac-card--normal  .ac-status-dot { background: var(--ok); }
 .ac-card--critico .ac-status-dot { background: var(--crit); }
 .ac-card--atencao .ac-status-dot { background: var(--warn); }
 .ac-card--pausado .ac-status-dot { background: var(--text-subtle); }
@@ -150,7 +151,7 @@
   font-size: var(--fs-sm);
   white-space: nowrap;
 }
-.ac-veredito--ok    { color: var(--text-muted); }
+.ac-veredito--ok    { color: var(--ok); font-weight: 600; }
 .ac-veredito--warn  { color: var(--warn); font-weight: 600; }
 .ac-veredito--crit  { color: var(--crit); font-weight: 600; }
 .ac-veredito--muted { color: var(--text-subtle); }
@@ -166,7 +167,7 @@
   flex: 1;
   height: 6px;
   border-radius: 3px;
-  background: var(--border-strong);
+  background: var(--ok-soft);
   overflow: hidden;
 }
 .ac-gastobar-fill {
@@ -174,7 +175,7 @@
   border-radius: 3px;
   transition: width 0.3s ease;
 }
-.ac-gastobar-fill--ok   { background: var(--text-muted); }
+.ac-gastobar-fill--ok   { background: var(--ok); }
 .ac-gastobar-fill--warn { background: var(--warn); }
 .ac-gastobar-fill--crit { background: var(--crit); }
 .ac-gastobar-label {

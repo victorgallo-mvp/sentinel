@@ -1,6 +1,6 @@
 .header {
   padding: var(--sp-6) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--ok);
   margin-bottom: var(--sp-5);
   background: var(--bg);
 }
