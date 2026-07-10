@@ -14,6 +14,8 @@ import { query } from '../../infra/postgres.js';
 import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS, metricaResultado } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
+import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
+import { buscarGastoMes, computarVeredito } from '../../core/analise/veredito.servico.js';
 
 // Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
 const METRICAS_COUNTER = new Set(
@@ -337,11 +339,13 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tipo === 'campaign')
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
-        // Gasto real de 7d e 30d (snapshots do job de períodos, nível campanha)
+        // Gasto real de 7d, 30d, mês corrente + veredito ponderado por objetivos
         const campanhaIds = entidades.filter((e) => e.tipo === 'campaign').map((e) => String(e._id));
-        const [gasto7d, gasto30d] = await Promise.all([
+        const [gasto7d, gasto30d, gastoMes, veredito] = await Promise.all([
           buscarGastoPeriodo(campanhaIds, JANELA_7D_HORAS),
           buscarGastoPeriodo(campanhaIds, JANELA_30D_HORAS),
+          buscarGastoMes(campanhaIds),
+          computarVeredito(campanhaIds, conta.perfil),
         ]);
 
         // Alertas: entidades com status crítico. Cada alerta tem uma `chave` estável
@@ -385,11 +389,20 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           identificador: conta.identificador,
           prepago: conta.configuracoes?.prepago ?? false,
           metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
+          perfil: {
+            gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
+            investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
+            objetivos: (conta.perfil?.objetivos ?? []).map((o) => ({ ordem: o.ordem, chave: o.chave })),
+          },
           entidades: dadosEntidades,
           resumo: {
             gastoHoje: gastoPeriodo,
             gasto7d,
             gasto30d,
+            gastoMes,
+            investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
+            gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
+            veredito,
             status: statusConta,
             alertas,
             saldoPrepago,
@@ -549,6 +562,60 @@ rotaDashboard.patch('/contas/:contaId/alertas', autenticarDashboard, async (req,
     }
 
     res.json({ ok: true, chave, reconhecido: Boolean(reconhecer) });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Objetivos de negócio disponíveis (para o onboarding) ───────────────────
+rotaDashboard.get('/objetivos/catalogo', autenticarDashboard, (req, res) => {
+  corsHeaders(res);
+  const catalogo = Object.entries(OBJETIVOS).map(([chave, o]) => ({ chave, nome: o.nome }));
+  res.json({ catalogo });
+});
+
+// ── Perfil da conta (onboarding): gerente, investimento mensal, objetivos ──
+// body: { gerenteResponsavel?, investimentoMensalPlanejado?, objetivos?: [{ordem,chave}] }
+rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    const { gerenteResponsavel, investimentoMensalPlanejado, objetivos } = req.body;
+
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+
+    const set = {};
+    if (gerenteResponsavel !== undefined) {
+      set['perfil.gerenteResponsavel'] = String(gerenteResponsavel ?? '').slice(0, 120);
+    }
+    if (investimentoMensalPlanejado !== undefined) {
+      const v = Number(investimentoMensalPlanejado);
+      set['perfil.investimentoMensalPlanejado'] = Number.isFinite(v) && v > 0 ? v : null;
+    }
+    if (objetivos !== undefined) {
+      if (!Array.isArray(objetivos)) return res.status(400).json({ erro: 'objetivos deve ser um array' });
+      // Valida chaves, ordena por ordem, no máximo 3, sem chave repetida.
+      const vistos = new Set();
+      const validos = objetivos
+        .filter((o) => o && objetivoValido(o.chave) && [1, 2, 3].includes(Number(o.ordem)))
+        .filter((o) => (vistos.has(o.chave) ? false : vistos.add(o.chave)))
+        .sort((a, b) => a.ordem - b.ordem)
+        .slice(0, 3)
+        .map((o) => ({ ordem: Number(o.ordem), chave: o.chave }));
+      set['perfil.objetivos'] = validos;
+    }
+
+    if (Object.keys(set).length === 0) {
+      return res.status(400).json({ erro: 'nada para atualizar' });
+    }
+
+    await Conta.findByIdAndUpdate(contaId, { $set: set });
+    const atualizada = await Conta.findById(contaId).select('perfil').lean();
+    res.json({ ok: true, perfil: atualizada.perfil });
   } catch (erro) {
     next(erro);
   }

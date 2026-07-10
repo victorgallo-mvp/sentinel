@@ -14,6 +14,8 @@ const SYSTEM_PROMPT = [
   '',
   'Escreva em português do Brasil, tom direto e profissional. Regras:',
   '- Comece pelo panorama (gasto do dia e o resultado principal). Uma ou duas frases.',
+  '- Se houver `veredito` (tendência 7d vs 7d anterior, ponderada pelos objetivos da conta), diga se a conta MELHOROU, ficou ESTÁVEL ou PIOROU no geral e por quê (olhe `veredito.detalhes` por objetivo). É o ponto mais importante.',
+  '- Se houver `investimentoMensal`, mencione o ritmo do mês (`gastoMes` vs `investimentoMensal`) de forma leve.',
   '- Depois, destaque os PONTOS DE ATENÇÃO que existirem (saldo baixo/crítico, campanhas gastando sem converter, alertas, quedas). Se não houver, diga que está tudo tranquilo.',
   '- Seja COMPACTO: no máximo ~6 linhas. Nada de repetir todos os números crus — foque no que importa para decidir.',
   '- Formatação de WhatsApp: use *asteriscos* para negrito (não use markdown com # ou **). Pode usar 1-2 emojis com moderação.',

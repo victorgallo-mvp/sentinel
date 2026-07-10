@@ -129,6 +129,16 @@ export const CATALOGO_METRICAS = {
     campoApi: 'actions', // extraído de `actions` filtrando pelo evento de conversão configurado
   },
 
+  leads: {
+    nome: 'Leads',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'critica',
+    campoApi: 'actions', // extraído de `actions`: lead / onsite_conversion.lead_grouped
+  },
+
   messaging_conversations_started: {
     nome: 'Conversas por mensagem iniciada',
     tipo: 'counter',
@@ -282,7 +292,7 @@ export function metricasNumericas() {
  */
 const RESULTADO_POR_OBJETIVO = {
   OUTCOME_SALES:         'conversions',
-  OUTCOME_LEADS:         'conversions',
+  OUTCOME_LEADS:         'leads',
   OUTCOME_APP_PROMOTION: 'conversions',
   OUTCOME_ENGAGEMENT:    'messaging_conversations_started',
   OUTCOME_TRAFFIC:       'clicks',

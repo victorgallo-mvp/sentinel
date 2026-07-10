@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import HierarchyView from './HierarchyView.jsx';
 import MetricSelector from './MetricSelector.jsx';
+import PerfilConta from './PerfilConta.jsx';
 import './AccountModal.css';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -30,6 +31,7 @@ const TIPO_LABEL = { campaign: 'Campanha', adset: 'Conjunto', ad: 'Anúncio' };
 export default function AccountModal({ conta, customName, onClose, onMetricasSalvas, onRefresh }) {
   const [filtroAtivo, setFiltroAtivo] = useState('todas');
   const [mostrarSelector, setMostrarSelector] = useState(false);
+  const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [alertas, setAlertas] = useState(conta.resumo?.alertas ?? []);
   const [reconhecendo, setReconhecendo] = useState(null); // chave em processamento
 
@@ -104,6 +106,13 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
             )}
           </div>
           <button
+            className={`am-metricas-btn ${mostrarPerfil ? 'ativo' : ''}`}
+            onClick={() => setMostrarPerfil((v) => !v)}
+            title="Perfil da conta: gerente, investimento mensal, objetivos"
+          >
+            Perfil
+          </button>
+          <button
             className="am-metricas-btn"
             onClick={() => setMostrarSelector(true)}
             title="Configurar métricas"
@@ -112,6 +121,11 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
           </button>
           <button className="am-close" onClick={onClose} title="Fechar (ESC)">×</button>
         </div>
+
+        {/* ── Perfil da conta (onboarding) ── */}
+        {mostrarPerfil && (
+          <PerfilConta conta={conta} onSalvo={() => onRefresh?.()} />
+        )}
 
         {/* ── Alertas (com detalhes + marcar ciente) ── */}
         {alertas.length > 0 && (

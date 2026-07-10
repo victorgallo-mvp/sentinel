@@ -11,6 +11,7 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { redigirResumoDiario } from './resumo-diario.agente.js';
+import { computarVeredito, buscarGastoMes } from '../analise/veredito.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
@@ -178,9 +179,18 @@ export async function montarDadosResumoBm(contasBm) {
     enviadaEm: { $gte: desde24h },
   });
 
+  // Perfil (gerente/investimento/objetivos) — usa a conta da BM que tiver objetivos.
+  const contaPerfil = contasBm.find((c) => (c.perfil?.objetivos ?? []).length > 0) ?? contasBm[0];
+  const [gastoMes, veredito] = await Promise.all([
+    buscarGastoMes(ids),
+    computarVeredito(ids, contaPerfil?.perfil),
+  ]);
+  const investimentoMensal = contaPerfil?.perfil?.investimentoMensalPlanejado ?? null;
+
   return {
     bm: nomeBm,
     data: dataStr,
+    gerente: contaPerfil?.perfil?.gerenteResponsavel || null,
     totais: {
       gasto: Number(totais.gasto.toFixed(2)),
       impressoes: totais.impressoes,
@@ -197,20 +207,33 @@ export async function montarDadosResumoBm(contasBm) {
     saldo,
     alertas24h,
     gasto30d: Number(gasto30d.toFixed(2)),
+    gastoMes: Number(gastoMes.toFixed(2)),
+    investimentoMensal,
+    veredito, // { direcao: 'melhorou'|'estavel'|'piorou', scorePct, detalhes[] } | null
   };
 }
 
 /** Resumo determinístico compacto — usado quando a IA está off ou falha. */
 function montarResumoFallback(d) {
   const t = d.totais;
+  const SETA = { melhorou: '📈', estavel: '➖', piorou: '📉' };
   const linhas = [
     `📊 *Resumo diário — ${d.bm}*`,
-    `${d.data}`,
+    `${d.data}` + (d.gerente ? ` · resp.: ${d.gerente}` : ''),
     ``,
     `• Gasto: ${fmt(t.gasto, 'currency')}` + (t.conversoes > 0 ? ` · Conversões: ${fmt(t.conversoes, 'integer')}` : '') + (t.conversasWpp > 0 ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}` : ''),
     `• Impressões: ${fmt(t.impressoes, 'integer')} · CTR: ${t.ctr != null ? fmt(t.ctr, 'percent') : '—'} · CPM: ${t.cpm != null ? fmt(t.cpm, 'currency') : '—'}`,
     `• Campanhas ativas: ${d.campanhasAtivas}/${d.campanhasTotal}`,
   ];
+
+  if (d.investimentoMensal > 0) {
+    const pct = Math.round((d.gastoMes / d.investimentoMensal) * 100);
+    linhas.push(`• Mês: ${fmt(d.gastoMes, 'currency')} de ${fmt(d.investimentoMensal, 'currency')} (${pct}%)`);
+  }
+  if (d.veredito) {
+    const dir = { melhorou: 'melhorou', estavel: 'estável', piorou: 'piorou' }[d.veredito.direcao];
+    linhas.push(`• Tendência (7d vs 7d): ${SETA[d.veredito.direcao]} *${dir}* (${d.veredito.scorePct > 0 ? '+' : ''}${d.veredito.scorePct}%)`);
+  }
 
   const atencao = [];
   for (const s of d.saldo) {

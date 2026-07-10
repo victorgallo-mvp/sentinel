@@ -57,6 +57,12 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
   // Conversas iniciadas por mensagem (campanhas de mensagens/WhatsApp)
   push('messaging_conversations_started', extrairValorAction(linha.actions, 'onsite_conversion.messaging_conversation_started_7d'));
 
+  // Leads (campanhas de formulário/lead) — 'lead' agrega; fallback p/ lead_grouped (forms nativos)
+  push('leads', Math.max(
+    extrairValorAction(linha.actions, 'lead'),
+    extrairValorAction(linha.actions, 'onsite_conversion.lead_grouped')
+  ));
+
   if (impressoes > 0) {
     push('conversion_rate', (conversoes / impressoes) * 100);
   }

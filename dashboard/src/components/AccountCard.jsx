@@ -7,6 +7,12 @@ const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', p
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 // Tom do saldo: 'crit' | 'warn' | 'muted' (sem cor de "ok" — minimalismo)
 const SALDO_TOM = { zerado: 'crit', bloqueado: 'crit', critico: 'crit', acabando: 'warn', ok: 'muted' };
+// Veredito de melhora/queda por objetivos (tendência 7d vs 7d anterior)
+const VEREDITO_UI = {
+  melhorou: { icon: '📈', tom: 'ok',    label: 'melhorou' },
+  estavel:  { icon: '➖', tom: 'muted', label: 'estável' },
+  piorou:   { icon: '📉', tom: 'crit',  label: 'piorou' },
+};
 
 function fmtRunway(h) {
   if (h == null) return null;
@@ -87,15 +93,23 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d } = conta.resumo;
+  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d, gastoMes, investimentoMensalPlanejado, veredito } = conta.resumo;
   const saldo = piorSaldo(saldoPrepago);
   const saldoTexto = saldo ? textoSaldo(saldo) : null;
-  const fmtGasto = (v) => `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+  const fmtGasto = (v) => `R$ ${(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+
+  // Barra de gasto do mês vs. investimento planejado (substitui os números quando há plano)
+  const temPlano = investimentoMensalPlanejado > 0;
+  const pctMes = temPlano ? Math.round((gastoMes / investimentoMensalPlanejado) * 100) : null;
+  const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
+
   const partesGasto = [
     gasto7d > 0 ? `7d: ${fmtGasto(gasto7d)}` : null,
     gasto30d > 0 ? `30d: ${fmtGasto(gasto30d)}` : null,
   ].filter(Boolean);
-  const gastoTexto = partesGasto.length ? partesGasto.join(' · ') : null;
+  const gastoTexto = !temPlano && partesGasto.length ? partesGasto.join(' · ') : null;
+
+  const vd = veredito ? VEREDITO_UI[veredito.direcao] : null;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -167,6 +181,14 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
               {gastoTexto}
             </span>
           )}
+          {vd && (
+            <span
+              className={`ac-veredito ac-veredito--${vd.tom}`}
+              title={`Tendência (7d vs 7d anterior, ponderada pelos objetivos): ${vd.label} ${veredito.scorePct > 0 ? '+' : ''}${veredito.scorePct}%`}
+            >
+              {vd.icon} {vd.label}
+            </span>
+          )}
           {alertas.length > 0 && (
             <span className="ac-tag ac-tag--crit">
               {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
@@ -182,6 +204,23 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
 
         <span className="ac-toggle"><IconChevron /></span>
       </div>
+
+      {temPlano && (
+        <div
+          className="ac-gastobar"
+          title={`Gasto do mês: ${fmtGasto(gastoMes)} de ${fmtGasto(investimentoMensalPlanejado)} planejados`}
+        >
+          <div className="ac-gastobar-track">
+            <div
+              className={`ac-gastobar-fill ac-gastobar-fill--${tomBarra}`}
+              style={{ width: `${Math.min(pctMes, 100)}%` }}
+            />
+          </div>
+          <span className="ac-gastobar-label">
+            {fmtGasto(gastoMes)} / {fmtGasto(investimentoMensalPlanejado)} · {pctMes}%
+          </span>
+        </div>
+      )}
     </div>
   );
 }
