@@ -199,6 +199,26 @@ export const CATALOGO_METRICAS = {
     relevancia: 'critica',
   },
 
+  // Receita de compra — componente para recompor o ROAS multi-dia (Σreceita/Σgasto).
+  // Não exibida no dashboard por padrão (relevancia baixa); alimenta o recálculo.
+  purchase_revenue: {
+    nome: 'Receita de compra',
+    tipo: 'counter',
+    unidade: 'currency',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'baixa',
+  },
+
+  website_purchase_revenue: {
+    nome: 'Receita de compra (site)',
+    tipo: 'counter',
+    unidade: 'currency',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'baixa',
+  },
+
   // ===== Vídeo =====
   video_p25_watched_actions: {
     nome: 'Vídeo assistido 25%',

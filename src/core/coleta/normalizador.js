@@ -74,6 +74,12 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
   const receitaOmni = extrairValorAction(linha.action_values, eventoConversao);
   const receitaWebsite = extrairValorAction(linha.action_values, EVENTO_CONVERSAO_WEBSITE);
 
+  // Receita (valor da compra) como componente — permite recompor o ROAS multi-dia
+  // corretamente (Σreceita/Σgasto), em vez de mediar as ROAS diárias (que infla com
+  // dias de gasto baixo + uma venda: ex.: R$278 ÷ R$0,52 = 535x).
+  if (receitaOmni > 0) push('purchase_revenue', receitaOmni);
+  if (receitaWebsite > 0) push('website_purchase_revenue', receitaWebsite);
+
   if (gasto > 0 && receitaOmni > 0) {
     push('purchase_roas', receitaOmni / gasto);
   }
