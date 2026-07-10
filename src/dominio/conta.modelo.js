@@ -29,6 +29,9 @@ const saldoPrepagoSchema = new Schema(
     runwayHoras: { type: Number, default: null },   // horas de autonomia projetadas
     nivel: { type: String, default: null },         // 'ok'|'acabando'|'critico'|'zerado'|'bloqueado'
     motivoBloqueio: { type: String, default: null }, // rótulo do account_status quando nivel='bloqueado'
+    // Último nível já notificado no WhatsApp. Anti-repetição: só alerta na MUDANÇA de
+    // nível; zera quando o saldo volta a 'ok' (re-arma o alerta após uma recarga).
+    nivelNotificado: { type: String, default: null },
     atualizadoEm: { type: Date },
   },
   { _id: false }
@@ -86,10 +89,31 @@ const configuracoesSchema = new Schema(
   { _id: false }
 );
 
+// Perfil de negócio da conta (preenchido no onboarding): gerente responsável,
+// investimento mensal planejado e objetivos declarados (até 3, ordenados).
+const objetivoContaSchema = new Schema(
+  {
+    ordem: { type: Number, required: true }, // 1=principal, 2=secundário, 3=terciário
+    chave: { type: String, required: true }, // conversao|mensagem|lead|trafego|alcance
+  },
+  { _id: false }
+);
+
+const perfilSchema = new Schema(
+  {
+    gerenteResponsavel: { type: String, default: '' },
+    investimentoMensalPlanejado: { type: Number, default: null }, // R$/mês
+    objetivos: { type: [objetivoContaSchema], default: [] },
+  },
+  { _id: false }
+);
+
 const contaSchema = new Schema(
   {
     identificador: { type: String, required: true, unique: true, index: true },
     nome: { type: String, required: true },
+
+    perfil: { type: perfilSchema, default: () => ({}) },
 
     metaConfig: { type: metaConfigSchema, required: true },
     notificacao: { type: notificacaoSchema, default: () => ({}) },

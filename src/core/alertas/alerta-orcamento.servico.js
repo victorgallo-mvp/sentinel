@@ -101,13 +101,24 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
 
   // Conta com status problemático
   if (labelProblema) {
-    const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
-    const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
-    const jaAvisou = await Notificacao.exists({
-      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde },
-    });
-    if (!jaAvisou) {
+    const isPrepago = conta.configuracoes?.prepago === true;
+    const anteriorBloq = (conta.saldoPrepago ?? []).find((s) => s.contaAnuncioId === contaAnuncioId);
+
+    // Pré-pago: só notifica na MUDANÇA de estado (não repete enquanto bloqueado).
+    // Pós-pago: sem snapshot de saldo — mantém throttle por notificação (persistente).
+    let deveNotificar;
+    if (isPrepago) {
+      deveNotificar = (anteriorBloq?.nivelNotificado ?? null) !== 'bloqueado';
+    } else {
+      const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
+      deveNotificar = !(await Notificacao.exists({
+        contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+        conteudo: new RegExp(`alerta_conta_status_${contaAnuncioId}`), enviadaEm: { $gte: desde },
+      }));
+    }
+
+    if (deveNotificar) {
+      const chaveAlerta = `alerta_conta_status_${contaAnuncioId}`;
       const mensagem = [
         `🚨 *Conta de anúncio bloqueada — ${conta.nome}*`,
         ``, `Conta: \`${contaAnuncioId}\``, `Status: *${labelProblema}*`, ``,
@@ -119,9 +130,9 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
       logger.info({ msg: 'Alerta de conta bloqueada enviado', conta: conta.nome, contaAnuncioId, status: labelProblema });
     }
-    // Reflete o bloqueio no dashboard (conta pré-paga), com o motivo (status) legível
-    if (conta.configuracoes?.prepago) {
-      await persistirSnapshotSaldo(conta._id, contaAnuncioId, { nivel: 'bloqueado', motivoBloqueio: labelProblema });
+    // Reflete o bloqueio no dashboard (conta pré-paga), marcando o nível já notificado
+    if (isPrepago) {
+      await persistirSnapshotSaldo(conta._id, contaAnuncioId, { nivel: 'bloqueado', motivoBloqueio: labelProblema, nivelNotificado: 'bloqueado' });
     }
     return;
   }
@@ -133,35 +144,38 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     if (!snap) return; // saldo indeterminável — não é pré-pago real
     const { saldoReais: saldoEstimadoReais, ritmoHora, runwayHoras, nivel } = snap;
 
-    // Persiste o snapshot para o dashboard ler sem chamar a Meta API
-    await persistirSnapshotSaldo(conta._id, contaAnuncioId, snap);
+    // Nível já notificado neste episódio (lido antes de persistir — em memória ainda é
+    // o snapshot anterior). Anti-repetição: só alerta quando o nível MUDA.
+    const nivelNotificadoAnterior = (conta.saldoPrepago ?? []).find((s) => s.contaAnuncioId === contaAnuncioId)?.nivelNotificado ?? null;
 
-    // 1. Saldo zerado — entrega interrompida (chave própria, 24h)
+    // Persiste o snapshot pro dashboard. Carrega adiante o nivelNotificado; zera quando
+    // volta a 'ok' (re-arma o alerta após uma recarga).
+    await persistirSnapshotSaldo(conta._id, contaAnuncioId, {
+      ...snap,
+      nivelNotificado: nivel === 'ok' ? null : nivelNotificadoAnterior,
+    });
+
+    // 1. Saldo zerado — entrega interrompida. Notifica só na transição para 'zerado'.
     if (nivel === 'zerado') {
-      const janelaSaldo = new Date(Date.now() - JANELA_RENOTIFICACAO_PERSISTENTE * 60 * 60 * 1000);
+      if (nivelNotificadoAnterior === 'zerado') return; // já notificado neste episódio
       const chaveZerado = `saldo_prepago_zerado_${contaAnuncioId}`;
-      const jaAvisouZerado = await Notificacao.exists({
-        contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-        conteudo: new RegExp(chaveZerado), enviadaEm: { $gte: janelaSaldo },
-      });
-      if (!jaAvisouZerado) {
-        const mensagem = [
-          `🔴 *Saldo zerado — entrega interrompida — ${conta.nome}*`,
-          ``, `Conta: \`${contaAnuncioId}\``,
-          `Saldo estimado: *R$ 0,00*`,
-          ``,
-          `As campanhas pararam de entregar por falta de saldo pré-pago. Recarregue para retomar.`,
-          `<!-- ${chaveZerado} -->`,
-        ].join('\n');
-        let envioStatus = 'enviada';
-        try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo zerado', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
-        await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
-        logger.info({ msg: 'Alerta de saldo zerado enviado', conta: conta.nome, contaAnuncioId, status: envioStatus });
-      }
+      const mensagem = [
+        `🔴 *Saldo zerado — entrega interrompida — ${conta.nome}*`,
+        ``, `Conta: \`${contaAnuncioId}\``,
+        `Saldo estimado: *R$ 0,00*`,
+        ``,
+        `As campanhas pararam de entregar por falta de saldo pré-pago. Recarregue para retomar.`,
+        `<!-- ${chaveZerado} -->`,
+      ].join('\n');
+      let envioStatus = 'enviada';
+      try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo zerado', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
+      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+      await marcarNivelNotificado(conta._id, contaAnuncioId, 'zerado');
+      logger.info({ msg: 'Alerta de saldo zerado enviado', conta: conta.nome, contaAnuncioId, status: envioStatus });
       return;
     }
 
-    // 2. Saldo confortável — snapshot já persistido, nada a alertar
+    // 2. Saldo confortável — snapshot já persistido (nivelNotificado zerado), nada a alertar
     if (nivel === 'ok') return;
 
     // 2b. Saldo parado — não está caindo desde a última leitura. Suprime o alerta
@@ -172,15 +186,9 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
       return;
     }
 
-    // 3. Projeção de esgotamento (runway): avisa com antecedência por tempo de autonomia
-    const janelaHoras = nivel === 'critico' ? JANELA_RENOTIFICACAO_CRITICO : JANELA_RENOTIFICACAO_ACABANDO;
+    // 3. Projeção de esgotamento (runway): notifica só na MUDANÇA de nível (crítico/acabando).
+    if (nivelNotificadoAnterior === nivel) return; // mesmo nível já notificado — não repete
     const chaveAlerta = `saldo_prepago_${nivel}_${contaAnuncioId}`;
-    const desde = new Date(Date.now() - janelaHoras * 60 * 60 * 1000);
-    const jaAvisou = await Notificacao.exists({
-      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
-      conteudo: new RegExp(chaveAlerta), enviadaEm: { $gte: desde },
-    });
-    if (jaAvisou) return;
 
     const linhaRitmo = (ritmoHora && runwayHoras != null)
       ? `\nRitmo atual: *R$ ${ritmoHora.toFixed(2)}/h* → acaba em ~*${formatarRunway(runwayHoras)}*`
@@ -203,6 +211,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     let envioStatus = 'enviada';
     try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { envioStatus = 'erro'; logger.error({ msg: 'Falha ao enviar alerta de saldo pré-pago', conta: conta.nome, destinatario: destinatarios.join(','), erro: e.message }); }
     await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status: envioStatus });
+    await marcarNivelNotificado(conta._id, contaAnuncioId, nivel);
     logger.info({ msg: 'Alerta de saldo pré-pago enviado', conta: conta.nome, contaAnuncioId, nivel, saldoEstimadoReais, runwayHoras, status: envioStatus });
   }
 }
@@ -426,7 +435,7 @@ export async function recalcularSnapshotsSaldoPrepago() {
  * documento da Conta, para o dashboard ler sem chamar a Meta API.
  */
 async function persistirSnapshotSaldo(contaId, contaAnuncioId, dados) {
-  const snapshot = { contaAnuncioId, atualizadoEm: new Date(), saldoReais: null, ritmoHora: null, runwayHoras: null, nivel: null, motivoBloqueio: null, ...dados };
+  const snapshot = { contaAnuncioId, atualizadoEm: new Date(), saldoReais: null, ritmoHora: null, runwayHoras: null, nivel: null, motivoBloqueio: null, nivelNotificado: null, ...dados };
   const r = await Conta.updateOne(
     { _id: contaId, 'saldoPrepago.contaAnuncioId': contaAnuncioId },
     { $set: { 'saldoPrepago.$': snapshot } }
@@ -434,6 +443,14 @@ async function persistirSnapshotSaldo(contaId, contaAnuncioId, dados) {
   if (r.matchedCount === 0) {
     await Conta.updateOne({ _id: contaId }, { $push: { saldoPrepago: snapshot } });
   }
+}
+
+/** Marca o nível já notificado no snapshot (anti-repetição por mudança de estado). */
+async function marcarNivelNotificado(contaId, contaAnuncioId, nivelNotificado) {
+  await Conta.updateOne(
+    { _id: contaId, 'saldoPrepago.contaAnuncioId': contaAnuncioId },
+    { $set: { 'saldoPrepago.$.nivelNotificado': nivelNotificado } }
+  );
 }
 
 /** Formata horas de autonomia em string amigável ("5h" ou "1d 4h"). */
