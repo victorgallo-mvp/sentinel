@@ -107,6 +107,44 @@
   transition: border-color .12s, color .12s;
 }
 .am-metricas-btn:hover { border-color: var(--text); color: var(--text); }
+.am-metricas-btn.ativo { border-color: var(--text); color: var(--text); }
+
+/* Botão "Abrir na BM" — deep-link para o Ads Manager */
+.am-bm-btn {
+  border: 1px solid var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 6px 14px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.am-bm-btn:hover { border-color: var(--text); }
+
+/* Mini-resumo (visão geral por IA) */
+.am-mini-resumo {
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+}
+.am-mini-resumo-txt { margin: 0; font-size: var(--fs-sm); color: var(--text); line-height: 1.5; }
+.am-mini-resumo-load { font-size: var(--fs-sm); color: var(--text-subtle); }
+
+/* Toggle do detalhamento (recolhido por padrão — investigação a fundo vai pra BM) */
+.am-detalhe-toggle {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  padding: var(--sp-3) var(--sp-6);
+  text-align: left;
+}
+.am-detalhe-toggle:hover { color: var(--text); }
 
 /* ── Alertas (detalhes + marcar ciente) ── */
 .am-alertas {

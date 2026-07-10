@@ -11,11 +11,14 @@ import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
 import { query } from '../../infra/postgres.js';
+import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS, metricaResultado } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
 import { buscarGastoMes, computarVeredito } from '../../core/analise/veredito.servico.js';
+import { montarDadosResumoBm } from '../../core/relatorio/resumo-diario.servico.js';
+import { redigirMiniResumo } from '../../core/relatorio/resumo-diario.agente.js';
 
 // Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
 const METRICAS_COUNTER = new Set(
@@ -113,6 +116,21 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
     for (const [metrica, [num, den, fator]] of Object.entries(RATIOS_RECALCULAVEIS)) {
       if (soma[den] > 0 && soma[num] != null) {
         resultado[metrica] = (soma[num] / soma[den]) * fator;
+      }
+    }
+
+    // ROAS: 1 dia = valor real da Meta (correto). Multi-dia NÃO pode ser média das
+    // ROAS diárias (dias de gasto baixo + uma venda inflam pra 300x+). Recompõe de
+    // Σreceita/Σgasto quando houver receita coletada; senão OMITE (evita número errado).
+    for (const [roasKey, revKey] of [['purchase_roas', 'purchase_revenue'], ['website_purchase_roas', 'website_purchase_revenue']]) {
+      if (soma[roasKey] === undefined) continue;
+      const dias = contagem[roasKey] ?? 0;
+      if (dias <= 1) {
+        resultado[roasKey] = soma[roasKey]; // 1 dia: soma == o valor daquele dia
+      } else if (soma[revKey] > 0 && soma['spend'] > 0) {
+        resultado[roasKey] = soma[revKey] / soma['spend'];
+      } else {
+        resultado[roasKey] = null; // multi-dia sem receita: não exibir a média inflada
       }
     }
 
@@ -388,6 +406,8 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           nome: conta.nome,
           identificador: conta.identificador,
           prepago: conta.configuracoes?.prepago ?? false,
+          contaAnuncioId: conta.metaConfig?.contasAnuncioIds?.[0] ?? null,
+          bmId: conta.metaConfig?.bmId ?? null,
           metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
           perfil: {
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
@@ -616,6 +636,33 @@ rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, 
     await Conta.findByIdAndUpdate(contaId, { $set: set });
     const atualizada = await Conta.findById(contaId).select('perfil').lean();
     res.json({ ok: true, perfil: atualizada.perfil });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Mini-resumo (IA) da conta para a visão geral — gerado sob demanda ──────
+rotaDashboard.get('/contas/:contaId/mini-resumo', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+    const conta = await Conta.findById(contaId);
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    const dados = await montarDadosResumoBm([conta]);
+    if (!dados) return res.json({ texto: null });
+
+    if (!config.iaResumoDiarioAtivo) return res.json({ texto: null });
+    try {
+      const { texto } = await redigirMiniResumo(dados);
+      res.json({ texto: texto || null });
+    } catch (erro) {
+      logger.warn({ msg: 'Falha ao gerar mini-resumo', contaId, erro: erro.message });
+      res.json({ texto: null });
+    }
   } catch (erro) {
     next(erro);
   }

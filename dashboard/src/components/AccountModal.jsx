@@ -32,10 +32,32 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
   const [filtroAtivo, setFiltroAtivo] = useState('todas');
   const [mostrarSelector, setMostrarSelector] = useState(false);
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
+  const [mostrarDetalhe, setMostrarDetalhe] = useState(false);
+  const [miniResumo, setMiniResumo] = useState(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(true);
   const [alertas, setAlertas] = useState(conta.resumo?.alertas ?? []);
   const [reconhecendo, setReconhecendo] = useState(null); // chave em processamento
 
   useEffect(() => { setAlertas(conta.resumo?.alertas ?? []); }, [conta]);
+
+  // Mini-resumo (IA) sob demanda ao abrir — visão geral rápida da conta
+  useEffect(() => {
+    let vivo = true;
+    setCarregandoResumo(true);
+    setMiniResumo(null);
+    const token = getToken();
+    fetch(`${API_URL}/dashboard/contas/${conta.id}/mini-resumo?token=${token}`)
+      .then((r) => (r.ok ? r.json() : { texto: null }))
+      .then((d) => { if (vivo) setMiniResumo(d.texto ?? null); })
+      .catch(() => { if (vivo) setMiniResumo(null); })
+      .finally(() => { if (vivo) setCarregandoResumo(false); });
+    return () => { vivo = false; };
+  }, [conta.id]);
+
+  const actBm = conta.contaAnuncioId?.replace(/^act_/, '');
+  const linkBm = actBm
+    ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${actBm}${conta.bmId ? `&business_id=${conta.bmId}` : ''}`
+    : null;
 
   async function marcarCiente(alerta) {
     setReconhecendo(alerta.chave);
@@ -105,6 +127,17 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
               <span className="am-data-ref">Métricas de {dataReferencia}</span>
             )}
           </div>
+          {linkBm && (
+            <a
+              className="am-bm-btn"
+              href={linkBm}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir esta conta no Meta Ads Manager (BM)"
+            >
+              Abrir na BM ↗
+            </a>
+          )}
           <button
             className={`am-metricas-btn ${mostrarPerfil ? 'ativo' : ''}`}
             onClick={() => setMostrarPerfil((v) => !v)}
@@ -126,6 +159,17 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
         {mostrarPerfil && (
           <PerfilConta conta={conta} onSalvo={() => onRefresh?.()} />
         )}
+
+        {/* ── Mini-resumo (visão geral por IA) ── */}
+        <div className="am-mini-resumo">
+          {carregandoResumo ? (
+            <span className="am-mini-resumo-load">Gerando resumo…</span>
+          ) : miniResumo ? (
+            <p className="am-mini-resumo-txt">{miniResumo}</p>
+          ) : (
+            <span className="am-mini-resumo-load">Sem resumo disponível.</span>
+          )}
+        </div>
 
         {/* ── Alertas (com detalhes + marcar ciente) ── */}
         {alertas.length > 0 && (
@@ -160,31 +204,43 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
           </div>
         )}
 
-        {/* ── Filtros ── */}
-        <div className="am-filtros">
-          {FILTROS.map((f) => (
-            <button
-              key={f.id}
-              className={`am-filtro-btn ${filtroAtivo === f.id ? 'ativo' : ''}`}
-              onClick={() => setFiltroAtivo(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        {/* ── Detalhamento (recolhido por padrão — investigação a fundo vai pra BM) ── */}
+        <button
+          className="am-detalhe-toggle"
+          onClick={() => setMostrarDetalhe((v) => !v)}
+        >
+          {mostrarDetalhe ? '▾ Ocultar detalhamento' : '▸ Ver detalhamento das campanhas'}
+        </button>
 
-        {/* ── Hierarquia ── */}
-        <div className="am-body">
-          {conta.entidades?.length > 0 ? (
-            <HierarchyView
-              entidades={conta.entidades}
-              nivel="todos"
-              statusFiltro={filtroAtivo}
-            />
-          ) : (
-            <p className="am-vazio">Nenhuma entidade monitorada nesta conta.</p>
-          )}
-        </div>
+        {mostrarDetalhe && (
+          <>
+            {/* ── Filtros ── */}
+            <div className="am-filtros">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.id}
+                  className={`am-filtro-btn ${filtroAtivo === f.id ? 'ativo' : ''}`}
+                  onClick={() => setFiltroAtivo(f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Hierarquia ── */}
+            <div className="am-body">
+              {conta.entidades?.length > 0 ? (
+                <HierarchyView
+                  entidades={conta.entidades}
+                  nivel="todos"
+                  statusFiltro={filtroAtivo}
+                />
+              ) : (
+                <p className="am-vazio">Nenhuma entidade monitorada nesta conta.</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
     </>

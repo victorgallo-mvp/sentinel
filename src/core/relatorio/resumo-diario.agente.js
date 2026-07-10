@@ -42,3 +42,24 @@ export async function redigirResumoDiario(dados) {
   logger.info({ msg: 'Resumo diário IA gerado', bm: dados.bm, modelo, custoUsd: custoUsd.toFixed(5) });
   return { texto, custoUsd, modelo };
 }
+
+const SYSTEM_MINI = [
+  'Você resume o dia de uma conta de tráfego para o gestor, na visão geral do dashboard.',
+  'Receberá um JSON com os totais do dia e os pontos de atenção.',
+  'Escreva UMA a DUAS frases (máx ~240 caracteres), português do Brasil, direto ao ponto.',
+  'Priorize: tendência (melhorou/piorou), e o ponto de atenção mais crítico (saldo, gasto sem converter).',
+  'Sem formatação, sem emojis, sem saudação. Só o essencial que o gestor precisa saber num relance.',
+].join('\n');
+
+/** Mini-resumo (1-2 frases) para a visão geral do dashboard. */
+export async function redigirMiniResumo(dados) {
+  const modelo = config.modeloResumoDiario;
+  const resposta = await anthropic.messages.create({
+    model: modelo,
+    max_tokens: 200,
+    system: SYSTEM_MINI,
+    messages: [{ role: 'user', content: `Dados do dia:\n\n${JSON.stringify(dados, null, 2)}` }],
+  });
+  const bloco = resposta.content.find((c) => c.type === 'text');
+  return { texto: (bloco?.text ?? '').trim(), custoUsd: calcularCusto(resposta.usage, modelo), modelo };
+}

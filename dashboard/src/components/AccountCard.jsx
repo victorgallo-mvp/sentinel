@@ -14,6 +14,14 @@ const VEREDITO_UI = {
   piorou:   { icon: '📉', tom: 'crit',  label: 'piorou' },
 };
 
+// Deep-link para o Ads Manager da conta (nível BM) — investigação a fundo é na Meta
+function urlMetaBm(conta) {
+  const act = conta.contaAnuncioId?.replace(/^act_/, '');
+  if (!act) return null;
+  const base = 'https://adsmanager.facebook.com/adsmanager/manage/campaigns';
+  return `${base}?act=${act}${conta.bmId ? `&business_id=${conta.bmId}` : ''}`;
+}
+
 function fmtRunway(h) {
   if (h == null) return null;
   const horas = Math.max(0, Math.round(h));
@@ -110,6 +118,7 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   const gastoTexto = !temPlano && partesGasto.length ? partesGasto.join(' · ') : null;
 
   const vd = veredito ? VEREDITO_UI[veredito.direcao] : null;
+  const linkBm = urlMetaBm(conta);
 
   function iniciarEdicao(e) {
     e.stopPropagation();
@@ -199,6 +208,18 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
           )}
           {status === 'pausado' && (
             <span className="ac-tag ac-tag--muted">pausada</span>
+          )}
+          {linkBm && (
+            <a
+              className="ac-bm-link"
+              href={linkBm}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Abrir esta conta no Meta Ads Manager (BM)"
+            >
+              Abrir na BM ↗
+            </a>
           )}
         </div>
 

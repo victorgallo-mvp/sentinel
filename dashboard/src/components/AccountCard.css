@@ -132,6 +132,19 @@
   color: var(--text-subtle);
 }
 
+/* Botão "Abrir na BM" — deep-link para o Ads Manager */
+.ac-bm-link {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+.ac-bm-link:hover { border-color: var(--text-muted); }
+
 /* Veredito de tendência (melhorou/estável/piorou) */
 .ac-veredito {
   font-size: var(--fs-sm);
