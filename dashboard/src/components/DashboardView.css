@@ -121,6 +121,102 @@
   text-align: center;
 }
 
+/* ── Lista de atenção ────────────────────────────────────────────────────── */
+.dv-atencao {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.dv-atencao-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dv-atencao-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dv-atencao-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--crit, #e55) 12%, transparent);
+  color: var(--crit, #e55);
+}
+
+.dv-atencao-chevron {
+  font-size: 10px;
+  color: var(--text-subtle);
+}
+
+.dv-atencao-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.dv-atencao-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.dv-atencao-item:last-child { border-bottom: none; }
+
+.dv-atencao-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dv-dot-problema { background: var(--crit, #e55); }
+.dv-dot-alerta   { background: var(--warn, #f90); }
+
+.dv-atencao-nome {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 120px;
+}
+
+.dv-atencao-gestor {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.dv-atencao-motivo {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.dv-atencao-motivo.dv-motivo-urgente {
+  color: var(--crit, #e55);
+  font-weight: 500;
+}
+
 /* ── Mobile: scroll horizontal ──────────────────────────────────────────── */
 @media (max-width: 768px) {
   .dv-kanban {
