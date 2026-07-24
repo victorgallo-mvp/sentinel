@@ -141,14 +141,14 @@ export default function DashboardView({ contas, notificacoes }) {
           {atencaoAberto && (
             <ul className="dv-atencao-lista">
               {contasAtencao.map(({ conta, col }) => {
-                const nome   = nomesCuston[conta.id] ?? conta.nome;
-                const gestor = conta.perfil?.gerenteResponsavel;
+                const nome         = nomesCuston[conta.id] ?? conta.nome;
+                const gestorConta  = conta.perfil?.gerenteResponsavel;
                 const motivo = motivoPrincipal(conta, notifPorConta[conta.id] ?? []);
                 return (
                   <li key={conta.id} className={`dv-atencao-item dv-atencao-${col}`}>
                     <span className={`dv-atencao-dot dv-dot-${col}`} aria-hidden="true" />
                     <span className="dv-atencao-nome">{nome}</span>
-                    {gestor && <span className="dv-atencao-gestor">{gestor}</span>}
+                    {gestorConta && <span className="dv-atencao-gestor">{gestorConta}</span>}
                     <span className={`dv-atencao-motivo${motivo.urgente ? ' dv-motivo-urgente' : ''}`}>
                       {motivo.texto}
                     </span>
