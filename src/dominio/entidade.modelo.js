@@ -49,6 +49,9 @@ const entidadeSchema = new Schema(
     hierarquia: { type: hierarquiaSchema, required: true },
 
     objetivo: { type: String, default: null },
+    // optimization_goal do adset (mais específico que o objetivo da campanha).
+    // Presente apenas em entidades do tipo 'adset'; null em campaigns e ads.
+    optimizationGoal: { type: String, default: null },
     status: { type: String, default: 'UNKNOWN' },
 
     issues:       { type: Array, default: [] },        // issues_info from Meta API

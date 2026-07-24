@@ -143,7 +143,7 @@ export async function listarAdsets(campanhaId, { apenasAtivos = false, token } =
     const campanha = new Campaign(campanhaId);
     const params = {};
     params.filtering = [{ field: 'effective_status', operator: 'IN', value: apenasAtivos ? ['ACTIVE'] : STATUS_SYNC }];
-    const cursor = await campanha.getAdSets(['id', 'name', 'status', 'effective_status', 'daily_budget', 'lifetime_budget'], params);
+    const cursor = await campanha.getAdSets(['id', 'name', 'status', 'effective_status', 'daily_budget', 'lifetime_budget', 'optimization_goal'], params);
     verificarRateLimit(cursor);
     return paraArrayPlano(cursor).map((a) => ({
       id: a.id,
@@ -152,6 +152,7 @@ export async function listarAdsets(campanhaId, { apenasAtivos = false, token } =
       statusEfetivo: a.effective_status,
       orcamentoDiario: a.daily_budget,
       orcamentoTotal: a.lifetime_budget,
+      optimizationGoal: a.optimization_goal ?? null,
     }));
   });
 }

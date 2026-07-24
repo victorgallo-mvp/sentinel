@@ -96,6 +96,7 @@ export async function sincronizarEntidades(contaId, bmId, contaAnuncioId, { toke
           nome: adset.nome,
           hierarquia: { bmId, contaAnuncioId, campanhaId: campanha.id, adsetId: adset.id },
           objetivo: campanha.objetivo,
+          optimizationGoal: adset.optimizationGoal ?? null,
           status: adset.statusEfetivo ?? adset.status,
         });
         criadaAdset ? criadas++ : atualizadas++;
@@ -171,6 +172,7 @@ async function upsertEntidade(contaId, dados) {
     existente.nome = dados.nome;
     existente.status = dados.status;
     existente.objetivo = dados.objetivo;
+    if (dados.optimizationGoal !== undefined) existente.optimizationGoal = dados.optimizationGoal;
     existente.hierarquia = dados.hierarquia;
     existente.motivoStatus = motivoStatus;
     await existente.save();
@@ -184,6 +186,7 @@ async function upsertEntidade(contaId, dados) {
     nome: dados.nome,
     hierarquia: dados.hierarquia,
     objetivo: dados.objetivo,
+    optimizationGoal: dados.optimizationGoal ?? null,
     status: dados.status,
     motivoStatus,
     configuracoes: { monitorada: true, sensibilidadeCustom: null, metricasIgnoradas: [] },

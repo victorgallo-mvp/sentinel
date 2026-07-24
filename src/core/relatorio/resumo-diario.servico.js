@@ -12,7 +12,7 @@ import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { redigirResumoDiario } from './resumo-diario.agente.js';
 import { computarVeredito, buscarGastoMes } from '../analise/veredito.servico.js';
-import { metricaResultado } from '../../config/metricas.config.js';
+import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
@@ -114,7 +114,7 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     contaId: { $in: contaIds },
     tipo: 'campaign',
     'configuracoes.monitorada': true,
-  }).select('_id nome status objetivo').lean();
+  }).select('_id nome status objetivo optimizationGoal').lean();
 
   const campanhasAtivas = campanhas.filter((c) => c.status === 'ACTIVE');
   if (campanhas.length === 0) return null;
@@ -170,9 +170,8 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     totais.conversasWpp += m.messaging_conversations_started ?? 0;
     totais.leads += m.leads ?? 0;
     const gasto = m.spend ?? 0;
-    // "Sem resultado" só faz sentido para métricas de negócio rastreáveis;
-    // usa a métrica-resultado correta do objetivo da campanha.
-    const metricaAlvo = metricaResultado(objetivoPorId[id]);
+    // Prefere optimizationGoal do adset quando disponível (mais específico).
+    const metricaAlvo = metricaResultadoEntidade(campanhas.find((c) => String(c._id) === id));
     const ALERTAVEIS = new Set(['conversions', 'leads', 'messaging_conversations_started']);
     if (gasto >= LIMIAR_GASTO_SEM_CONVERSAO && ALERTAVEIS.has(metricaAlvo) && (m[metricaAlvo] ?? 0) === 0) {
       semResultado.push({ nome: nomePorId[id] ?? id, gasto: Number(gasto.toFixed(2)) });

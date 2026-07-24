@@ -16,7 +16,7 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
-import { metricaResultado } from '../../config/metricas.config.js';
+import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 
 const THRESHOLD_FREQUENCIA = 3.0;
 const LIMIAR_GASTO_ZERO_CONVERSOES = 30; // R$
@@ -66,9 +66,9 @@ async function verificarPerformanceConta(conta) {
       await verificarFrequenciaSaturacao(conta, entidade, destinatarios);
       await verificarFadigaCriativo(conta, entidade, destinatarios);
 
-      // Resolve a métrica-resultado pelo objetivo da campanha e só alerta
-      // se for uma métrica de negócio rastreável (conversão, lead, mensagem).
-      const metricaAlvo = metricaResultado(entidade.objetivo);
+      // Resolve a métrica-resultado preferindo optimizationGoal do adset (mais
+      // específico que o objetivo de campanha) — correto para ThruPlay, leads, etc.
+      const metricaAlvo = metricaResultadoEntidade(entidade);
       if (METRICAS_ALERTAVEIS_ZERO.has(metricaAlvo)) {
         await verificarZeroResultados(conta, entidade, destinatarios, metricaAlvo);
       }

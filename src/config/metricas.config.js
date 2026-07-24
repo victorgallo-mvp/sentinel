@@ -321,9 +321,49 @@ const RESULTADO_POR_OBJETIVO = {
   VIDEO_VIEWS:           'video_p25_watched_actions',
 };
 
-/** Chave da métrica de resultado para um objetivo (fallback: conversões). */
+/** Chave da métrica de resultado para um objetivo de campanha (fallback: conversões). */
 export function metricaResultado(objetivo) {
   return RESULTADO_POR_OBJETIVO[String(objetivo || '').toUpperCase()] ?? 'conversions';
+}
+
+/**
+ * Mapeamento de optimization_goal (nível adset) para métrica de resultado.
+ * Mais específico que o objetivo de campanha — preferir quando disponível.
+ * Retorna null se o goal não for reconhecido ou mapeável (usar metricaResultado como fallback).
+ */
+const RESULTADO_POR_OPTIMIZATION_GOAL = {
+  THRUPLAY:              'video_p100_watched_actions', // 97%+ ou 15s — p100 é o mais próximo coletado
+  VIDEO_VIEWS:           'video_p25_watched_actions',
+  POST_ENGAGEMENT:       'clicks',
+  PAGE_LIKES:            'reach',
+  PAGE_ENGAGEMENT:       'clicks',
+  LEAD_GENERATION:       'leads',
+  QUALITY_LEAD:          'leads',
+  CONVERSATIONS:         'messaging_conversations_started',
+  OFFSITE_CONVERSIONS:   'conversions',
+  VALUE:                 'conversions',
+  APP_INSTALLS:          'conversions',
+  QUALITY_CALL:          'conversions',
+  OFFER_CLAIMS:          'conversions',
+  LINK_CLICKS:           'clicks',
+  LANDING_PAGE_VIEWS:    'clicks',
+  REACH:                 'reach',
+  IMPRESSIONS:           'impressions',
+  BRAND_AWARENESS:       'impressions',
+  ENGAGED_USERS:         'messaging_conversations_started',
+  EVENT_RESPONSES:       'messaging_conversations_started',
+};
+
+/** Chave da métrica de resultado para um optimization_goal de adset.
+ *  Retorna null se não mapeável — usar metricaResultado(entidade.objetivo) como fallback. */
+export function metricaResultadoPorGoal(optimizationGoal) {
+  if (!optimizationGoal || optimizationGoal === 'NONE') return null;
+  return RESULTADO_POR_OPTIMIZATION_GOAL[String(optimizationGoal).toUpperCase()] ?? null;
+}
+
+/** Resolve a métrica de resultado para uma entidade, preferindo optimizationGoal quando disponível. */
+export function metricaResultadoEntidade(entidade) {
+  return metricaResultadoPorGoal(entidade?.optimizationGoal) ?? metricaResultado(entidade?.objetivo);
 }
 
 /**

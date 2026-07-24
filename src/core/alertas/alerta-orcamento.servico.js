@@ -62,11 +62,225 @@ export async function verificarOrcamentosContas() {
     } catch (erro) {
       logger.error({ msg: 'Falha ao verificar meta mensal da conta', contaId: String(conta._id), erro: erro.message });
     }
+    try {
+      await verificarSpikeDiarioConta(conta);
+    } catch (erro) {
+      logger.error({ msg: 'Falha ao verificar spike de gasto', contaId: String(conta._id), erro: erro.message });
+    }
+    try {
+      await verificarRitmoMensalBaixo(conta);
+    } catch (erro) {
+      logger.error({ msg: 'Falha ao verificar ritmo mensal baixo', contaId: String(conta._id), erro: erro.message });
+    }
   }
 }
 
 const THRESHOLD_META_MENSAL = 0.10;       // alerta quando projeção > meta + 10%
 const JANELA_RENOTIFICACAO_META = 24;     // renotifica no máximo 1× por dia
+
+// ── Spike e sub-utilização de gasto ─────────────────────────────────────────
+const SPIKE_MULTIPLO_ALTO  = 2.5;   // hoje > 2.5× a média → spike de gasto
+const SPIKE_MULTIPLO_BAIXO = 0.30;  // hoje < 30% da média → gasto muito abaixo
+const SPIKE_DIAS_MINIMOS   = 3;     // mínimo de dias com gasto na janela de 7d
+const SPIKE_DIAS_ATIVOS_3D = 2;     // mínimo de dias ativos nos últimos 3 (evita falso após pausa)
+const SPIKE_HORA_BRT_MIN   = 18;    // só alerta spike baixo após 18h BRT
+const SPIKE_THROTTLE_HORAS = 24;    // uma notificação por direção por dia
+const RITMO_LIMIAR_PCT     = 0.50;  // ritmo < 50% do esperado → sub-utilização
+const RITMO_DIA_MINIMO     = 8;     // só verifica após o 8º dia do mês
+
+/**
+ * Detecta spikes de gasto diário: acima (>2.5×) ou abaixo (<30%) da média 7d.
+ * Só dispara se a conta estava ativa nos últimos 3 dias (≥2 dias com gasto),
+ * evitando falso positivo ao reativar uma campanha pausada.
+ */
+async function verificarSpikeDiarioConta(conta) {
+  const meta = conta.perfil?.investimentoMensalPlanejado;
+  // Sem meta cadastrada não temos referência de "normal" para sub-utilização,
+  // mas ainda verificamos spike alto (pode gastar demais sem meta também).
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
+
+  const campanhas = await Entidade.find({
+    contaId: conta._id, tipo: 'campaign', 'configuracoes.monitorada': true,
+  }).select('_id').lean();
+  if (!campanhas.length) return;
+  const ids = campanhas.map((c) => String(c._id));
+
+  // 1. Verificar atividade recente: quantos dos últimos 3 dias (excl. hoje) tiveram gasto > R$1
+  const hoje0h = new Date(); hoje0h.setHours(0, 0, 0, 0);
+  const ha3dias = new Date(hoje0h); ha3dias.setDate(ha3dias.getDate() - 3);
+
+  const res3d = await query(
+    `SELECT COUNT(DISTINCT date_trunc('day', coletada_em))::int AS dias_ativos
+     FROM metricas_serie_temporal
+     WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
+       AND valor::float > 1 AND coletada_em >= $2 AND coletada_em < $3`,
+    [ids, ha3dias, hoje0h]
+  );
+  const diasAtivos3d = Number(res3d.rows[0]?.dias_ativos ?? 0);
+  if (diasAtivos3d < SPIKE_DIAS_ATIVOS_3D) return; // foi pausada recentemente — pula
+
+  // 2. Média diária dos últimos 7 dias (excl. hoje), usando só dias com gasto
+  const ha7dias = new Date(hoje0h); ha7dias.setDate(ha7dias.getDate() - 7);
+
+  const res7d = await query(
+    `SELECT AVG(dia_total)::float AS media_diaria, COUNT(*)::int AS dias_com_gasto
+     FROM (
+       SELECT dia, SUM(max_por_entidade) AS dia_total
+       FROM (
+         SELECT date_trunc('day', coletada_em) AS dia,
+                entidade_id,
+                MAX(valor::float) AS max_por_entidade
+         FROM metricas_serie_temporal
+         WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
+           AND coletada_em >= $2 AND coletada_em < $3
+         GROUP BY date_trunc('day', coletada_em), entidade_id
+       ) por_entidade
+       WHERE max_por_entidade > 0
+       GROUP BY dia
+     ) diarios`,
+    [ids, ha7dias, hoje0h]
+  );
+
+  const mediaDiaria = Number(res7d.rows[0]?.media_diaria ?? 0);
+  const diasComGasto = Number(res7d.rows[0]?.dias_com_gasto ?? 0);
+  if (mediaDiaria <= 0 || diasComGasto < SPIKE_DIAS_MINIMOS) return;
+
+  // 3. Gasto de hoje (último snapshot 24h frescos)
+  const frescorCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const resHoje = await query(
+    `SELECT COALESCE(SUM(s), 0)::float AS gasto FROM (
+       SELECT DISTINCT ON (entidade_id) valor::float AS s
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
+         AND coletada_em >= $2
+       ORDER BY entidade_id, coletada_em DESC
+     ) x`,
+    [ids, frescorCutoff]
+  );
+  const gastoHoje = Number(resHoje.rows[0]?.gasto ?? 0);
+  if (gastoHoje === 0) return; // sem dados do dia ainda
+
+  const fmtR = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // 4. Spike ALTO
+  if (gastoHoje > mediaDiaria * SPIKE_MULTIPLO_ALTO) {
+    const chave = `spike_alto_${conta._id}`;
+    const desde = new Date(Date.now() - SPIKE_THROTTLE_HORAS * 60 * 60 * 1000);
+    const jaAvisou = await Notificacao.exists({
+      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+      conteudo: new RegExp(chave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      enviadaEm: { $gte: desde },
+    });
+    if (!jaAvisou) {
+      const multiplo = (gastoHoje / mediaDiaria).toFixed(1);
+      const mensagem = [
+        `📈 *Gasto acima do normal — ${conta.nome}*`,
+        ``,
+        `Gasto hoje: *${fmtR(gastoHoje)}*`,
+        `Média diária (7d): *${fmtR(mediaDiaria)}* → hoje é *${multiplo}×* acima`,
+        ``,
+        `Verifique se houve expansão de orçamento não planejada ou leilão anômalo.`,
+        `<!-- ${chave} -->`,
+      ].join('\n');
+      let status = 'enviada';
+      try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { status = 'erro'; logger.error({ msg: 'Falha ao enviar spike alto', conta: conta.nome, erro: e.message }); }
+      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status });
+      logger.info({ msg: 'Alerta spike alto', conta: conta.nome, gastoHoje, mediaDiaria, multiplo, status });
+    }
+  }
+
+  // 5. Spike BAIXO — só após 18h BRT para dar tempo ao dia
+  const horaBRT = (new Date().getUTCHours() - 3 + 24) % 24;
+  if (gastoHoje < mediaDiaria * SPIKE_MULTIPLO_BAIXO && horaBRT >= SPIKE_HORA_BRT_MIN) {
+    const chave = `spike_baixo_${conta._id}`;
+    const desde = new Date(Date.now() - SPIKE_THROTTLE_HORAS * 60 * 60 * 1000);
+    const jaAvisou = await Notificacao.exists({
+      contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+      conteudo: new RegExp(chave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      enviadaEm: { $gte: desde },
+    });
+    if (!jaAvisou) {
+      const pct = Math.round((gastoHoje / mediaDiaria) * 100);
+      const mensagem = [
+        `📉 *Gasto muito abaixo do normal — ${conta.nome}*`,
+        ``,
+        `Gasto hoje: *${fmtR(gastoHoje)}* (${pct}% da média)`,
+        `Média diária (7d): *${fmtR(mediaDiaria)}*`,
+        ``,
+        `Verifique se campanhas estão ativas e sem problemas de entrega.`,
+        `<!-- ${chave} -->`,
+      ].join('\n');
+      let status = 'enviada';
+      try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { status = 'erro'; logger.error({ msg: 'Falha ao enviar spike baixo', conta: conta.nome, erro: e.message }); }
+      await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status });
+      logger.info({ msg: 'Alerta spike baixo', conta: conta.nome, gastoHoje, mediaDiaria, pct, status });
+    }
+  }
+}
+
+/**
+ * Verifica se o ritmo mensal de gasto está muito abaixo do previsto.
+ * Só dispara após o 8º dia do mês (evitar ruído na primeira semana).
+ * Alerta quando ritmo atual < 50% do ritmo esperado (meta/diasNoMes).
+ */
+async function verificarRitmoMensalBaixo(conta) {
+  const meta = conta.perfil?.investimentoMensalPlanejado;
+  if (!meta || meta <= 0) return;
+
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
+
+  const agora = new Date();
+  const diaAtual = agora.getDate();
+  if (diaAtual < RITMO_DIA_MINIMO) return;
+
+  const campanhas = await Entidade.find({
+    contaId: conta._id, tipo: 'campaign', 'configuracoes.monitorada': true,
+  }).select('_id').lean();
+  if (!campanhas.length) return;
+
+  const campanhaIds = campanhas.map((c) => String(c._id));
+  const gastoMes = await buscarGastoMes(campanhaIds);
+  if (gastoMes === 0) return;
+
+  const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+  const metaDiaria = meta / diasNoMes;
+  const ritmoAtual = gastoMes / diaAtual;
+
+  if (ritmoAtual >= metaDiaria * RITMO_LIMIAR_PCT) return;
+
+  const chave = `ritmo_baixo_${conta._id}_${agora.getFullYear()}_${agora.getMonth()}`;
+  const desde = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+    conteudo: new RegExp(chave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    enviadaEm: { $gte: desde },
+  });
+  if (jaAvisou) return;
+
+  const fmtR = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const projecao = ritmoAtual * diasNoMes;
+  const pctMeta = Math.round((projecao / meta) * 100);
+  const mesAtual = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const mensagem = [
+    `⚠️ *Investimento abaixo do previsto — ${conta.nome}*`,
+    ``,
+    `Mês: *${mesAtual}* · Dia ${diaAtual} de ${diasNoMes}`,
+    `Meta mensal: *${fmtR(meta)}*`,
+    `Gasto até agora: *${fmtR(gastoMes)}* (ritmo: ${fmtR(ritmoAtual)}/dia)`,
+    `Projeção para o mês: *${fmtR(projecao)}* (${pctMeta}% da meta)`,
+    ``,
+    `Verifique se o orçamento das campanhas está adequado ao objetivo do cliente.`,
+    `<!-- ${chave} -->`,
+  ].join('\n');
+
+  let status = 'enviada';
+  try { await enviarMensagemWhatsapp(destinatarios, mensagem); } catch (e) { status = 'erro'; logger.error({ msg: 'Falha ao enviar ritmo mensal baixo', conta: conta.nome, erro: e.message }); }
+  await Notificacao.create({ contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp', destinatario: destinatarios.join(','), conteudo: mensagem, enviadaEm: new Date(), status });
+  logger.info({ msg: 'Alerta ritmo mensal baixo', conta: conta.nome, gastoMes, meta, ritmoAtual, metaDiaria, pctMeta, status });
+}
 
 /**
  * Verifica se o gasto do mês corrente está no ritmo de ultrapassar a meta mensal
