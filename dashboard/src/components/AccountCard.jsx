@@ -101,7 +101,7 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d, gastoMes, investimentoMensalPlanejado, veredito } = conta.resumo;
+  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d, gasto30dAnterior, gastoMes, investimentoMensalPlanejado, veredito, veredito30d } = conta.resumo;
   const saldo = piorSaldo(saldoPrepago);
   const saldoTexto = saldo ? textoSaldo(saldo) : null;
   const fmtGasto = (v) => `R$ ${(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
@@ -111,13 +111,23 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   const pctMes = temPlano ? Math.round((gastoMes / investimentoMensalPlanejado) * 100) : null;
   const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
 
+  const gasto30dTexto = gasto30d > 0
+    ? `30d: ${fmtGasto(gasto30d)}${var30d != null ? ` (${var30d > 0 ? '+' : ''}${var30d}%)` : ''}`
+    : null;
   const partesGasto = [
     gasto7d > 0 ? `7d: ${fmtGasto(gasto7d)}` : null,
-    gasto30d > 0 ? `30d: ${fmtGasto(gasto30d)}` : null,
+    gasto30dTexto,
   ].filter(Boolean);
   const gastoTexto = !temPlano && partesGasto.length ? partesGasto.join(' · ') : null;
 
-  const vd = veredito ? VEREDITO_UI[veredito.direcao] : null;
+  const vd   = veredito   ? VEREDITO_UI[veredito.direcao]   : null;
+  const vd30 = veredito30d ? VEREDITO_UI[veredito30d.direcao] : null;
+
+  // Variação % do gasto 30d vs. período anterior
+  const var30d = gasto30dAnterior > 0
+    ? Math.round(((gasto30d - gasto30dAnterior) / gasto30dAnterior) * 100)
+    : null;
+
   const linkBm = urlMetaBm(conta);
 
   function iniciarEdicao(e) {
@@ -193,9 +203,17 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
           {vd && (
             <span
               className={`ac-veredito ac-veredito--${vd.tom}`}
-              title={`Tendência (7d vs 7d anterior, ponderada pelos objetivos): ${vd.label} ${veredito.scorePct > 0 ? '+' : ''}${veredito.scorePct}%`}
+              title={`7d vs 7d anterior (${veredito.scorePct > 0 ? '+' : ''}${veredito.scorePct}%): ${vd.label}`}
             >
-              {vd.icon} {vd.label}
+              {vd.icon} 7d
+            </span>
+          )}
+          {vd30 && (
+            <span
+              className={`ac-veredito ac-veredito--${vd30.tom}`}
+              title={`30d vs 30d anterior (${veredito30d.scorePct > 0 ? '+' : ''}${veredito30d.scorePct}%): ${vd30.label}`}
+            >
+              {vd30.icon} 30d
             </span>
           )}
           {alertas.length > 0 && (

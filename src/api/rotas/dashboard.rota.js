@@ -16,7 +16,7 @@ import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS, metricaResultado } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
-import { buscarGastoMes, computarVeredito } from '../../core/analise/veredito.servico.js';
+import { buscarGastoMes, buscarGasto30dAnterior, computarVeredito, computarVeredito30d } from '../../core/analise/veredito.servico.js';
 import { montarDadosResumoBm } from '../../core/relatorio/resumo-diario.servico.js';
 import { redigirMiniResumo } from '../../core/relatorio/resumo-diario.agente.js';
 
@@ -357,13 +357,15 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           .filter((e) => e.tipo === 'campaign')
           .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
 
-        // Gasto real de 7d, 30d, mês corrente + veredito ponderado por objetivos
+        // Gasto real de 7d, 30d, mês corrente + comparativo 30d + vereditos
         const campanhaIds = entidades.filter((e) => e.tipo === 'campaign').map((e) => String(e._id));
-        const [gasto7d, gasto30d, gastoMes, veredito] = await Promise.all([
+        const [gasto7d, gasto30d, gastoMes, gasto30dAnterior, veredito, veredito30d] = await Promise.all([
           buscarGastoPeriodo(campanhaIds, JANELA_7D_HORAS),
           buscarGastoPeriodo(campanhaIds, JANELA_30D_HORAS),
           buscarGastoMes(campanhaIds),
+          buscarGasto30dAnterior(campanhaIds),
           computarVeredito(campanhaIds, conta.perfil),
+          computarVeredito30d(campanhaIds, conta.perfil),
         ]);
 
         // Alertas: entidades com status crítico. Cada alerta tem uma `chave` estável
@@ -419,10 +421,12 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             gastoHoje: gastoPeriodo,
             gasto7d,
             gasto30d,
+            gasto30dAnterior,
             gastoMes,
             investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
             veredito,
+            veredito30d,
             status: statusConta,
             alertas,
             saldoPrepago,

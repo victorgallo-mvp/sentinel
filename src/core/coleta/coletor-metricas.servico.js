@@ -21,9 +21,12 @@ const CONJUNTO_METRICAS_NUMERICAS = new Set(metricasNumericas());
 // Períodos agregados coletados 1×/dia (agregado real da Meta, uma linha por período).
 // 30d é usado pelas métricas deduplicadas (freq/alcance/únicos) e pelo gasto de 30d;
 // 7d é usado pelo gasto de 7d no dashboard.
+// this_month (janelaHoras=744) é usado para o gasto do mês corrente — mais preciso do
+// que somar snapshots diários (que herdam drift de UTC vs. fuso do anunciante).
 const PERIODOS_AGREGADOS = [
-  { datePreset: 'last_7d', janelaHoras: 168 },
-  { datePreset: 'last_30d', janelaHoras: 720 },
+  { datePreset: 'last_7d',    janelaHoras: 168 },
+  { datePreset: 'last_30d',   janelaHoras: 720 },
+  { datePreset: 'this_month', janelaHoras: 744 },
 ];
 
 /**
