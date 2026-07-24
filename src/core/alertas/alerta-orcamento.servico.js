@@ -13,6 +13,7 @@ import { query } from '../../infra/postgres.js';
 // `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
 // Para problemas de pagamento, usamos exclusivamente account_status.
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
+import { buscarGastoMes } from '../analise/veredito.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
@@ -56,7 +57,110 @@ export async function verificarOrcamentosContas() {
     } catch (erro) {
       logger.error({ msg: 'Falha ao verificar orçamentos da conta', contaId: String(conta._id), erro: erro.message });
     }
+    try {
+      await verificarMetaMensalConta(conta);
+    } catch (erro) {
+      logger.error({ msg: 'Falha ao verificar meta mensal da conta', contaId: String(conta._id), erro: erro.message });
+    }
   }
+}
+
+const THRESHOLD_META_MENSAL = 0.10;       // alerta quando projeção > meta + 10%
+const JANELA_RENOTIFICACAO_META = 24;     // renotifica no máximo 1× por dia
+
+/**
+ * Verifica se o gasto do mês corrente está no ritmo de ultrapassar a meta mensal
+ * declarada em `conta.perfil.investimentoMensalPlanejado`. Dispara dois cenários:
+ *   1. Já ultrapassou — urgente.
+ *   2. Projeção até fim do mês supera a meta + threshold — preventivo.
+ * Throttle: 24h. Só funciona para contas com meta cadastrada.
+ */
+async function verificarMetaMensalConta(conta) {
+  const meta = conta.perfil?.investimentoMensalPlanejado;
+  if (!meta || meta <= 0) return;
+
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
+
+  const campanhas = await Entidade.find({
+    contaId: conta._id, tipo: 'campaign', 'configuracoes.monitorada': true,
+  }).select('_id').lean();
+  if (!campanhas.length) return;
+
+  const campanhaIds = campanhas.map((c) => String(c._id));
+  const gastoMes = await buscarGastoMes(campanhaIds);
+  if (gastoMes === 0) return;
+
+  const agora = new Date();
+  const diaAtual = agora.getDate();
+  const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+  const diasRestantes = diasNoMes - diaAtual;
+  const projecao = (gastoMes / diaAtual) * diasNoMes;
+
+  // Formata em pt-BR
+  const fmtR = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const mesAtual = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  let cenario = null;
+  if (gastoMes > meta) {
+    cenario = 'ultrapassou';
+  } else if (projecao > meta * (1 + THRESHOLD_META_MENSAL)) {
+    cenario = 'projecao';
+  }
+  if (!cenario) return;
+
+  // Throttle por cenário + mês — evita spam mas avisa ao mudar de cenário
+  const chaveAlerta = `meta_mensal_${cenario}_${conta._id}_${agora.getFullYear()}_${agora.getMonth()}`;
+  const desde = new Date(Date.now() - JANELA_RENOTIFICACAO_META * 60 * 60 * 1000);
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+    conteudo: new RegExp(chaveAlerta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    enviadaEm: { $gte: desde },
+  });
+  if (jaAvisou) return;
+
+  const pctMeta = Math.round((gastoMes / meta) * 100);
+  const pctProjecao = Math.round((projecao / meta) * 100);
+
+  const mensagem = cenario === 'ultrapassou'
+    ? [
+        `🔴 *Meta mensal ultrapassada — ${conta.nome}*`,
+        ``,
+        `Mês: *${mesAtual}*`,
+        `Meta: *${fmtR(meta)}*`,
+        `Gasto atual: *${fmtR(gastoMes)}* (${pctMeta}% da meta)`,
+        `Restam *${diasRestantes} dias* no mês.`,
+        ``,
+        `Considere pausar campanhas ou ajustar o orçamento com o cliente.`,
+        `<!-- ${chaveAlerta} -->`,
+      ].join('\n')
+    : [
+        `⚠️ *Ritmo de gasto acima do previsto — ${conta.nome}*`,
+        ``,
+        `Mês: *${mesAtual}* · Dia ${diaAtual} de ${diasNoMes}`,
+        `Meta mensal: *${fmtR(meta)}*`,
+        `Gasto até hoje: *${fmtR(gastoMes)}*`,
+        `Projeção para o mês: *${fmtR(projecao)}* (${pctProjecao}% da meta)`,
+        ``,
+        `Reduza o orçamento diário das campanhas para manter dentro da meta.`,
+        `<!-- ${chaveAlerta} -->`,
+      ].join('\n');
+
+  let envioStatus = 'enviada';
+  try {
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
+  } catch (e) {
+    envioStatus = 'erro';
+    logger.error({ msg: 'Falha ao enviar alerta de meta mensal', conta: conta.nome, erro: e.message });
+  }
+
+  await Notificacao.create({
+    contaId: conta._id, tipo: 'alerta_orcamento', canal: 'whatsapp',
+    destinatario: destinatarios.join(','), conteudo: mensagem,
+    enviadaEm: new Date(), status: envioStatus,
+  });
+
+  logger.info({ msg: 'Alerta de meta mensal enviado', conta: conta.nome, cenario, gastoMes, meta, projecao, status: envioStatus });
 }
 
 async function verificarOrcamentosConta(conta) {

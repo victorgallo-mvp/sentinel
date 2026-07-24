@@ -134,6 +134,23 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
       }
     }
 
+    // Para períodos de exatamente ~7d ou ~30d, sobrepõe ROAS e receita com o snapshot
+    // nativo da Meta (janela 168h/720h). Elimina o drift do denominador (spend) causado
+    // por gaps de coleta diária — o agregado nativo da Meta é sempre exato.
+    const diffDias = Math.round((ate - desde) / 86400000);
+    const janelaNativa = diffDias >= 6 && diffDias <= 8 ? 168 : diffDias >= 28 && diffDias <= 32 ? 720 : null;
+    if (janelaNativa) {
+      const rNativo = await query(
+        `SELECT DISTINCT ON (metrica) metrica, valor::float
+         FROM metricas_serie_temporal
+         WHERE entidade_id = $1 AND janela_horas = $2
+           AND metrica IN ('purchase_roas','website_purchase_roas','purchase_revenue','website_purchase_revenue')
+         ORDER BY metrica, coletada_em DESC`,
+        [entidadeId, janelaNativa]
+      );
+      for (const row of rNativo.rows) resultado[row.metrica] = Number(row.valor);
+    }
+
     return resultado;
   }
 
