@@ -160,8 +160,22 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     (porCampanha[entidade_id] ??= {})[metrica] = Number(valor);
   }
 
+  const NOME_METRICA_RESULTADO = {
+    conversions:                      'Conversões',
+    leads:                            'Leads',
+    messaging_conversations_started:  'Conversas WhatsApp',
+    clicks:                           'Cliques',
+    reach:                            'Alcance',
+    impressions:                      'Impressões',
+    video_p100_watched_actions:       'Vídeos concluídos',
+    video_p25_watched_actions:        'Vídeos iniciados',
+  };
+
   const totais = { gasto: 0, impressoes: 0, cliques: 0, conversoes: 0, conversasWpp: 0, leads: 0 };
   const semResultado = [];
+  // Rastreia qual métrica de resultado tem mais volume (determina metricaPrincipal da BM)
+  const volumePorMetrica = {};
+
   for (const [id, m] of Object.entries(porCampanha)) {
     totais.gasto += m.spend ?? 0;
     totais.impressoes += m.impressions ?? 0;
@@ -170,13 +184,26 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     totais.conversasWpp += m.messaging_conversations_started ?? 0;
     totais.leads += m.leads ?? 0;
     const gasto = m.spend ?? 0;
-    // Prefere optimizationGoal do adset quando disponível (mais específico).
-    const metricaAlvo = metricaResultadoEntidade(campanhas.find((c) => String(c._id) === id));
+    const campanha = campanhas.find((c) => String(c._id) === id);
+    const metricaAlvo = metricaResultadoEntidade(campanha);
     const ALERTAVEIS = new Set(['conversions', 'leads', 'messaging_conversations_started']);
-    if (gasto >= LIMIAR_GASTO_SEM_CONVERSAO && ALERTAVEIS.has(metricaAlvo) && (m[metricaAlvo] ?? 0) === 0) {
-      semResultado.push({ nome: nomePorId[id] ?? id, gasto: Number(gasto.toFixed(2)) });
+    const valorAlvo = m[metricaAlvo] ?? 0;
+    // Acumula volume por métrica (pelo gasto — campanhas maiores pesam mais)
+    volumePorMetrica[metricaAlvo] = (volumePorMetrica[metricaAlvo] ?? 0) + gasto;
+    if (gasto >= LIMIAR_GASTO_SEM_CONVERSAO && ALERTAVEIS.has(metricaAlvo) && valorAlvo === 0) {
+      semResultado.push({
+        nome: nomePorId[id] ?? id,
+        gasto: Number(gasto.toFixed(2)),
+        metricaAlvo,
+        nomeMetrica: NOME_METRICA_RESULTADO[metricaAlvo] ?? metricaAlvo,
+      });
     }
   }
+
+  // Métrica principal da BM = aquela que recebeu mais gasto entre as campanhas
+  const metricaPrincipal = Object.entries(volumePorMetrica)
+    .sort(([, a], [, b]) => b - a)[0]?.[0] ?? 'conversions';
+  const nomeMetricaPrincipal = NOME_METRICA_RESULTADO[metricaPrincipal] ?? metricaPrincipal;
 
   // Se ninguém gastou ontem, não manda nada.
   if (totais.gasto === 0) {
@@ -230,6 +257,8 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     bm: nomeBm,
     data: dataStr,
     gerente: contaPerfil?.perfil?.gerenteResponsavel || null,
+    metricaPrincipal,
+    nomeMetricaPrincipal,
     totais: {
       gasto: Number(totais.gasto.toFixed(2)),
       impressoes: totais.impressoes,
@@ -283,7 +312,15 @@ function montarResumoFallback(d) {
     atencao.push(`⚠️ Saldo ${s.nivel}${rw} — ${s.conta}`);
   }
   if (d.semConversao.length) {
-    atencao.push(`⚠️ Gastando sem converter: ${d.semConversao.map((c) => `${c.nome} (${fmt(c.gasto, 'currency')})`).join(', ')}`);
+    // Agrupa por métrica para dar a mensagem certa (ex: "sem conversas" vs "sem leads")
+    const porMetrica = {};
+    for (const c of d.semConversao) {
+      const label = c.nomeMetrica ?? 'resultado';
+      (porMetrica[label] ??= []).push(`${c.nome} (${fmt(c.gasto, 'currency')})`);
+    }
+    for (const [label, nomes] of Object.entries(porMetrica)) {
+      atencao.push(`⚠️ Gastando sem ${label.toLowerCase()}: ${nomes.join(', ')}`);
+    }
   }
   if (d.alertas24h > 0) atencao.push(`⚠️ ${d.alertas24h} alerta(s) nas últimas 24h`);
 
