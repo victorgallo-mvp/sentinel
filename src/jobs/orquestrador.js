@@ -10,7 +10,7 @@
  * - Detecção de anomalias: a cada 2 horas, no minuto 20 (após a coleta)
  * - Sincronização de entidades: a cada 2 horas (minuto 30)
  * - Atualização de baselines: diariamente às 02:00
- * - Resumo diário WhatsApp: todos os dias às 08:00
+ * - Resumo de período WhatsApp: segunda 08:00 (cobre qui-dom) e quinta 08:00 (cobre seg-qua)
  * - Relatório semanal IA: segundas-feiras às 08:00
  * - Limpeza de dados antigos: diariamente às 03:00
  */
@@ -43,7 +43,7 @@ const TAREFAS_CRON = [
   { nome: 'alerta-performance', expressao: '25 * * * *', executar: executarAlertaPerformance },
   { nome: 'sincronizar-entidades', expressao: '30 */2 * * *', executar: executarSincronizacaoEntidades },
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
-  { nome: 'resumo-diario', expressao: '0 8 * * *', executar: executarResumoDiario },
+  { nome: 'resumo-diario', expressao: '0 8 * * 1,4', executar: executarResumoDiario },
   { nome: 'relatorio-semanal', expressao: '0 8 * * 1', executar: enfileirarRelatoriosSemanais, requerIA: true },
   { nome: 'limpeza-dados-antigos', expressao: '0 3 * * *', executar: executarLimpezaDadosAntigos },
 ];

@@ -22,6 +22,12 @@ const THRESHOLD_FREQUENCIA = 3.0;
 const LIMIAR_GASTO_ZERO_CONVERSOES = 30; // R$
 const JANELA_RENOTIFICACAO_HORAS = 24;
 
+// Fadiga de criativo: frequência subiu E CTR caiu → criativo saturado
+const FADIGA_FREQ_DELTA_MIN = 0.3;       // frequência subiu ao menos +0.3x
+const FADIGA_CTR_QUEDA_MIN_PCT = 15;     // CTR caiu ao menos 15% relativo
+const FADIGA_FREQ_MINIMA = 1.8;          // só alerta acima de freq 1.8 (ruído em freq baixa)
+const FADIGA_RENOTIFICACAO_HORAS = 48;   // sinal mais lento — renotifica a cada 48h
+
 // A métrica de 24h é o acumulado de HOJE (date_preset 'today') e zera à meia-noite.
 // Só alertamos com base na coleta mais recente — a coleta roda de hora em hora, então
 // uma janela de 2h cobre um eventual tick perdido. Sem isso, uma leitura velha (ex.: a
@@ -59,11 +65,10 @@ async function verificarPerformanceConta(conta) {
   for (const entidade of entidades) {
     try {
       await verificarFrequenciaSaturacao(conta, entidade, destinatarios);
+      await verificarFadigaCriativo(conta, entidade, destinatarios);
 
       // Resolve a métrica-resultado pelo objetivo da campanha e só alerta
       // se for uma métrica de negócio rastreável (conversão, lead, mensagem).
-      // Isso garante que conta de mensagens não receba "zero conversões"
-      // e conta de leads não receba "zero conversões" quando tem leads.
       const metricaAlvo = metricaResultado(entidade.objetivo);
       if (METRICAS_ALERTAVEIS_ZERO.has(metricaAlvo)) {
         await verificarZeroResultados(conta, entidade, destinatarios, metricaAlvo);
@@ -139,6 +144,103 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
   });
 
   logger.info({ msg: 'Alerta de frequência elevada', conta: conta.nome, entidade: entidade.nome, frequencia: frequencia.toFixed(2), status: envioStatus });
+}
+
+/**
+ * Detecta fadiga de criativo: frequência subiu E CTR caiu entre hoje e ontem.
+ * Compara o último snapshot de 24h de hoje vs. o último de ontem para a entidade.
+ * Ambas as condições precisam ocorrer simultaneamente — uma isolada não basta.
+ */
+async function verificarFadigaCriativo(conta, entidade, destinatarios) {
+  const frescorCutoff = new Date(Date.now() - FRESCOR_MAX_HORAS * 60 * 60 * 1000);
+  const ontemInicio = new Date(); ontemInicio.setDate(ontemInicio.getDate() - 1); ontemInicio.setHours(0, 0, 0, 0);
+  const hojeInicio = new Date(); hojeInicio.setHours(0, 0, 0, 0);
+
+  // Leitura de HOJE (recente)
+  const resHoje = await query(
+    `SELECT DISTINCT ON (metrica) metrica, valor::float
+     FROM metricas_serie_temporal
+     WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('frequency', 'ctr')
+       AND coletada_em >= $2
+     ORDER BY metrica, coletada_em DESC`,
+    [String(entidade._id), frescorCutoff]
+  );
+
+  // Leitura de ONTEM (último snapshot do dia anterior)
+  const resOntem = await query(
+    `SELECT DISTINCT ON (metrica) metrica, valor::float
+     FROM metricas_serie_temporal
+     WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('frequency', 'ctr')
+       AND coletada_em >= $2 AND coletada_em < $3
+     ORDER BY metrica, coletada_em DESC`,
+    [String(entidade._id), ontemInicio, hojeInicio]
+  );
+
+  const hoje = Object.fromEntries(resHoje.rows.map((r) => [r.metrica, Number(r.valor)]));
+  const ontem = Object.fromEntries(resOntem.rows.map((r) => [r.metrica, Number(r.valor)]));
+
+  if (hoje.frequency == null || ontem.frequency == null) return;
+  if (hoje.ctr == null || ontem.ctr == null) return;
+
+  const freqHoje = hoje.frequency;
+  const freqOntem = ontem.frequency;
+  const ctrHoje = hoje.ctr;
+  const ctrOntem = ontem.ctr;
+
+  // Condições: frequência mínima atingida + subiu + CTR caiu
+  if (freqHoje < FADIGA_FREQ_MINIMA) return;
+  if (freqHoje - freqOntem < FADIGA_FREQ_DELTA_MIN) return;
+  if (ctrOntem <= 0) return;
+  const quedaCtrPct = ((ctrOntem - ctrHoje) / ctrOntem) * 100;
+  if (quedaCtrPct < FADIGA_CTR_QUEDA_MIN_PCT) return;
+
+  // Throttle
+  const desde = new Date(Date.now() - FADIGA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
+  const chaveAlerta = `fadiga_criativo_${String(entidade._id)}`;
+  const jaAvisou = await Notificacao.exists({
+    contaId: conta._id,
+    tipo: 'alerta_performance',
+    canal: 'whatsapp',
+    conteudo: new RegExp(chaveAlerta),
+    enviadaEm: { $gte: desde },
+  });
+  if (jaAvisou) return;
+
+  const tipoLabel = entidade.tipo === 'campaign' ? 'Campanha' : 'Conjunto';
+  const mensagem = [
+    `🎨 *Fadiga de criativo detectada*`,
+    ``,
+    `Conta: *${conta.nome}*`,
+    `${tipoLabel}: *${entidade.nome}*`,
+    ``,
+    `Frequência: *${freqOntem.toFixed(2)}×* → *${freqHoje.toFixed(2)}×* (+${(freqHoje - freqOntem).toFixed(2)})`,
+    `CTR: *${ctrOntem.toFixed(2)}%* → *${ctrHoje.toFixed(2)}%* (−${quedaCtrPct.toFixed(0)}%)`,
+    ``,
+    `Frequência subindo enquanto CTR cai indica que a audiência está saturada com o criativo atual.`,
+    `Ações sugeridas: criar novas variações de anúncio ou expandir a audiência.`,
+    `<!-- ${chaveAlerta} -->`,
+  ].join('\n');
+
+  let envioStatus = 'enviada';
+  try {
+    await enviarMensagemWhatsapp(destinatarios, mensagem);
+  } catch (e) {
+    envioStatus = 'erro';
+    logger.error({ msg: 'Falha ao enviar alerta de fadiga de criativo', conta: conta.nome, entidade: entidade.nome, erro: e.message });
+  }
+
+  await Notificacao.create({
+    contaId: conta._id,
+    tipo: 'alerta_performance',
+    entidadeId: entidade._id,
+    canal: 'whatsapp',
+    destinatario: destinatarios.join(','),
+    conteudo: mensagem,
+    enviadaEm: new Date(),
+    status: envioStatus,
+  });
+
+  logger.info({ msg: 'Alerta de fadiga de criativo', conta: conta.nome, entidade: entidade.nome, freqHoje, ctrHoje, quedaCtrPct: quedaCtrPct.toFixed(1), status: envioStatus });
 }
 
 async function verificarZeroResultados(conta, entidade, destinatarios, metricaAlvo) {

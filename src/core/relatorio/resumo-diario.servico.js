@@ -21,7 +21,26 @@ const LIMIAR_GASTO_SEM_CONVERSAO = 30; // R$ — só destaca "gastou sem convert
 const METRICAS = ['spend', 'impressions', 'clicks', 'conversions', 'messaging_conversations_started', 'leads'];
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 
+/**
+ * Determina quantos dias o resumo deve cobrir conforme o dia da semana:
+ *  - Segunda (1): cobre quinta a domingo → 4 dias
+ *  - Quinta  (4): cobre segunda a quarta → 3 dias
+ * Retorna null em outros dias (não envia resumo).
+ */
+function diasAtrasParaResumo() {
+  const dia = new Date().getDay(); // 0=dom … 6=sab
+  if (dia === 1) return 4; // segunda: cobre qui-dom
+  if (dia === 4) return 3; // quinta: cobre seg-qua
+  return null;
+}
+
 export async function enviarResumoDiarioContas() {
+  const diasAtras = diasAtrasParaResumo();
+  if (diasAtras === null) {
+    logger.info({ msg: 'Resumo de período — dia não é segunda nem quinta, pulando' });
+    return;
+  }
+
   const contas = await Conta.find({ ativo: true });
 
   // Consolida por BM: contas que compartilham metaConfig.bmId viram um único resumo.
@@ -34,19 +53,19 @@ export async function enviarResumoDiarioContas() {
 
   for (const [bmId, contasBm] of porBm) {
     try {
-      await enviarResumoDiarioBm(bmId, contasBm);
+      await enviarResumoDiarioBm(bmId, contasBm, diasAtras);
     } catch (erro) {
-      logger.error({ msg: 'Falha ao enviar resumo diário da BM', bmId, erro: erro.message });
+      logger.error({ msg: 'Falha ao enviar resumo da BM', bmId, erro: erro.message });
     }
   }
 }
 
-async function enviarResumoDiarioBm(bmId, contasBm) {
+async function enviarResumoDiarioBm(bmId, contasBm, diasAtras = 1) {
   // Destinatários = união dos das contas da BM (dedup)
   const destinatarios = [...new Set(contasBm.flatMap((c) => resolverDestinatarios(c)))];
   if (!destinatarios.length) return;
 
-  const dados = await montarDadosResumoBm(contasBm);
+  const dados = await montarDadosResumoBm(contasBm, { diasAtras });
   if (!dados) return;
 
   // Texto: IA (com fallback) ou determinístico
@@ -85,11 +104,11 @@ async function enviarResumoDiarioBm(bmId, contasBm) {
 }
 
 /**
- * Agrega os dados do dia anterior para uma BM (conjunto de contas que compartilham
- * o mesmo bmId). Retorna o objeto `dados` para o agente/fallback, ou null se não
- * houver campanhas ou gasto ontem. Exportada para permitir dry-run/testes.
+ * Agrega os dados do período para uma BM. `diasAtras` define quantos dias cobrir:
+ * 1 = só ontem (padrão/mini-resumo), 3 = seg-qua, 4 = qui-dom.
+ * Exportada para dry-run/testes e para o mini-resumo do dashboard.
  */
-export async function montarDadosResumoBm(contasBm) {
+export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
   const contaIds = contasBm.map((c) => c._id);
   const campanhas = await Entidade.find({
     contaId: { $in: contaIds },
@@ -101,25 +120,39 @@ export async function montarDadosResumoBm(contasBm) {
   if (campanhas.length === 0) return null;
 
   const nomeBm = [...new Set(contasBm.map((c) => c.nome))].join(' + ');
-  const ontem = new Date();
-  ontem.setDate(ontem.getDate() - 1);
-  const dataStr = ontem.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  // Período: de `diasAtras` dias atrás (00:00) até hoje (00:00 = exclusive)
+  const inicioPeriodo = new Date(); inicioPeriodo.setDate(inicioPeriodo.getDate() - diasAtras); inicioPeriodo.setHours(0, 0, 0, 0);
+  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+  const fimPeriodo = new Date(inicioHoje.getTime() - 1); // último ms de ontem
+
+  const fmtData = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const dataStr = diasAtras <= 1
+    ? fmtData(new Date(fimPeriodo))
+    : `${fmtData(inicioPeriodo)} a ${fmtData(fimPeriodo)}`;
 
   const ids = campanhas.map((c) => String(c._id));
   const nomePorId    = Object.fromEntries(campanhas.map((c) => [String(c._id), c.nome]));
   const objetivoPorId = Object.fromEntries(campanhas.map((c) => [String(c._id), c.objetivo]));
 
-  // Métricas de ONTEM por campanha (última leitura da janela 24h daquele dia)
-  const inicioOntem = new Date(); inicioOntem.setDate(inicioOntem.getDate() - 1); inicioOntem.setHours(0, 0, 0, 0);
-  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
-
+  // Para cada campanha+métrica: soma o último snapshot de 24h de cada dia no período.
+  // Todas as METRICAS do resumo são counters (spend, clicks, conversions…), então
+  // somar os snapshots diários dá o total correto do período.
   const res = await query(
-    `SELECT DISTINCT ON (entidade_id, metrica) entidade_id, metrica, valor
-     FROM metricas_serie_temporal
-     WHERE entidade_id = ANY($1) AND janela_horas = 24 AND metrica = ANY($2)
-       AND coletada_em >= $3 AND coletada_em < $4
-     ORDER BY entidade_id, metrica, coletada_em DESC`,
-    [ids, METRICAS, inicioOntem, inicioHoje]
+    `WITH ultimas AS (
+       SELECT entidade_id, metrica, date_trunc('day', coletada_em) AS dia, MAX(coletada_em) AS ts
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND janela_horas = 24 AND metrica = ANY($2)
+         AND coletada_em >= $3 AND coletada_em < $4
+       GROUP BY entidade_id, metrica, date_trunc('day', coletada_em)
+     )
+     SELECT u.entidade_id, u.metrica, SUM(m.valor)::float AS valor
+     FROM ultimas u
+     JOIN metricas_serie_temporal m
+       ON m.entidade_id = u.entidade_id AND m.coletada_em = u.ts
+       AND m.metrica = u.metrica AND m.janela_horas = 24
+     GROUP BY u.entidade_id, u.metrica`,
+    [ids, METRICAS, inicioPeriodo, inicioHoje]
   );
 
   const porCampanha = {};
@@ -227,7 +260,7 @@ function montarResumoFallback(d) {
   const t = d.totais;
   const SETA = { melhorou: '📈', estavel: '➖', piorou: '📉' };
   const linhas = [
-    `📊 *Resumo diário — ${d.bm}*`,
+    `📊 *Resumo — ${d.bm}*`,
     `${d.data}` + (d.gerente ? ` · resp.: ${d.gerente}` : ''),
     ``,
     `• Gasto: ${fmt(t.gasto, 'currency')}` + (t.conversoes > 0 ? ` · Conversões: ${fmt(t.conversoes, 'integer')}` : '') + (t.leads > 0 ? ` · Leads: ${fmt(t.leads, 'integer')}` : '') + (t.conversasWpp > 0 ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}` : ''),
