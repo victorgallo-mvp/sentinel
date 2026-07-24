@@ -111,6 +111,11 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
   const pctMes = temPlano ? Math.round((gastoMes / investimentoMensalPlanejado) * 100) : null;
   const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
 
+  // Variação % do gasto 30d vs. período anterior (deve vir antes de gasto30dTexto)
+  const var30d = gasto30dAnterior > 0
+    ? Math.round(((gasto30d - gasto30dAnterior) / gasto30dAnterior) * 100)
+    : null;
+
   const gasto30dTexto = gasto30d > 0
     ? `30d: ${fmtGasto(gasto30d)}${var30d != null ? ` (${var30d > 0 ? '+' : ''}${var30d}%)` : ''}`
     : null;
@@ -122,11 +127,6 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
 
   const vd   = veredito   ? VEREDITO_UI[veredito.direcao]   : null;
   const vd30 = veredito30d ? VEREDITO_UI[veredito30d.direcao] : null;
-
-  // Variação % do gasto 30d vs. período anterior
-  const var30d = gasto30dAnterior > 0
-    ? Math.round(((gasto30d - gasto30dAnterior) / gasto30dAnterior) * 100)
-    : null;
 
   const linkBm = urlMetaBm(conta);
 
