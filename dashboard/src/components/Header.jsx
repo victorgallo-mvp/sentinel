@@ -10,7 +10,7 @@ function IconShield() {
   );
 }
 
-export default function Header({ ultimaAtualizacao, segundos, usuario, dataInicio, dataFim, onPeriodoChange }) {
+export default function Header({ ultimaAtualizacao, segundos, usuario, dataInicio, dataFim, onPeriodoChange, modo, onModo }) {
   const atualStr = ultimaAtualizacao
     ? segundos < 5
       ? 'agora mesmo'
@@ -36,6 +36,21 @@ export default function Header({ ultimaAtualizacao, segundos, usuario, dataInici
           <span className="header-refresh">{atualStr}</span>
         </div>
       </div>
+
+      <nav className="header-nav">
+        <button
+          className={`header-tab${modo === 'monitoramento' ? ' header-tab-ativo' : ''}`}
+          onClick={() => onModo?.('monitoramento')}
+        >
+          Monitoramento
+        </button>
+        <button
+          className={`header-tab${modo === 'dashboard' ? ' header-tab-ativo' : ''}`}
+          onClick={() => onModo?.('dashboard')}
+        >
+          Dashboard
+        </button>
+      </nav>
     </header>
   );
 }

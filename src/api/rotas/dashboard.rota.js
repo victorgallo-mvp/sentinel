@@ -525,6 +525,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       })),
       notificacoes: notificacoes.map((n) => ({
         id: String(n._id),
+        contaId: String(n.contaId),
         contaNome: nomeConta.get(String(n.contaId)) ?? null,
         canal: n.canal,
         conteudo: n.conteudo,

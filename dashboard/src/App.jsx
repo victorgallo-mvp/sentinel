@@ -3,7 +3,10 @@ import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import AccountList from './components/AccountList.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
+import DashboardView from './components/DashboardView.jsx';
 import './App.css';
+
+const LS_MODO = 'sentinela_modo';
 
 const API_URL    = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_MS = 60_000;
@@ -27,6 +30,9 @@ export default function App() {
   const [erro,   setErro]   = useState(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
   const [segundos, setSegundos] = useState(0);
+  const [modo, setModo] = useState(() => {
+    try { return localStorage.getItem(LS_MODO) ?? 'monitoramento'; } catch { return 'monitoramento'; }
+  });
 
   const isoHoje = new Date().toISOString().slice(0, 10);
   const [dataInicio, setDataInicio] = useState(isoHoje);
@@ -101,6 +107,11 @@ export default function App() {
 
   if (!dados) return <div className="loading">Carregando...</div>;
 
+  function handleModo(novoModo) {
+    setModo(novoModo);
+    try { localStorage.setItem(LS_MODO, novoModo); } catch {}
+  }
+
   return (
     <div className="app">
       <Header
@@ -113,24 +124,35 @@ export default function App() {
           setDataInicio(ini);
           setDataFim(fim);
         }}
+        modo={modo}
+        onModo={handleModo}
       />
 
       <main className="main">
-        <AccountList
-          contas={dados.contas}
-          favoritos={favoritos}
-          customNames={customNames}
-          onFavorito={handleFavorito}
-          onRename={handleRename}
-          onRefresh={buscarDados}
-        />
+        {modo === 'dashboard' ? (
+          <DashboardView
+            contas={dados.contas}
+            notificacoes={dados.notificacoes}
+          />
+        ) : (
+          <>
+            <AccountList
+              contas={dados.contas}
+              favoritos={favoritos}
+              customNames={customNames}
+              onFavorito={handleFavorito}
+              onRename={handleRename}
+              onRefresh={buscarDados}
+            />
 
-        <AlertsPanel
-          anomalias={dados.anomalias}
-          investigacoes={dados.investigacoes}
-          notificacoes={dados.notificacoes}
-          stats={dados.stats}
-        />
+            <AlertsPanel
+              anomalias={dados.anomalias}
+              investigacoes={dados.investigacoes}
+              notificacoes={dados.notificacoes}
+              stats={dados.stats}
+            />
+          </>
+        )}
       </main>
 
       <Footer stats={dados.stats} />
