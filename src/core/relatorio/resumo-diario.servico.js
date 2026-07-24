@@ -12,12 +12,13 @@ import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { redigirResumoDiario } from './resumo-diario.agente.js';
 import { computarVeredito, buscarGastoMes } from '../analise/veredito.servico.js';
+import { metricaResultado } from '../../config/metricas.config.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
 
 const JANELA_30D_HORAS = 720;
 const LIMIAR_GASTO_SEM_CONVERSAO = 30; // R$ — só destaca "gastou sem converter" acima disso
-const METRICAS = ['spend', 'impressions', 'clicks', 'conversions', 'messaging_conversations_started'];
+const METRICAS = ['spend', 'impressions', 'clicks', 'conversions', 'messaging_conversations_started', 'leads'];
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 
 export async function enviarResumoDiarioContas() {
@@ -94,7 +95,7 @@ export async function montarDadosResumoBm(contasBm) {
     contaId: { $in: contaIds },
     tipo: 'campaign',
     'configuracoes.monitorada': true,
-  }).select('_id nome status').lean();
+  }).select('_id nome status objetivo').lean();
 
   const campanhasAtivas = campanhas.filter((c) => c.status === 'ACTIVE');
   if (campanhas.length === 0) return null;
@@ -105,7 +106,8 @@ export async function montarDadosResumoBm(contasBm) {
   const dataStr = ontem.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const ids = campanhas.map((c) => String(c._id));
-  const nomePorId = Object.fromEntries(campanhas.map((c) => [String(c._id), c.nome]));
+  const nomePorId    = Object.fromEntries(campanhas.map((c) => [String(c._id), c.nome]));
+  const objetivoPorId = Object.fromEntries(campanhas.map((c) => [String(c._id), c.objetivo]));
 
   // Métricas de ONTEM por campanha (última leitura da janela 24h daquele dia)
   const inicioOntem = new Date(); inicioOntem.setDate(inicioOntem.getDate() - 1); inicioOntem.setHours(0, 0, 0, 0);
@@ -125,18 +127,22 @@ export async function montarDadosResumoBm(contasBm) {
     (porCampanha[entidade_id] ??= {})[metrica] = Number(valor);
   }
 
-  const totais = { gasto: 0, impressoes: 0, cliques: 0, conversoes: 0, conversasWpp: 0 };
-  const semConversao = [];
+  const totais = { gasto: 0, impressoes: 0, cliques: 0, conversoes: 0, conversasWpp: 0, leads: 0 };
+  const semResultado = [];
   for (const [id, m] of Object.entries(porCampanha)) {
     totais.gasto += m.spend ?? 0;
     totais.impressoes += m.impressions ?? 0;
     totais.cliques += m.clicks ?? 0;
     totais.conversoes += m.conversions ?? 0;
     totais.conversasWpp += m.messaging_conversations_started ?? 0;
+    totais.leads += m.leads ?? 0;
     const gasto = m.spend ?? 0;
-    const resultados = (m.conversions ?? 0) + (m.messaging_conversations_started ?? 0);
-    if (gasto >= LIMIAR_GASTO_SEM_CONVERSAO && resultados === 0) {
-      semConversao.push({ nome: nomePorId[id] ?? id, gasto: Number(gasto.toFixed(2)) });
+    // "Sem resultado" só faz sentido para métricas de negócio rastreáveis;
+    // usa a métrica-resultado correta do objetivo da campanha.
+    const metricaAlvo = metricaResultado(objetivoPorId[id]);
+    const ALERTAVEIS = new Set(['conversions', 'leads', 'messaging_conversations_started']);
+    if (gasto >= LIMIAR_GASTO_SEM_CONVERSAO && ALERTAVEIS.has(metricaAlvo) && (m[metricaAlvo] ?? 0) === 0) {
+      semResultado.push({ nome: nomePorId[id] ?? id, gasto: Number(gasto.toFixed(2)) });
     }
   }
 
@@ -149,6 +155,7 @@ export async function montarDadosResumoBm(contasBm) {
   const ctr = totais.impressoes > 0 ? (totais.cliques / totais.impressoes) * 100 : null;
   const cpm = totais.impressoes > 0 ? (totais.gasto / totais.impressoes) * 1000 : null;
   const custoPorConversao = totais.conversoes > 0 ? totais.gasto / totais.conversoes : null;
+  const custoPorLead = totais.leads > 0 ? totais.gasto / totais.leads : null;
 
   // Gasto real de 30d (janela 720, nível campanha)
   const r30 = await query(
@@ -200,10 +207,12 @@ export async function montarDadosResumoBm(contasBm) {
       conversoes: totais.conversoes,
       custoPorConversao: custoPorConversao != null ? Number(custoPorConversao.toFixed(2)) : null,
       conversasWpp: totais.conversasWpp,
+      leads: totais.leads,
+      custoPorLead: custoPorLead != null ? Number(custoPorLead.toFixed(2)) : null,
     },
     campanhasAtivas: campanhasAtivas.length,
     campanhasTotal: campanhas.length,
-    semConversao,
+    semConversao: semResultado,
     saldo,
     alertas24h,
     gasto30d: Number(gasto30d.toFixed(2)),
@@ -221,7 +230,7 @@ function montarResumoFallback(d) {
     `📊 *Resumo diário — ${d.bm}*`,
     `${d.data}` + (d.gerente ? ` · resp.: ${d.gerente}` : ''),
     ``,
-    `• Gasto: ${fmt(t.gasto, 'currency')}` + (t.conversoes > 0 ? ` · Conversões: ${fmt(t.conversoes, 'integer')}` : '') + (t.conversasWpp > 0 ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}` : ''),
+    `• Gasto: ${fmt(t.gasto, 'currency')}` + (t.conversoes > 0 ? ` · Conversões: ${fmt(t.conversoes, 'integer')}` : '') + (t.leads > 0 ? ` · Leads: ${fmt(t.leads, 'integer')}` : '') + (t.conversasWpp > 0 ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}` : ''),
     `• Impressões: ${fmt(t.impressoes, 'integer')} · CTR: ${t.ctr != null ? fmt(t.ctr, 'percent') : '—'} · CPM: ${t.cpm != null ? fmt(t.cpm, 'currency') : '—'}`,
     `• Campanhas ativas: ${d.campanhasAtivas}/${d.campanhasTotal}`,
   ];
