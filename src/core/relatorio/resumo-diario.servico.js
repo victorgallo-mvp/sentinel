@@ -18,7 +18,11 @@ import { logger } from '../../infra/logger.js';
 
 const JANELA_30D_HORAS = 720;
 const LIMIAR_GASTO_SEM_CONVERSAO = 30; // R$ — só destaca "gastou sem converter" acima disso
-const METRICAS = ['spend', 'impressions', 'clicks', 'conversions', 'messaging_conversations_started', 'leads'];
+const METRICAS = [
+  'spend', 'impressions', 'reach', 'clicks',
+  'conversions', 'messaging_conversations_started', 'leads',
+  'video_thruplay_watched_actions', 'video_p100_watched_actions',
+];
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 
 /**
@@ -167,11 +171,12 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     clicks:                           'Cliques',
     reach:                            'Alcance',
     impressions:                      'Impressões',
+    video_thruplay_watched_actions:   'ThruPlay',
     video_p100_watched_actions:       'Vídeos concluídos',
     video_p25_watched_actions:        'Vídeos iniciados',
   };
 
-  const totais = { gasto: 0, impressoes: 0, cliques: 0, conversoes: 0, conversasWpp: 0, leads: 0 };
+  const totais = { gasto: 0, impressoes: 0, alcance: 0, cliques: 0, conversoes: 0, conversasWpp: 0, leads: 0, thruplay: 0, videosConcluidos: 0 };
   const semResultado = [];
   // Rastreia qual métrica de resultado tem mais volume (determina metricaPrincipal da BM)
   const volumePorMetrica = {};
@@ -179,10 +184,13 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
   for (const [id, m] of Object.entries(porCampanha)) {
     totais.gasto += m.spend ?? 0;
     totais.impressoes += m.impressions ?? 0;
+    totais.alcance += m.reach ?? 0;
     totais.cliques += m.clicks ?? 0;
     totais.conversoes += m.conversions ?? 0;
     totais.conversasWpp += m.messaging_conversations_started ?? 0;
     totais.leads += m.leads ?? 0;
+    totais.thruplay += m.video_thruplay_watched_actions ?? 0;
+    totais.videosConcluidos += m.video_p100_watched_actions ?? 0;
     const gasto = m.spend ?? 0;
     const campanha = campanhas.find((c) => String(c._id) === id);
     const metricaAlvo = metricaResultadoEntidade(campanha);
@@ -265,11 +273,14 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
       cliques: totais.cliques,
       ctr: ctr != null ? Number(ctr.toFixed(2)) : null,
       cpm: cpm != null ? Number(cpm.toFixed(2)) : null,
+      alcance: totais.alcance,
       conversoes: totais.conversoes,
       custoPorConversao: custoPorConversao != null ? Number(custoPorConversao.toFixed(2)) : null,
       conversasWpp: totais.conversasWpp,
       leads: totais.leads,
       custoPorLead: custoPorLead != null ? Number(custoPorLead.toFixed(2)) : null,
+      thruplay: totais.thruplay,
+      videosConcluidos: totais.videosConcluidos,
     },
     campanhasAtivas: campanhasAtivas.length,
     campanhasTotal: campanhas.length,
@@ -291,7 +302,13 @@ function montarResumoFallback(d) {
     `📊 *Resumo — ${d.bm}*`,
     `${d.data}` + (d.gerente ? ` · resp.: ${d.gerente}` : ''),
     ``,
-    `• Gasto: ${fmt(t.gasto, 'currency')}` + (t.conversoes > 0 ? ` · Conversões: ${fmt(t.conversoes, 'integer')}` : '') + (t.leads > 0 ? ` · Leads: ${fmt(t.leads, 'integer')}` : '') + (t.conversasWpp > 0 ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}` : ''),
+    `• Gasto: ${fmt(t.gasto, 'currency')}` +
+      (t.conversoes > 0     ? ` · Conversões: ${fmt(t.conversoes, 'integer')}`          : '') +
+      (t.leads > 0          ? ` · Leads: ${fmt(t.leads, 'integer')}`                   : '') +
+      (t.conversasWpp > 0   ? ` · Conversas WPP: ${fmt(t.conversasWpp, 'integer')}`    : '') +
+      (t.thruplay > 0       ? ` · ThruPlay: ${fmt(t.thruplay, 'integer')}`             : '') +
+      (t.videosConcluidos > 0 && t.thruplay === 0 ? ` · Vídeos completos: ${fmt(t.videosConcluidos, 'integer')}` : '') +
+      (t.alcance > 0 && t.conversoes === 0 && t.conversasWpp === 0 && t.leads === 0 && t.thruplay === 0 ? ` · Alcance: ${fmt(t.alcance, 'integer')}` : ''),
     `• Impressões: ${fmt(t.impressoes, 'integer')} · CTR: ${t.ctr != null ? fmt(t.ctr, 'percent') : '—'} · CPM: ${t.cpm != null ? fmt(t.cpm, 'currency') : '—'}`,
     `• Campanhas ativas: ${d.campanhasAtivas}/${d.campanhasTotal}`,
   ];

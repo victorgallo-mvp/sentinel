@@ -36,7 +36,12 @@ const FRESCOR_MAX_HORAS = 2;
 
 // Métricas de resultado que fazem sentido ter alerta de "zero resultados com gasto".
 // Cliques e alcance não entram — são métricas de entrega, não de resultado de negócio.
-const METRICAS_ALERTAVEIS_ZERO = new Set(['conversions', 'leads', 'messaging_conversations_started']);
+const METRICAS_ALERTAVEIS_ZERO = new Set([
+  'conversions',
+  'leads',
+  'messaging_conversations_started',
+  'video_thruplay_watched_actions',
+]);
 
 export async function verificarPerformance() {
   const contas = await Conta.find({ ativo: true });

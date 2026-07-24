@@ -75,12 +75,23 @@ export async function buscarGasto30dAnterior(campanhaIds) {
  * @returns {Promise<{direcao, scorePct, detalhes}|null>}
  */
 export async function computarVeredito30d(campanhaIds, perfil) {
-  const objetivos = resolverObjetivosConta(perfil);
-  if (!objetivos.length || !campanhaIds?.length) return null;
+  let objetivos = resolverObjetivosConta(perfil);
+  if (!campanhaIds?.length) return null;
 
   const fim = new Date();
   const ini = new Date(fim); ini.setDate(ini.getDate() - 30);
   const iniAnt = new Date(ini); iniAnt.setDate(iniAnt.getDate() - 30);
+
+  if (!objetivos.length) {
+    for (const candidato of AUTO_DETECT_ORDEM) {
+      const total = await agregarResultadoPeriodo(campanhaIds, candidato.metricaResultado, ini, fim);
+      if (total > 0) {
+        objetivos = [{ ordem: 1, chave: 'auto', ...candidato, peso: 1 }];
+        break;
+      }
+    }
+    if (!objetivos.length) return null;
+  }
 
   let somaPonderada = 0;
   let pesoTotal = 0;
@@ -103,18 +114,42 @@ export async function computarVeredito30d(campanhaIds, perfil) {
   return { direcao, scorePct: Number(scorePct.toFixed(1)), detalhes };
 }
 
+// Ordem de prioridade para auto-detecção quando não há objetivos declarados.
+// A primeira métrica com valor > 0 no período é usada.
+const AUTO_DETECT_ORDEM = [
+  { metricaResultado: 'messaging_conversations_started', rotulo: 'conversas' },
+  { metricaResultado: 'leads',                           rotulo: 'leads' },
+  { metricaResultado: 'conversions',                     rotulo: 'conversões' },
+  { metricaResultado: 'video_thruplay_watched_actions',  rotulo: 'ThruPlay' },
+  { metricaResultado: 'clicks',                          rotulo: 'cliques' },
+  { metricaResultado: 'reach',                           rotulo: 'alcance' },
+];
+
 /**
  * @param {string[]} campanhaIds
  * @param {object} perfil - conta.perfil (com objetivos)
  * @returns {Promise<{direcao, scorePct, detalhes}|null>}
  */
 export async function computarVeredito(campanhaIds, perfil) {
-  const objetivos = resolverObjetivosConta(perfil);
-  if (!objetivos.length || !campanhaIds?.length) return null;
+  let objetivos = resolverObjetivosConta(perfil);
+  if (!campanhaIds?.length) return null;
 
   const fim = new Date();
   const ini = new Date(fim); ini.setDate(ini.getDate() - 7);
   const iniAnt = new Date(ini); iniAnt.setDate(iniAnt.getDate() - 7);
+
+  // Auto-detecção: conta sem objetivos configurados — usa a primeira métrica
+  // com dados reais no período recente para não retornar null sem necessidade.
+  if (!objetivos.length) {
+    for (const candidato of AUTO_DETECT_ORDEM) {
+      const total = await agregarResultadoPeriodo(campanhaIds, candidato.metricaResultado, ini, fim);
+      if (total > 0) {
+        objetivos = [{ ordem: 1, chave: 'auto', ...candidato, peso: 1 }];
+        break;
+      }
+    }
+    if (!objetivos.length) return null;
+  }
 
   let somaPonderada = 0;
   let pesoTotal = 0;

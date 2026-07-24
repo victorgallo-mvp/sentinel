@@ -87,10 +87,12 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
     push('website_purchase_roas', receitaWebsite / gasto);
   }
 
-  push('video_p25_watched_actions', extrairValorAction(linha.video_p25_watched_actions, 'video_view'));
-  push('video_p50_watched_actions', extrairValorAction(linha.video_p50_watched_actions, 'video_view'));
-  push('video_p75_watched_actions', extrairValorAction(linha.video_p75_watched_actions, 'video_view'));
-  push('video_p100_watched_actions', extrairValorAction(linha.video_p100_watched_actions, 'video_view'));
+  push('video_p25_watched_actions',     extrairValorAction(linha.video_p25_watched_actions,     'video_view'));
+  push('video_p50_watched_actions',     extrairValorAction(linha.video_p50_watched_actions,     'video_view'));
+  push('video_p75_watched_actions',     extrairValorAction(linha.video_p75_watched_actions,     'video_view'));
+  push('video_p100_watched_actions',    extrairValorAction(linha.video_p100_watched_actions,    'video_view'));
+  // ThruPlay: assistiu ≥15s ou ≥97% do vídeo — campo correto para campanhas THRUPLAY
+  push('video_thruplay_watched_actions', extrairValorAction(linha.video_thruplay_watched_actions, 'video_view'));
 
   // Rankings são enums — não vão pra série temporal (coluna NUMERIC), mas
   // ficam disponíveis pro agente via tools.
@@ -127,6 +129,7 @@ export function agregarLinhasHorarias(linhas) {
     video_p50_watched_actions: 0,
     video_p75_watched_actions: 0,
     video_p100_watched_actions: 0,
+    video_thruplay_watched_actions: 0,
   };
 
   const somarMapa = (mapa, lista) => {
@@ -167,10 +170,11 @@ export function agregarLinhasHorarias(linhas) {
     cpp: reach > 0 ? (spend / reach) * 1000 : 0,
     actions: [...actionsTotais.entries()].map(([action_type, value]) => ({ action_type, value })),
     action_values: [...actionValuesTotais.entries()].map(([action_type, value]) => ({ action_type, value })),
-    video_p25_watched_actions: [{ action_type: 'video_view', value: videos.video_p25_watched_actions }],
-    video_p50_watched_actions: [{ action_type: 'video_view', value: videos.video_p50_watched_actions }],
-    video_p75_watched_actions: [{ action_type: 'video_view', value: videos.video_p75_watched_actions }],
-    video_p100_watched_actions: [{ action_type: 'video_view', value: videos.video_p100_watched_actions }],
+    video_p25_watched_actions:     [{ action_type: 'video_view', value: videos.video_p25_watched_actions }],
+    video_p50_watched_actions:     [{ action_type: 'video_view', value: videos.video_p50_watched_actions }],
+    video_p75_watched_actions:     [{ action_type: 'video_view', value: videos.video_p75_watched_actions }],
+    video_p100_watched_actions:    [{ action_type: 'video_view', value: videos.video_p100_watched_actions }],
+    video_thruplay_watched_actions:[{ action_type: 'video_view', value: videos.video_thruplay_watched_actions }],
     // Rankings não fazem sentido agregados — fica o da última hora disponível.
     quality_ranking: linhas[linhas.length - 1]?.quality_ranking ?? null,
     engagement_rate_ranking: linhas[linhas.length - 1]?.engagement_rate_ranking ?? null,

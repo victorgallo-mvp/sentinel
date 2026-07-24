@@ -256,6 +256,15 @@ export const CATALOGO_METRICAS = {
     relevancia: 'media',
   },
 
+  video_thruplay_watched_actions: {
+    nome: 'ThruPlay (≥15s ou ≥97%)',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'critica', // métrica oficial de resultado para campanhas THRUPLAY
+  },
+
   // ===== Qualidade (rankings) =====
   quality_ranking: {
     nome: 'Quality Ranking',
@@ -314,7 +323,10 @@ const RESULTADO_POR_OBJETIVO = {
   OUTCOME_SALES:         'conversions',
   OUTCOME_LEADS:         'leads',
   OUTCOME_APP_PROMOTION: 'conversions',
-  OUTCOME_ENGAGEMENT:    'messaging_conversations_started',
+  // OUTCOME_ENGAGEMENT é genérico (post, curtidas, mensagens, eventos).
+  // Sem optimizationGoal, usamos clicks como fallback razoável — quando o
+  // adset tiver optimizationGoal populado, metricaResultadoEntidade() sobrescreve.
+  OUTCOME_ENGAGEMENT:    'clicks',
   OUTCOME_TRAFFIC:       'clicks',
   OUTCOME_AWARENESS:     'reach',
   OUTCOME_REACH:         'reach',
@@ -332,7 +344,7 @@ export function metricaResultado(objetivo) {
  * Retorna null se o goal não for reconhecido ou mapeável (usar metricaResultado como fallback).
  */
 const RESULTADO_POR_OPTIMIZATION_GOAL = {
-  THRUPLAY:              'video_p100_watched_actions', // 97%+ ou 15s — p100 é o mais próximo coletado
+  THRUPLAY:              'video_thruplay_watched_actions', // campo oficial da Meta para ThruPlay
   VIDEO_VIEWS:           'video_p25_watched_actions',
   POST_ENGAGEMENT:       'clicks',
   PAGE_LIKES:            'reach',
