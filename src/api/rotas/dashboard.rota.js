@@ -19,6 +19,7 @@ import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
 import { buscarGastoMes, buscarGasto30dAnterior, computarVeredito, computarVeredito30d } from '../../core/analise/veredito.servico.js';
 import { montarDadosResumoBm } from '../../core/relatorio/resumo-diario.servico.js';
 import { redigirMiniResumo } from '../../core/relatorio/resumo-diario.agente.js';
+import { listarContasAnuncio } from '../../core/coleta/meta-api.cliente.js';
 
 // Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
 const METRICAS_COUNTER = new Set(
@@ -432,6 +433,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
             investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
             objetivos: (conta.perfil?.objetivos ?? []).map((o) => ({ ordem: o.ordem, chave: o.chave })),
+            metasPersonalizadas: conta.perfil?.metasPersonalizadas ?? [],
+          },
+          metaConfig: {
+            contasAnuncioIds: conta.metaConfig?.contasAnuncioIds ?? [],
           },
           entidades: dadosEntidades,
           resumo: {
@@ -657,6 +662,108 @@ rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, 
     await Conta.findByIdAndUpdate(contaId, { $set: set });
     const atualizada = await Conta.findById(contaId).select('perfil').lean();
     res.json({ ok: true, perfil: atualizada.perfil });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Métricas disponíveis para metas personalizadas ──────────────────────────
+// Subconjunto curado do catálogo: apenas métricas numéricas que fazem sentido
+// como threshold de alerta (excluir derivadas sem snapshot e métricas de entrega pura).
+const METRICAS_ALERTAVEIS_META = [
+  { chave: 'purchase_roas',         nome: 'ROAS de compra',      unidade: 'multiplier', operadorPadrao: 'acima_de',  janelas: ['7d', '30d'] },
+  { chave: 'website_purchase_roas', nome: 'ROAS de compra (site)',unidade: 'multiplier', operadorPadrao: 'acima_de',  janelas: ['7d', '30d'] },
+  { chave: 'ctr',                   nome: 'CTR',                  unidade: 'percent',    operadorPadrao: 'acima_de',  janelas: ['1d', '7d']  },
+  { chave: 'cpm',                   nome: 'CPM',                  unidade: 'currency',   operadorPadrao: 'abaixo_de', janelas: ['1d', '7d']  },
+  { chave: 'cpc',                   nome: 'CPC',                  unidade: 'currency',   operadorPadrao: 'abaixo_de', janelas: ['1d', '7d']  },
+  { chave: 'frequency',             nome: 'Frequência 30d',       unidade: 'decimal',    operadorPadrao: 'abaixo_de', janelas: ['30d']       },
+  { chave: 'leads',                 nome: 'Leads',                unidade: 'integer',    operadorPadrao: 'acima_de',  janelas: ['1d', '7d']  },
+  { chave: 'conversions',           nome: 'Conversões',           unidade: 'integer',    operadorPadrao: 'acima_de',  janelas: ['1d', '7d']  },
+  { chave: 'messaging_conversations_started', nome: 'Conversas WPP', unidade: 'integer', operadorPadrao: 'acima_de', janelas: ['1d', '7d'] },
+];
+
+rotaDashboard.get('/metricas/catalogo-metas', autenticarDashboard, (req, res) => {
+  corsHeaders(res);
+  res.json({ metricas: METRICAS_ALERTAVEIS_META });
+});
+
+// ── Contas de anúncio disponíveis na BM (para seleção de monitoramento) ─────
+rotaDashboard.get('/contas/:contaId/contas-anuncio', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    const { bmId, systemUserToken, contasAnuncioIds } = conta.metaConfig;
+    const selecionadas = new Set(contasAnuncioIds ?? []);
+
+    const disponiveis = await listarContasAnuncio(bmId, systemUserToken);
+    const resultado = disponiveis.map((c) => ({ ...c, selecionada: selecionadas.has(c.id) }));
+    res.json({ contas: resultado });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Atualizar contas de anúncio monitoradas ───────────────────────────────────
+// body: { contasAnuncioIds: string[] }
+rotaDashboard.patch('/contas/:contaId/contas-anuncio', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    const { contasAnuncioIds } = req.body;
+    if (!Array.isArray(contasAnuncioIds) || contasAnuncioIds.length === 0) {
+      return res.status(400).json({ erro: 'contasAnuncioIds deve ser um array não-vazio' });
+    }
+    const ids = contasAnuncioIds.map(String).filter(Boolean);
+    await Conta.findByIdAndUpdate(contaId, { $set: { 'metaConfig.contasAnuncioIds': ids } });
+    res.json({ ok: true, contasAnuncioIds: ids });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ── Metas personalizadas da conta ─────────────────────────────────────────────
+// body: { metasPersonalizadas: [{metrica, operador, valor, janela, ativo}] }
+rotaDashboard.patch('/contas/:contaId/metas', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { contaId } = req.params;
+    if (!req.usuario.superAdmin && !req.usuario.contaIds.includes(contaId)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta conta' });
+    }
+    const conta = await Conta.findById(contaId).lean();
+    if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
+
+    const { metasPersonalizadas } = req.body;
+    if (!Array.isArray(metasPersonalizadas)) {
+      return res.status(400).json({ erro: 'metasPersonalizadas deve ser um array' });
+    }
+
+    const chavesValidas = new Set(METRICAS_ALERTAVEIS_META.map((m) => m.chave));
+    const validas = metasPersonalizadas
+      .filter((m) => m && chavesValidas.has(m.metrica) && ['abaixo_de', 'acima_de'].includes(m.operador))
+      .filter((m) => Number.isFinite(Number(m.valor)) && Number(m.valor) > 0)
+      .map((m) => ({
+        metrica:  m.metrica,
+        operador: m.operador,
+        valor:    Number(m.valor),
+        janela:   ['1d', '7d', '30d'].includes(m.janela) ? m.janela : '7d',
+        ativo:    m.ativo !== false,
+      }));
+
+    await Conta.findByIdAndUpdate(contaId, { $set: { 'perfil.metasPersonalizadas': validas } });
+    res.json({ ok: true, metasPersonalizadas: validas });
   } catch (erro) {
     next(erro);
   }

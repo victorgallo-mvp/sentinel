@@ -50,7 +50,122 @@
 }
 .pc-salvar:disabled { opacity: 0.6; cursor: default; }
 .pc-msg { font-size: var(--fs-xs); color: var(--text-subtle); }
+.pc-msg-erro { font-size: var(--fs-xs); color: var(--color-danger, #e55); }
+
+/* ── Seções ─────────────────────────────────────────────────────────────── */
+.pc-divisor {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+.pc-secao-titulo {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pc-subtitulo {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  margin: 0;
+}
+
+/* ── Contas de anúncio ──────────────────────────────────────────────────── */
+.pc-contas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pc-conta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.pc-conta-nome {
+  color: var(--text);
+  flex: 1;
+}
+
+.pc-conta-id {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  font-family: var(--font-mono, monospace);
+}
+
+/* ── Metas personalizadas ───────────────────────────────────────────────── */
+.pc-metas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pc-meta-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  gap: var(--sp-2);
+}
+
+.pc-meta-item.pc-meta-inativa {
+  opacity: 0.5;
+}
+
+.pc-meta-desc {
+  flex: 1;
+  color: var(--text);
+}
+
+.pc-meta-acoes {
+  display: flex;
+  gap: 6px;
+}
+
+.pc-btn-mini {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.pc-btn-remover {
+  color: var(--color-danger, #e55);
+  border-color: var(--color-danger, #e55);
+}
+
+.pc-nova-meta {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pc-select-meta,
+.pc-input-meta {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.pc-select-meta { min-width: 140px; }
+.pc-input-meta  { width: 90px; }
 
 @media (max-width: 640px) {
   .pc-linha, .pc-objetivos { grid-template-columns: 1fr; }
+  .pc-nova-meta { flex-direction: column; align-items: stretch; }
+  .pc-select-meta, .pc-input-meta { width: 100%; min-width: unset; }
 }

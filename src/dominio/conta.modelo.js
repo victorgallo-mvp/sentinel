@@ -99,11 +99,25 @@ const objetivoContaSchema = new Schema(
   { _id: false }
 );
 
+// Meta personalizada de performance: usuário define métrica + threshold + direção.
+// Alerta dispara quando a condição é violada (ex: ROAS 7d caiu abaixo de 10x).
+const metaPersonalizadaSchema = new Schema(
+  {
+    metrica:  { type: String, required: true },                              // chave do CATALOGO_METRICAS
+    operador: { type: String, enum: ['abaixo_de', 'acima_de'], required: true },
+    valor:    { type: Number, required: true },
+    janela:   { type: String, enum: ['1d', '7d', '30d'], default: '7d' },
+    ativo:    { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
 const perfilSchema = new Schema(
   {
-    gerenteResponsavel: { type: String, default: '' },
+    gerenteResponsavel:          { type: String, default: '' },
     investimentoMensalPlanejado: { type: Number, default: null }, // R$/mês
-    objetivos: { type: [objetivoContaSchema], default: [] },
+    objetivos:                   { type: [objetivoContaSchema], default: [] },
+    metasPersonalizadas:         { type: [metaPersonalizadaSchema], default: [] },
   },
   { _id: false }
 );

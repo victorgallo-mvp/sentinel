@@ -22,11 +22,10 @@ const THRESHOLD_FREQUENCIA = 3.0;
 const LIMIAR_GASTO_ZERO_CONVERSOES = 30; // R$
 const JANELA_RENOTIFICACAO_HORAS = 24;
 
-// Fadiga de criativo: frequência subiu E CTR caiu → criativo saturado
-const FADIGA_FREQ_DELTA_MIN = 0.3;       // frequência subiu ao menos +0.3x
-const FADIGA_CTR_QUEDA_MIN_PCT = 15;     // CTR caiu ao menos 15% relativo
-const FADIGA_FREQ_MINIMA = 1.8;          // só alerta acima de freq 1.8 (ruído em freq baixa)
-const FADIGA_RENOTIFICACAO_HORAS = 48;   // sinal mais lento — renotifica a cada 48h
+// Fadiga de criativo: frequência acumulada 30d alta E CTR 7d caindo vs 7d anterior
+const FADIGA_FREQ_30D_MINIMA = 3.0;      // frequência acumulada 30d >= 3x → audiência saturou
+const FADIGA_CTR_QUEDA_MIN_PCT = 15;     // CTR 7d caiu >= 15% relativo vs 7d anterior
+const FADIGA_RENOTIFICACAO_HORAS = 48;   // sinal lento — renotifica a cada 48h
 
 // A métrica de 24h é o acumulado de HOJE (date_preset 'today') e zera à meia-noite.
 // Só alertamos com base na coleta mais recente — a coleta roda de hora em hora, então
@@ -77,6 +76,13 @@ async function verificarPerformanceConta(conta) {
       logger.warn({ msg: 'Falha ao verificar performance da entidade', entidadeId: String(entidade._id), nome: entidade.nome, erro: erro.message });
     }
   }
+
+  // Metas personalizadas são verificadas no nível da conta (não por entidade),
+  // usando IDs de campanhas ativas como escopo para agregar as métricas.
+  const campanhaIds = entidades
+    .filter((e) => e.tipo === 'campaign')
+    .map((e) => String(e._id));
+  await verificarMetasPersonalizadas(conta, campanhaIds);
 }
 
 async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
@@ -147,56 +153,65 @@ async function verificarFrequenciaSaturacao(conta, entidade, destinatarios) {
 }
 
 /**
- * Detecta fadiga de criativo: frequência subiu E CTR caiu entre hoje e ontem.
- * Compara o último snapshot de 24h de hoje vs. o último de ontem para a entidade.
- * Ambas as condições precisam ocorrer simultaneamente — uma isolada não basta.
+ * Detecta fadiga de criativo usando métricas acumuladas:
+ * - Frequência 30d (janela 720h) >= threshold: audiência viu o anúncio muitas vezes
+ * - CTR 7d (cliques/impressões dos últimos 7 dias) caiu >= 15% vs 7d anterior
+ * Ambas as condições precisam ocorrer simultaneamente.
  */
 async function verificarFadigaCriativo(conta, entidade, destinatarios) {
-  const frescorCutoff = new Date(Date.now() - FRESCOR_MAX_HORAS * 60 * 60 * 1000);
-  const ontemInicio = new Date(); ontemInicio.setDate(ontemInicio.getDate() - 1); ontemInicio.setHours(0, 0, 0, 0);
-  const hojeInicio = new Date(); hojeInicio.setHours(0, 0, 0, 0);
+  const entidadeId = String(entidade._id);
 
-  // Leitura de HOJE (recente)
-  const resHoje = await query(
-    `SELECT DISTINCT ON (metrica) metrica, valor::float
-     FROM metricas_serie_temporal
-     WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('frequency', 'ctr')
-       AND coletada_em >= $2
-     ORDER BY metrica, coletada_em DESC`,
-    [String(entidade._id), frescorCutoff]
+  // 1. Frequência acumulada 30d (snapshot nativo da Meta — deduplica por usuário)
+  const resFreq = await query(
+    `SELECT valor::float FROM metricas_serie_temporal
+     WHERE entidade_id = $1 AND janela_horas = 720 AND metrica = 'frequency'
+     ORDER BY coletada_em DESC LIMIT 1`,
+    [entidadeId]
   );
+  if (!resFreq.rows.length) return;
+  const freq30d = Number(resFreq.rows[0].valor);
+  if (freq30d < FADIGA_FREQ_30D_MINIMA) return;
 
-  // Leitura de ONTEM (último snapshot do dia anterior)
-  const resOntem = await query(
-    `SELECT DISTINCT ON (metrica) metrica, valor::float
-     FROM metricas_serie_temporal
-     WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('frequency', 'ctr')
-       AND coletada_em >= $2 AND coletada_em < $3
-     ORDER BY metrica, coletada_em DESC`,
-    [String(entidade._id), ontemInicio, hojeInicio]
-  );
+  // 2. CTR 7d atual vs 7d anterior — calcula via soma de snapshots diários (24h)
+  //    CTR ponderado: cliques_totais / impressões_totais × 100
+  const agora = new Date();
+  const ini7 = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const ini14 = new Date(agora.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const hoje = Object.fromEntries(resHoje.rows.map((r) => [r.metrica, Number(r.valor)]));
-  const ontem = Object.fromEntries(resOntem.rows.map((r) => [r.metrica, Number(r.valor)]));
+  const ctrPeriodo = async (de, ate) => {
+    const r = await query(
+      `WITH dias AS (
+         SELECT date_trunc('day', coletada_em) AS d, MAX(coletada_em) AS ts
+         FROM metricas_serie_temporal
+         WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('clicks', 'impressions')
+           AND coletada_em >= $2 AND coletada_em < $3
+         GROUP BY date_trunc('day', coletada_em)
+       )
+       SELECT m.metrica, SUM(m.valor)::float AS total
+       FROM dias
+       JOIN metricas_serie_temporal m
+         ON m.entidade_id = $1 AND m.coletada_em = dias.ts
+         AND m.metrica IN ('clicks', 'impressions') AND m.janela_horas = 24
+       GROUP BY m.metrica`,
+      [entidadeId, de, ate]
+    );
+    const vals = Object.fromEntries(r.rows.map((row) => [row.metrica, Number(row.total)]));
+    if (!vals.impressions || vals.impressions === 0) return null;
+    return (vals.clicks / vals.impressions) * 100;
+  };
 
-  if (hoje.frequency == null || ontem.frequency == null) return;
-  if (hoje.ctr == null || ontem.ctr == null) return;
+  const [ctrAtual, ctrAnterior] = await Promise.all([
+    ctrPeriodo(ini7, agora),
+    ctrPeriodo(ini14, ini7),
+  ]);
 
-  const freqHoje = hoje.frequency;
-  const freqOntem = ontem.frequency;
-  const ctrHoje = hoje.ctr;
-  const ctrOntem = ontem.ctr;
-
-  // Condições: frequência mínima atingida + subiu + CTR caiu
-  if (freqHoje < FADIGA_FREQ_MINIMA) return;
-  if (freqHoje - freqOntem < FADIGA_FREQ_DELTA_MIN) return;
-  if (ctrOntem <= 0) return;
-  const quedaCtrPct = ((ctrOntem - ctrHoje) / ctrOntem) * 100;
+  if (ctrAtual == null || ctrAnterior == null || ctrAnterior === 0) return;
+  const quedaCtrPct = ((ctrAnterior - ctrAtual) / ctrAnterior) * 100;
   if (quedaCtrPct < FADIGA_CTR_QUEDA_MIN_PCT) return;
 
-  // Throttle
+  // 3. Throttle
   const desde = new Date(Date.now() - FADIGA_RENOTIFICACAO_HORAS * 60 * 60 * 1000);
-  const chaveAlerta = `fadiga_criativo_${String(entidade._id)}`;
+  const chaveAlerta = `fadiga_criativo_${entidadeId}`;
   const jaAvisou = await Notificacao.exists({
     contaId: conta._id,
     tipo: 'alerta_performance',
@@ -213,11 +228,11 @@ async function verificarFadigaCriativo(conta, entidade, destinatarios) {
     `Conta: *${conta.nome}*`,
     `${tipoLabel}: *${entidade.nome}*`,
     ``,
-    `Frequência: *${freqOntem.toFixed(2)}×* → *${freqHoje.toFixed(2)}×* (+${(freqHoje - freqOntem).toFixed(2)})`,
-    `CTR: *${ctrOntem.toFixed(2)}%* → *${ctrHoje.toFixed(2)}%* (−${quedaCtrPct.toFixed(0)}%)`,
+    `Frequência 30d: *${freq30d.toFixed(2)}×* (audiência viu o anúncio ${freq30d.toFixed(1)} vezes em média)`,
+    `CTR 7d: *${ctrAnterior.toFixed(2)}%* → *${ctrAtual.toFixed(2)}%* (−${quedaCtrPct.toFixed(0)}%)`,
     ``,
-    `Frequência subindo enquanto CTR cai indica que a audiência está saturada com o criativo atual.`,
-    `Ações sugeridas: criar novas variações de anúncio ou expandir a audiência.`,
+    `Audiência saturada: quem já viu o anúncio muitas vezes está deixando de clicar.`,
+    `Ações sugeridas: criar variações de criativo, expandir audiência ou renovar o anúncio.`,
     `<!-- ${chaveAlerta} -->`,
   ].join('\n');
 
@@ -240,7 +255,149 @@ async function verificarFadigaCriativo(conta, entidade, destinatarios) {
     status: envioStatus,
   });
 
-  logger.info({ msg: 'Alerta de fadiga de criativo', conta: conta.nome, entidade: entidade.nome, freqHoje, ctrHoje, quedaCtrPct: quedaCtrPct.toFixed(1), status: envioStatus });
+  logger.info({ msg: 'Alerta de fadiga de criativo', conta: conta.nome, entidade: entidade.nome, freq30d, ctrAtual, ctrAnterior, quedaCtrPct: quedaCtrPct.toFixed(1), status: envioStatus });
+}
+
+// ── Metas personalizadas ────────────────────────────────────────────────────
+
+const JANELA_META_HORAS = { '1d': 24, '7d': 168, '30d': 720 };
+const JANELA_META_LABEL = { '1d': 'hoje', '7d': '7 dias', '30d': '30 dias' };
+const THROTTLE_META_HORAS = 24;
+
+async function somarSnapshot(entidadeIds, metrica, janelaHoras) {
+  const r = await query(
+    `SELECT COALESCE(SUM(s), 0)::float AS total FROM (
+       SELECT DISTINCT ON (entidade_id) valor::float AS s
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND metrica = $2 AND janela_horas = $3
+       ORDER BY entidade_id, coletada_em DESC
+     ) x`,
+    [entidadeIds, metrica, janelaHoras]
+  );
+  return Number(r.rows[0]?.total ?? 0);
+}
+
+async function calcularValorMetrica(campanhaIds, metrica, janelaHoras) {
+  if (metrica === 'purchase_roas' || metrica === 'website_purchase_roas') {
+    const revKey = metrica === 'purchase_roas' ? 'purchase_revenue' : 'website_purchase_revenue';
+    const [rev, spend] = await Promise.all([
+      somarSnapshot(campanhaIds, revKey, janelaHoras),
+      somarSnapshot(campanhaIds, 'spend', janelaHoras),
+    ]);
+    return spend > 0 ? rev / spend : null;
+  }
+  if (metrica === 'ctr') {
+    const [clicks, impressions] = await Promise.all([
+      somarSnapshot(campanhaIds, 'clicks', janelaHoras),
+      somarSnapshot(campanhaIds, 'impressions', janelaHoras),
+    ]);
+    return impressions > 0 ? (clicks / impressions) * 100 : null;
+  }
+  if (metrica === 'cpm') {
+    const [spend, impressions] = await Promise.all([
+      somarSnapshot(campanhaIds, 'spend', janelaHoras),
+      somarSnapshot(campanhaIds, 'impressions', janelaHoras),
+    ]);
+    return impressions > 0 ? (spend / impressions) * 1000 : null;
+  }
+  if (metrica === 'cpc') {
+    const [spend, clicks] = await Promise.all([
+      somarSnapshot(campanhaIds, 'spend', janelaHoras),
+      somarSnapshot(campanhaIds, 'clicks', janelaHoras),
+    ]);
+    return clicks > 0 ? spend / clicks : null;
+  }
+  return somarSnapshot(campanhaIds, metrica, janelaHoras);
+}
+
+function formatarValorMeta(valor, metrica) {
+  if (metrica === 'purchase_roas' || metrica === 'website_purchase_roas') return `${valor.toFixed(2)}x`;
+  if (metrica === 'ctr') return `${valor.toFixed(2)}%`;
+  if (metrica === 'cpm' || metrica === 'cpc') return `R$ ${valor.toFixed(2)}`;
+  if (metrica === 'frequency') return `${valor.toFixed(2)}×`;
+  return valor.toFixed(0);
+}
+
+const NOME_METRICA_META = {
+  purchase_roas: 'ROAS de compra',
+  website_purchase_roas: 'ROAS de compra (site)',
+  ctr: 'CTR',
+  cpm: 'CPM',
+  cpc: 'CPC',
+  frequency: 'Frequência 30d',
+  leads: 'Leads',
+  conversions: 'Conversões',
+  messaging_conversations_started: 'Conversas WPP',
+};
+
+export async function verificarMetasPersonalizadas(conta, campanhaIds) {
+  const metas = (conta.perfil?.metasPersonalizadas ?? []).filter((m) => m.ativo);
+  if (!metas.length || !campanhaIds?.length) return;
+
+  const destinatarios = resolverDestinatarios(conta);
+  if (!destinatarios.length) return;
+
+  for (const meta of metas) {
+    try {
+      const janelaHoras = JANELA_META_HORAS[meta.janela] ?? 168;
+      const valor = await calcularValorMetrica(campanhaIds.map(String), meta.metrica, janelaHoras);
+      if (valor == null || valor === 0) continue;
+
+      const violou = meta.operador === 'abaixo_de' ? valor > meta.valor : valor < meta.valor;
+      if (!violou) continue;
+
+      const chaveAlerta = `meta_personalizada_${meta.metrica}_${meta.operador}_${String(conta._id)}`;
+      const desde = new Date(Date.now() - THROTTLE_META_HORAS * 60 * 60 * 1000);
+      const jaAvisou = await Notificacao.exists({
+        contaId: conta._id,
+        tipo: 'alerta_performance',
+        canal: 'whatsapp',
+        conteudo: new RegExp(chaveAlerta),
+        enviadaEm: { $gte: desde },
+      });
+      if (jaAvisou) continue;
+
+      const nomeMetrica = NOME_METRICA_META[meta.metrica] ?? meta.metrica;
+      const valorFmt = formatarValorMeta(valor, meta.metrica);
+      const metaFmt = formatarValorMeta(meta.valor, meta.metrica);
+      const direcao = meta.operador === 'abaixo_de' ? 'acima de' : 'abaixo de';
+      const emoji = meta.operador === 'abaixo_de' ? '📈' : '📉';
+      const periodo = JANELA_META_LABEL[meta.janela] ?? meta.janela;
+
+      const mensagem = [
+        `${emoji} *Meta não atingida — ${nomeMetrica}*`,
+        ``,
+        `Conta: *${conta.nome}*`,
+        `Período: *${periodo}*`,
+        ``,
+        `${nomeMetrica}: *${valorFmt}* (está ${direcao} da meta de *${metaFmt}*)`,
+        ``,
+        `<!-- ${chaveAlerta} -->`,
+      ].join('\n');
+
+      let envioStatus = 'enviada';
+      try {
+        await enviarMensagemWhatsapp(destinatarios, mensagem);
+      } catch (e) {
+        envioStatus = 'erro';
+        logger.error({ msg: 'Falha ao enviar alerta de meta personalizada', conta: conta.nome, metrica: meta.metrica, erro: e.message });
+      }
+
+      await Notificacao.create({
+        contaId: conta._id,
+        tipo: 'alerta_performance',
+        canal: 'whatsapp',
+        destinatario: destinatarios.join(','),
+        conteudo: mensagem,
+        enviadaEm: new Date(),
+        status: envioStatus,
+      });
+
+      logger.info({ msg: 'Alerta de meta personalizada', conta: conta.nome, metrica: meta.metrica, valor, meta: meta.valor, status: envioStatus });
+    } catch (erro) {
+      logger.warn({ msg: 'Falha ao verificar meta personalizada', conta: conta.nome, metrica: meta.metrica, erro: erro.message });
+    }
+  }
 }
 
 async function verificarZeroResultados(conta, entidade, destinatarios, metricaAlvo) {
