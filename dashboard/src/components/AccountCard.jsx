@@ -4,6 +4,19 @@ import './AccountCard.css';
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 const SALDO_TOM   = { zerado: 'crit', bloqueado: 'crit', critico: 'crit', acabando: 'warn', ok: 'muted' };
 
+const OBJ_LABEL = {
+  conversao: 'Conversões',
+  mensagem:  'Conversas',
+  lead:      'Leads',
+  trafego:   'Cliques',
+  alcance:   'Alcance',
+};
+
+function fmtContagem(n) {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k`;
+  return String(Math.round(n));
+}
+
 const VEREDITO_UI = {
   melhorou: { arrow: '↑', tom: 'ok' },
   estavel:  { arrow: '—', tom: 'muted' },
@@ -58,6 +71,9 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
   const saldoTom = saldo ? SALDO_TOM[saldo.nivel] ?? 'muted' : 'muted';
 
   const temPlano = (investimentoMensalPlanejado ?? 0) > 0;
+
+  const objetivos = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
+  const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
   const pctMes   = temPlano ? Math.min(Math.round(((gastoMes ?? 0) / investimentoMensalPlanejado) * 100), 100) : null;
   const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
 
@@ -105,6 +121,22 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
         </div>
         {gerenteResponsavel && <span className="ac-gestor">{gerenteResponsavel}</span>}
       </div>
+
+      {/* ── Objetivos ── */}
+      {objetivos.length > 0 && (
+        <div className="ac-obj-row">
+          {objetivos.map((o) => {
+            const label = OBJ_LABEL[o.chave] ?? o.chave;
+            const det   = detalhesMap[o.chave];
+            const count = det?.atual > 0 ? det.atual : null;
+            return (
+              <span key={o.chave} className="ac-obj-pill">
+                {label}{count != null ? ` · ${fmtContagem(count)}` : ''}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Corpo ── */}
       <div className="ac-body">

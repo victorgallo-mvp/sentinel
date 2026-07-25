@@ -102,6 +102,25 @@
   flex-shrink: 0;
 }
 
+/* ── Objetivos ── */
+.ac-obj-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 16px 8px;
+}
+
+.ac-obj-pill {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--ok-border);
+  border-radius: 99px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
 /* ── Corpo: gasto hoje + veredito ── */
 .ac-body {
   display: flex;

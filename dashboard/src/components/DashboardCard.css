@@ -47,6 +47,31 @@
   flex-shrink: 0;
 }
 
+/* ── Objetivo ── */
+.dc-obj-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 6px;
+}
+
+.dc-obj-pill {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--ok-border);
+  border-radius: 99px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.dc-obj-extra {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
 /* ── Corpo: gasto + veredito ── */
 .dc-body {
   display: flex;

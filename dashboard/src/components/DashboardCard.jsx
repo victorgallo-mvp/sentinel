@@ -3,6 +3,19 @@ import './DashboardCard.css';
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
 const VERD = { melhorou: { s: '↑', cls: 'ok' }, estavel: { s: '—', cls: 'muted' }, piorou: { s: '↓', cls: 'crit' } };
 
+const OBJ_LABEL = {
+  conversao: 'Conversões',
+  mensagem:  'Conversas',
+  lead:      'Leads',
+  trafego:   'Cliques',
+  alcance:   'Alcance',
+};
+
+function fmtContagem(n) {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k`;
+  return String(Math.round(n));
+}
+
 function piorSaldo(lista) {
   if (!lista?.length) return null;
   return [...lista].sort((a, b) => (SALDO_ORDEM[a.nivel] ?? 9) - (SALDO_ORDEM[b.nivel] ?? 9))[0];
@@ -41,6 +54,10 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
   const saldo    = piorSaldo(saldoPrepago);
   const saldoI   = saldo ? saldoInfo(saldo) : null;
   const temPlano = (investimentoMensalPlanejado ?? 0) > 0;
+
+  const objetivos   = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
+  const primObj     = objetivos[0] ?? null;
+  const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
   const pctMes   = temPlano ? Math.min(Math.round((gastoMes / investimentoMensalPlanejado) * 100), 100) : null;
   const barCls   = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
   const vd       = veredito ? VERD[veredito.direcao] : null;
@@ -55,6 +72,21 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
         <span className="dc-nome">{nome}</span>
         {gestor && <span className="dc-gestor">{gestor}</span>}
       </div>
+
+      {/* Objetivo principal */}
+      {primObj && (
+        <div className="dc-obj-row">
+          <span className="dc-obj-pill">
+            {OBJ_LABEL[primObj.chave] ?? primObj.chave}
+            {detalhesMap[primObj.chave]?.atual > 0
+              ? ` · ${fmtContagem(detalhesMap[primObj.chave].atual)}`
+              : ''}
+          </span>
+          {objetivos.length > 1 && (
+            <span className="dc-obj-extra">+{objetivos.length - 1}</span>
+          )}
+        </div>
+      )}
 
       {/* Gasto hoje + veredito */}
       <div className="dc-body">
