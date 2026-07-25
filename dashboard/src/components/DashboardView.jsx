@@ -35,7 +35,7 @@ const COLUNAS = [
   { id: 'normal',   titulo: 'Normal',    cor: 'ok',   desc: 'Operando normalmente'  },
 ];
 
-export default function DashboardView({ contas, notificacoes, customNames = {}, contaSelecionadaId, onSelectConta }) {
+export default function DashboardView({ contas, notificacoes, customNames = {}, contaSelecionadaId, onSelectConta, periodo }) {
   const [gestor, setGestor] = useState(() => {
     try { return localStorage.getItem(LS_GESTOR) ?? 'todos'; } catch { return 'todos'; }
   });
@@ -118,6 +118,7 @@ export default function DashboardView({ contas, notificacoes, customNames = {}, 
                       notificacoesConta={notifPorConta[conta.id] ?? []}
                       isSelected={conta.id === contaSelecionadaId}
                       onClick={onSelectConta}
+                      periodo={periodo}
                     />
                   ))
                 )}

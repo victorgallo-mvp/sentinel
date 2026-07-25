@@ -14,7 +14,7 @@ function IconSearch() {
 
 const ORDEM_STATUS = { critico: 0, atencao: 1, pausado: 2, normal: 3 };
 
-export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, contaSelecionadaId, onSelectConta }) {
+export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, contaSelecionadaId, onSelectConta, periodo }) {
   const [busca, setBusca] = useState('');
   const [sort,  setSort]  = useState('alertas');
 
@@ -80,6 +80,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
               onRename={onRename}
               onClick={onSelectConta}
               isSelected={conta.id === contaSelecionadaId}
+              periodo={periodo}
             />
           ))}
         </div>

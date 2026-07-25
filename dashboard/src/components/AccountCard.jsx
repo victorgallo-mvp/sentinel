@@ -26,12 +26,12 @@ function fmtContagem(n) {
   return String(Math.round(n));
 }
 
-// Converte meta de qualquer janela para alvo de 7 dias
-function metaAlvo7d(meta) {
-  if (meta.janela === '7d') return meta.valor;
-  if (meta.janela === '1d') return meta.valor * 7;
-  if (meta.janela === '30d') return Math.round(meta.valor * 7 / 30);
-  return meta.valor * 7;
+// Alvo da meta para o período selecionado (n dias)
+function metaAlvoPeriodo(meta, dias) {
+  if (meta.janela === '1d')  return meta.valor * dias;
+  if (meta.janela === '7d')  return meta.valor * (dias / 7);
+  if (meta.janela === '30d') return meta.valor * (dias / 30);
+  return meta.valor * dias;
 }
 
 const VEREDITO_UI = {
@@ -66,7 +66,7 @@ function IconPencil() {
   );
 }
 
-export default function AccountCard({ conta, customName, onRename, onClick, isSelected }) {
+export default function AccountCard({ conta, customName, onRename, onClick, isSelected, periodo = { label: 'hoje', dias: 1 } }) {
   const [editando,  setEditando]  = useState(false);
   const [valorEdit, setValorEdit] = useState('');
   const inputRef = useRef(null);
@@ -90,20 +90,24 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
   const temPlano = (investimentoMensalPlanejado ?? 0) > 0;
 
   const objetivos = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
-  const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
 
-  // Progresso das metas de resultado (meta por dia/semana vs. atual 7d do veredito)
+  // resultadosPeriodo: contagens do período selecionado (period-aware)
+  const resultadoMap = Object.fromEntries(
+    (r.resultadosPeriodo ?? []).map((d) => [d.chave, d])
+  );
+
+  // Progresso das metas de resultado vs. período selecionado
   const metasProgresso = (conta.perfil?.metasPersonalizadas ?? [])
     .filter((m) => m.ativo && m.operador === 'acima_de')
     .map((m) => {
       const chave = Object.entries(CHAVE_TO_METRICA).find(([, v]) => v === m.metrica)?.[0];
-      const det   = chave ? detalhesMap[chave] : null;
-      if (!det || det.atual == null) return null;
-      const alvo  = metaAlvo7d(m);
-      const atual = det.atual;
+      const res   = chave ? resultadoMap[chave] : null;
+      if (!res) return null;
+      const alvo  = Math.round(metaAlvoPeriodo(m, periodo.dias));
+      const atual = res.valor;
       const pct   = alvo > 0 ? Math.min(Math.round((atual / alvo) * 100), 150) : null;
       const tom   = pct == null ? 'muted' : pct >= 100 ? 'ok' : pct >= 60 ? 'warn' : 'crit';
-      return { rotulo: det.rotulo, atual, alvo, pct, tom, janela: m.janela };
+      return { rotulo: res.rotulo, atual, alvo, pct, tom };
     })
     .filter(Boolean);
   const pctMes   = temPlano ? Math.min(Math.round(((gastoMes ?? 0) / investimentoMensalPlanejado) * 100), 100) : null;
@@ -159,8 +163,8 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
         <div className="ac-obj-row">
           {objetivos.map((o) => {
             const label = OBJ_LABEL[o.chave] ?? o.chave;
-            const det   = detalhesMap[o.chave];
-            const count = det?.atual > 0 ? det.atual : null;
+            const res   = resultadoMap[o.chave];
+            const count = res?.valor > 0 ? res.valor : null;
             return (
               <span key={o.chave} className="ac-obj-pill">
                 {label}{count != null ? ` · ${fmtContagem(count)}` : ''}
@@ -197,7 +201,7 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
               ? `R$ ${(gastoHoje).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : '—'}
           </span>
-          <span className="ac-gasto-label">hoje</span>
+          <span className="ac-gasto-label">{periodo.label}</span>
         </div>
         {vd && (
           <span className={`ac-verd ac-verd--${vd.tom}`}>

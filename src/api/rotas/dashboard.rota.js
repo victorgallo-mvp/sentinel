@@ -15,7 +15,7 @@ import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
 import { CATALOGO_METRICAS, metricaResultado, metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
-import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
+import { OBJETIVOS, objetivoValido, resolverObjetivosConta } from '../../config/objetivos.config.js';
 import { buscarGastoMes, buscarGasto30dAnterior, computarVeredito, computarVeredito30d } from '../../core/analise/veredito.servico.js';
 import { montarDadosResumoBm } from '../../core/relatorio/resumo-diario.servico.js';
 import { redigirMiniResumo } from '../../core/relatorio/resumo-diario.agente.js';
@@ -366,14 +366,26 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
               dataReferencia: dataInicio === dataFim
                 ? new Date(dataInicio + 'T12:00:00Z').toLocaleDateString('pt-BR')
                 : `${new Date(dataInicio + 'T12:00:00Z').toLocaleDateString('pt-BR')} – ${new Date(dataFim + 'T12:00:00Z').toLocaleDateString('pt-BR')}`,
+              // usado internamente para gastoPeriodo e resultadosPeriodo; removido antes do envio
+              _rawAtual: entidade.tipo === 'campaign' ? atual : null,
             };
           })
         );
 
-        // Spend total das campanhas no período selecionado
-        const gastoPeriodo = dadosEntidades
-          .filter((e) => e.tipo === 'campaign')
-          .reduce((sum, e) => sum + (e.metricas.find((m) => m.chave === 'spend')?.atual ?? 0), 0);
+        // Campanhas com dados brutos para cálculos de resumo
+        const campanhas = dadosEntidades.filter((e) => e.tipo === 'campaign');
+
+        // Fix: gasto do período via dado bruto, sem depender de metricasSelecionadas
+        const gastoPeriodo = campanhas.reduce((sum, e) => sum + (e._rawAtual?.spend ?? 0), 0);
+
+        // Resultado de cada objetivo no período selecionado (period-aware)
+        const objetivosConta = resolverObjetivosConta(conta.perfil);
+        const resultadosPeriodo = objetivosConta
+          .map((obj) => {
+            const valor = campanhas.reduce((sum, e) => sum + (e._rawAtual?.[obj.metricaResultado] ?? 0), 0);
+            return { chave: obj.chave, rotulo: obj.rotulo, valor };
+          })
+          .filter((r) => r.valor > 0);
 
         // Gasto real de 7d, 30d, mês corrente + comparativo 30d + vereditos
         const campanhaIds = entidades.filter((e) => e.tipo === 'campaign').map((e) => String(e._id));
@@ -438,7 +450,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           metaConfig: {
             contasAnuncioIds: conta.metaConfig?.contasAnuncioIds ?? [],
           },
-          entidades: dadosEntidades,
+          entidades: dadosEntidades.map(({ _rawAtual: _, ...rest }) => rest),
           resumo: {
             gastoHoje: gastoPeriodo,
             gasto7d,
@@ -449,6 +461,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
             veredito,
             veredito30d,
+            resultadosPeriodo,
             status: statusConta,
             alertas,
             saldoPrepago,

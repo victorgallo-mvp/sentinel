@@ -37,6 +37,16 @@ export default function App() {
   const [dataInicio, setDataInicio] = useState(isoHoje);
   const [dataFim,    setDataFim]    = useState(isoHoje);
 
+  function calcPeriodo(ini, fim) {
+    const dias = Math.max(1, Math.round(
+      (new Date(fim + 'T00:00:00Z') - new Date(ini + 'T00:00:00Z')) / 86400000
+    ) + 1);
+    const label = ini === fim
+      ? (ini === new Date().toISOString().slice(0, 10) ? 'hoje' : '1d')
+      : `${dias}d`;
+    return { label, dias };
+  }
+
   const [usuario,     setUsuario]     = useState(null);
   const [customNames, setCustomNames] = useState(() => lerStorage(LS_NOMES, {}));
   const [favoritos,   setFavoritos]   = useState(() => lerStorage(LS_FAVS,  []));
@@ -121,6 +131,7 @@ export default function App() {
   const contas = dados.contas ?? [];
   const contaSelecionada = contaSelecionadaId ? contas.find((c) => c.id === contaSelecionadaId) ?? null : null;
   const painelAberto = contaSelecionada !== null;
+  const periodo = calcPeriodo(dataInicio, dataFim);
 
   return (
     <div className="app-shell">
@@ -157,6 +168,7 @@ export default function App() {
                 customNames={customNames}
                 contaSelecionadaId={contaSelecionadaId}
                 onSelectConta={setContaSelecionadaId}
+                periodo={periodo}
               />
             ) : (
               <>
@@ -168,6 +180,7 @@ export default function App() {
                   onRename={handleRename}
                   contaSelecionadaId={contaSelecionadaId}
                   onSelectConta={setContaSelecionadaId}
+                  periodo={periodo}
                 />
                 {!painelAberto && (
                   <AlertsPanel

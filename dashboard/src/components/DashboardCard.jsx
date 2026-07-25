@@ -24,11 +24,11 @@ function fmtContagem(n) {
   return String(Math.round(n));
 }
 
-function metaAlvo7d(meta) {
-  if (meta.janela === '7d') return meta.valor;
-  if (meta.janela === '1d') return meta.valor * 7;
-  if (meta.janela === '30d') return Math.round(meta.valor * 7 / 30);
-  return meta.valor * 7;
+function metaAlvoPeriodo(meta, dias) {
+  if (meta.janela === '1d')  return meta.valor * dias;
+  if (meta.janela === '7d')  return meta.valor * (dias / 7);
+  if (meta.janela === '30d') return meta.valor * (dias / 30);
+  return meta.valor * dias;
 }
 
 function piorSaldo(lista) {
@@ -57,7 +57,7 @@ function fmtBRL(v) {
   return `R$ ${Math.round(v ?? 0).toLocaleString('pt-BR')}`;
 }
 
-export default function DashboardCard({ conta, customName, notificacoesConta, isSelected, onClick }) {
+export default function DashboardCard({ conta, customName, notificacoesConta, isSelected, onClick, periodo = { label: 'hoje', dias: 1 } }) {
   const nome    = customName ?? conta.nome;
   const gestor  = conta.perfil?.gerenteResponsavel;
   const r       = conta.resumo ?? {};
@@ -70,18 +70,22 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
   const saldoI   = saldo ? saldoInfo(saldo) : null;
   const temPlano = (investimentoMensalPlanejado ?? 0) > 0;
 
-  const objetivos   = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
-  const primObj     = objetivos[0] ?? null;
-  const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
+  const objetivos    = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
+  const primObj      = objetivos[0] ?? null;
 
-  // Meta do objetivo principal
+  // resultadosPeriodo: contagens do período selecionado (period-aware)
+  const resultadoMap = Object.fromEntries(
+    (r.resultadosPeriodo ?? []).map((d) => [d.chave, d])
+  );
+
+  // Meta do objetivo principal vs. período selecionado
   const primMetrica  = primObj ? CHAVE_TO_METRICA[primObj.chave] : null;
   const primMetaDef  = primMetrica
     ? (conta.perfil?.metasPersonalizadas ?? []).find((m) => m.metrica === primMetrica && m.ativo && m.operador === 'acima_de')
     : null;
-  const primDet      = primObj ? detalhesMap[primObj.chave] : null;
-  const primMetaAlvo = primMetaDef ? metaAlvo7d(primMetaDef) : null;
-  const primAtual    = primDet?.atual ?? null;
+  const primRes      = primObj ? resultadoMap[primObj.chave] : null;
+  const primMetaAlvo = primMetaDef ? Math.round(metaAlvoPeriodo(primMetaDef, periodo.dias)) : null;
+  const primAtual    = primRes?.valor ?? null;
   const primPct      = primMetaAlvo > 0 && primAtual != null
     ? Math.min(Math.round((primAtual / primMetaAlvo) * 100), 150)
     : null;
@@ -106,9 +110,7 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
         <div className="dc-obj-row">
           <span className="dc-obj-pill">
             {OBJ_LABEL[primObj.chave] ?? primObj.chave}
-            {detalhesMap[primObj.chave]?.atual > 0
-              ? ` · ${fmtContagem(detalhesMap[primObj.chave].atual)}`
-              : ''}
+            {primRes?.valor > 0 ? ` · ${fmtContagem(primRes.valor)}` : ''}
           </span>
           {objetivos.length > 1 && (
             <span className="dc-obj-extra">+{objetivos.length - 1}</span>
@@ -135,7 +137,7 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
       <div className="dc-body">
         <div className="dc-gasto">
           <span className="dc-gasto-valor">{gastoHoje > 0 ? fmtBRL(gastoHoje) : '—'}</span>
-          <span className="dc-gasto-label">hoje</span>
+          <span className="dc-gasto-label">{periodo.label}</span>
         </div>
         {vd && (
           <span className={`dc-verd dc-verd--${vd.cls}`}>
