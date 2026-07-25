@@ -2,6 +2,39 @@
  * Funções utilitárias compartilhadas (estatística, datas, formatação).
  */
 
+// BRT = UTC-3, sem horário de verão (Brasil aboliu em 2019)
+const BRT_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Retorna o início do dia N dias atrás no fuso BRT (GMT-3), como Date UTC.
+ *   inicioDiaBRT(0)  → hoje 00:00 BRT     = hoje 03:00 UTC
+ *   inicioDiaBRT(1)  → ontem 00:00 BRT    = ontem 03:00 UTC
+ *   inicioDiaBRT(-1) → amanhã 00:00 BRT   = amanhã 03:00 UTC
+ */
+export function inicioDiaBRT(diasAtras = 0) {
+  const brt = new Date(Date.now() - BRT_MS); // relógio no "fuso BRT"
+  brt.setUTCHours(0, 0, 0, 0);               // meia-noite BRT
+  if (diasAtras) brt.setUTCDate(brt.getUTCDate() - diasAtras);
+  return new Date(brt.getTime() + BRT_MS);   // de volta para UTC
+}
+
+/**
+ * Retorna o início do mês corrente (dia 1) no fuso BRT, como Date UTC.
+ */
+export function inicioMesBRT() {
+  const brt = new Date(Date.now() - BRT_MS);
+  brt.setUTCDate(1);
+  brt.setUTCHours(0, 0, 0, 0);
+  return new Date(brt.getTime() + BRT_MS);
+}
+
+/**
+ * Dia da semana atual em BRT (0 = domingo … 6 = sábado).
+ */
+export function diaDaSemananaBRT() {
+  return new Date(Date.now() - BRT_MS).getUTCDay();
+}
+
 /** Calcula a média de um array de números. */
 export function calcularMedia(valores) {
   if (!valores || valores.length === 0) return 0;

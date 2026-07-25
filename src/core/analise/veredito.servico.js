@@ -9,6 +9,7 @@
  */
 import { query } from '../../infra/postgres.js';
 import { resolverObjetivosConta } from '../../config/objetivos.config.js';
+import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
 
 /**
  * Soma de um resultado (spend, leads, conversions, clicks, reach…) das campanhas
@@ -54,18 +55,16 @@ export async function buscarGastoMes(campanhaIds) {
   );
   if (Number(r.rows[0]?.n) > 0) return Number(r.rows[0]?.total ?? 0);
   // Fallback: soma diária até a primeira coleta nativa rodar
-  const inicioMes = new Date();
-  inicioMes.setUTCDate(1);
-  inicioMes.setUTCHours(0, 0, 0, 0);
-  const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const inicioMes = inicioMesBRT();
+  const amanha    = new Date(inicioDiaBRT(0).getTime() + 24 * 60 * 60 * 1000);
   return agregarResultadoPeriodo(campanhaIds, 'spend', inicioMes, amanha);
 }
 
 /** Gasto do mês anterior (30 dias antes do início do período de 30d). */
 export async function buscarGasto30dAnterior(campanhaIds) {
   if (!campanhaIds?.length) return 0;
-  const fim = new Date(); fim.setDate(fim.getDate() - 30);
-  const ini = new Date(fim); ini.setDate(ini.getDate() - 30);
+  const fim = inicioDiaBRT(30);
+  const ini = inicioDiaBRT(60);
   return agregarResultadoPeriodo(campanhaIds, 'spend', ini, fim);
 }
 
@@ -78,9 +77,9 @@ export async function computarVeredito30d(campanhaIds, perfil) {
   let objetivos = resolverObjetivosConta(perfil);
   if (!campanhaIds?.length) return null;
 
-  const fim = new Date();
-  const ini = new Date(fim); ini.setDate(ini.getDate() - 30);
-  const iniAnt = new Date(ini); iniAnt.setDate(iniAnt.getDate() - 30);
+  const fim    = inicioDiaBRT(0);
+  const ini    = inicioDiaBRT(30);
+  const iniAnt = inicioDiaBRT(60);
 
   if (!objetivos.length) {
     for (const candidato of AUTO_DETECT_ORDEM) {
@@ -105,7 +104,7 @@ export async function computarVeredito30d(campanhaIds, perfil) {
     const deltaPct = anterior > 0 ? ((atual - anterior) / anterior) * 100 : (atual > 0 ? 100 : 0);
     somaPonderada += deltaPct * obj.peso;
     pesoTotal += obj.peso;
-    detalhes.push({ ordem: obj.ordem, chave: obj.chave, rotulo: obj.rotulo, atual, anterior, deltaPct: Number(deltaPct.toFixed(1)) });
+    detalhes.push({ ordem: obj.ordem, chave: obj.chave, rotulo: obj.rotulo, valor30d: atual, valor30dAnterior: anterior, deltaPct: Number(deltaPct.toFixed(1)) });
   }
   if (pesoTotal === 0) return null;
 
@@ -134,9 +133,9 @@ export async function computarVeredito(campanhaIds, perfil) {
   let objetivos = resolverObjetivosConta(perfil);
   if (!campanhaIds?.length) return null;
 
-  const fim = new Date();
-  const ini = new Date(fim); ini.setDate(ini.getDate() - 7);
-  const iniAnt = new Date(ini); iniAnt.setDate(iniAnt.getDate() - 7);
+  const fim    = inicioDiaBRT(0);
+  const ini    = inicioDiaBRT(7);
+  const iniAnt = inicioDiaBRT(14);
 
   // Auto-detecção: conta sem objetivos configurados — usa a primeira métrica
   // com dados reais no período recente para não retornar null sem necessidade.
@@ -163,7 +162,8 @@ export async function computarVeredito(campanhaIds, perfil) {
     const deltaPct = anterior > 0 ? ((atual - anterior) / anterior) * 100 : (atual > 0 ? 100 : 0);
     somaPonderada += deltaPct * obj.peso;
     pesoTotal += obj.peso;
-    detalhes.push({ ordem: obj.ordem, chave: obj.chave, rotulo: obj.rotulo, atual, anterior, deltaPct: Number(deltaPct.toFixed(1)) });
+    // valor7d / valor7dAnterior: nomes explícitos para o texto da IA não confundir com "ontem"
+    detalhes.push({ ordem: obj.ordem, chave: obj.chave, rotulo: obj.rotulo, valor7d: atual, valor7dAnterior: anterior, deltaPct: Number(deltaPct.toFixed(1)) });
   }
   if (pesoTotal === 0) return null;
 

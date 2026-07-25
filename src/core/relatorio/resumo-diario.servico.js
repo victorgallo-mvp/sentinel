@@ -15,6 +15,7 @@ import { computarVeredito, buscarGastoMes } from '../analise/veredito.servico.js
 import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
+import { inicioDiaBRT, diaDaSemananaBRT } from '../../shared/utils.js';
 
 const JANELA_30D_HORAS = 720;
 const LIMIAR_GASTO_SEM_CONVERSAO = 30; // R$ — só destaca "gastou sem converter" acima disso
@@ -32,7 +33,7 @@ const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
  * Retorna null em outros dias (não envia resumo).
  */
 function diasAtrasParaResumo() {
-  const dia = new Date().getDay(); // 0=dom … 6=sab
+  const dia = diaDaSemananaBRT(); // 0=dom … 6=sab, em BRT
   if (dia === 1) return 4; // segunda: cobre qui-dom
   if (dia === 4) return 3; // quinta: cobre seg-qua
   return null;
@@ -125,10 +126,10 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
 
   const nomeBm = [...new Set(contasBm.map((c) => c.nome))].join(' + ');
 
-  // Período: de `diasAtras` dias atrás (00:00) até hoje (00:00 = exclusive)
-  const inicioPeriodo = new Date(); inicioPeriodo.setDate(inicioPeriodo.getDate() - diasAtras); inicioPeriodo.setHours(0, 0, 0, 0);
-  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
-  const fimPeriodo = new Date(inicioHoje.getTime() - 1); // último ms de ontem
+  // Período: de `diasAtras` dias atrás (00:00 BRT) até hoje (00:00 BRT, exclusive)
+  const inicioHoje    = inicioDiaBRT(0);
+  const inicioPeriodo = inicioDiaBRT(diasAtras);
+  const fimPeriodo    = new Date(inicioHoje.getTime() - 1); // último ms antes de hoje 00:00 BRT
 
   const fmtData = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   const dataStr = diasAtras <= 1
@@ -274,6 +275,38 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
   ]);
   const investimentoMensal = contaPerfil?.perfil?.investimentoMensalPlanejado ?? null;
 
+  // Progresso das metas configuradas no cadastro vs. o período coberto
+  const METRICA_TO_TOTAL = {
+    messaging_conversations_started: totais.conversasWpp,
+    leads:       totais.leads,
+    conversions: totais.conversoes,
+    clicks:      totais.cliques,
+    reach:       totais.alcance,
+  };
+  function metaAlvoPeriodo(m, dias) {
+    if (m.janela === '1d')  return m.valor * dias;
+    if (m.janela === '7d')  return m.valor * (dias / 7);
+    if (m.janela === '30d') return m.valor * (dias / 30);
+    return m.valor * dias;
+  }
+  const progressoMetas = (contaPerfil?.perfil?.metasPersonalizadas ?? [])
+    .filter((m) => m.ativo && m.operador === 'acima_de')
+    .map((m) => {
+      const atual = METRICA_TO_TOTAL[m.metrica];
+      if (atual == null) return null;
+      const alvo = Number(metaAlvoPeriodo(m, diasAtras).toFixed(1));
+      const pct  = alvo > 0 ? Math.round((atual / alvo) * 100) : null;
+      return {
+        nomeMetrica: NOME_METRICA_RESULTADO[m.metrica] ?? m.metrica,
+        definicao: `${m.valor}/${m.janela}`,
+        alvo,
+        atual,
+        pct,
+        atingida: pct != null && pct >= 100,
+      };
+    })
+    .filter(Boolean);
+
   return {
     bm: nomeBm,
     data: dataStr,
@@ -303,7 +336,8 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     gasto30d: Number(gasto30d.toFixed(2)),
     gastoMes: Number(gastoMes.toFixed(2)),
     investimentoMensal,
-    veredito, // { direcao: 'melhorou'|'estavel'|'piorou', scorePct, detalhes[] } | null
+    progressoMetas, // metas do cadastro vs. período coberto
+    veredito, // { direcao, scorePct, detalhes[] (valor7d/valor7dAnterior = totais de 7d) } | null
   };
 }
 

@@ -47,11 +47,13 @@ export async function redigirResumoDiario(dados) {
 
 const SYSTEM_MINI = [
   'Você resume o dia de uma conta de tráfego para o gestor, na visão geral do dashboard.',
-  'Receberá um JSON com os totais do dia e os pontos de atenção.',
+  'Receberá um JSON com os totais do período e os pontos de atenção.',
   'Escreva UMA a DUAS frases (máx ~240 caracteres), português do Brasil, direto ao ponto.',
   'O campo `metricaPrincipal` indica a métrica de resultado desta conta. Use SOMENTE essa métrica — se for "messaging_conversations_started", fale em conversas; se for "leads", fale em leads; se for "clicks", fale em cliques. NUNCA mencione "conversão" ou "conversões" se a metricaPrincipal não for "conversions".',
   'O array `semConversao` lista campanhas sem o resultado esperado — respeite o campo `nomeMetrica` de cada item (pode ser Conversas WhatsApp, Leads, Conversões etc), nunca generalize para "conversão".',
-  'Priorize: tendência (melhorou/piorou), e o ponto de atenção mais crítico (saldo, gasto sem o resultado esperado).',
+  'Se houver `progressoMetas` com itens, mencione o progresso da meta principal: quantos atingiu vs. a meta configurada (campo `alvo`) e o percentual (`pct`). Ex: "2 de 3 conversas/dia (67%)". Ignore se o array estiver vazio.',
+  'Se houver `veredito`, diga se a conta melhorou, ficou estável ou piorou. Os campos `valor7d` e `valor7dAnterior` em `veredito.detalhes` são TOTAIS DOS ÚLTIMOS 7 DIAS — nunca use "dia anterior"; use "na semana anterior" ou "nos 7 dias anteriores".',
+  'Priorize: progresso vs. meta configurada, depois tendência 7d, depois o ponto de atenção mais crítico (saldo, gasto sem resultado).',
   'Sem formatação, sem emojis, sem saudação. Só o essencial que o gestor precisa saber num relance.',
 ].join('\n');
 
