@@ -121,6 +121,58 @@
   white-space: nowrap;
 }
 
+/* ── Barra de progresso de meta de resultado ── */
+.ac-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+
+.ac-meta-rotulo {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.ac-meta-track {
+  flex: 1;
+  height: 5px;
+  background: var(--surface-2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.ac-meta-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .3s ease;
+}
+.ac-meta-fill--ok   { background: var(--ok); }
+.ac-meta-fill--warn { background: var(--warn); }
+.ac-meta-fill--crit { background: var(--crit); }
+.ac-meta-fill--muted { background: var(--border-strong); }
+
+.ac-meta-num {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ac-meta-pct {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 32px;
+  text-align: right;
+}
+.ac-meta-num--ok,  .ac-meta-pct--ok   { color: var(--ok); }
+.ac-meta-num--warn,.ac-meta-pct--warn  { color: var(--warn); }
+.ac-meta-num--crit,.ac-meta-pct--crit  { color: var(--crit); }
+.ac-meta-num--muted,.ac-meta-pct--muted { color: var(--text-subtle); }
+
 /* ── Corpo: gasto hoje + veredito ── */
 .ac-body {
   display: flex;

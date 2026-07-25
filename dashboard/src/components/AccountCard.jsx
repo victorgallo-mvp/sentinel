@@ -12,9 +12,26 @@ const OBJ_LABEL = {
   alcance:   'Alcance',
 };
 
+// Mapeia objetivo → metrica raw (para cruzar com metasPersonalizadas)
+const CHAVE_TO_METRICA = {
+  mensagem:  'messaging_conversations_started',
+  conversao: 'conversions',
+  lead:      'leads',
+  trafego:   'clicks',
+  alcance:   'reach',
+};
+
 function fmtContagem(n) {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k`;
   return String(Math.round(n));
+}
+
+// Converte meta de qualquer janela para alvo de 7 dias
+function metaAlvo7d(meta) {
+  if (meta.janela === '7d') return meta.valor;
+  if (meta.janela === '1d') return meta.valor * 7;
+  if (meta.janela === '30d') return Math.round(meta.valor * 7 / 30);
+  return meta.valor * 7;
 }
 
 const VEREDITO_UI = {
@@ -74,6 +91,21 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
 
   const objetivos = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
   const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
+
+  // Progresso das metas de resultado (meta por dia/semana vs. atual 7d do veredito)
+  const metasProgresso = (conta.perfil?.metasPersonalizadas ?? [])
+    .filter((m) => m.ativo && m.operador === 'acima_de')
+    .map((m) => {
+      const chave = Object.entries(CHAVE_TO_METRICA).find(([, v]) => v === m.metrica)?.[0];
+      const det   = chave ? detalhesMap[chave] : null;
+      if (!det || det.atual == null) return null;
+      const alvo  = metaAlvo7d(m);
+      const atual = det.atual;
+      const pct   = alvo > 0 ? Math.min(Math.round((atual / alvo) * 100), 150) : null;
+      const tom   = pct == null ? 'muted' : pct >= 100 ? 'ok' : pct >= 60 ? 'warn' : 'crit';
+      return { rotulo: det.rotulo, atual, alvo, pct, tom, janela: m.janela };
+    })
+    .filter(Boolean);
   const pctMes   = temPlano ? Math.min(Math.round(((gastoMes ?? 0) / investimentoMensalPlanejado) * 100), 100) : null;
   const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
 
@@ -137,6 +169,25 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
           })}
         </div>
       )}
+
+      {/* ── Progresso de metas de resultado ── */}
+      {metasProgresso.map((m, i) => (
+        <div key={i} className="ac-meta-row">
+          <span className="ac-meta-rotulo">{m.rotulo}</span>
+          <div className="ac-meta-track">
+            <div
+              className={`ac-meta-fill ac-meta-fill--${m.tom}`}
+              style={{ width: `${Math.min(m.pct ?? 0, 100)}%` }}
+            />
+          </div>
+          <span className={`ac-meta-num ac-meta-num--${m.tom}`}>
+            {fmtContagem(m.atual)}/{fmtContagem(m.alvo)}
+          </span>
+          <span className={`ac-meta-pct ac-meta-pct--${m.tom}`}>
+            {m.pct ?? 0}%
+          </span>
+        </div>
+      ))}
 
       {/* ── Corpo ── */}
       <div className="ac-body">

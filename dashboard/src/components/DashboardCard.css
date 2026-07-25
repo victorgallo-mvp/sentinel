@@ -72,6 +72,41 @@
   font-weight: 500;
 }
 
+/* ── Meta de resultado ── */
+.dc-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 6px;
+}
+
+.dc-meta-track {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.dc-meta-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .3s ease;
+}
+.dc-meta-fill--ok   { background: var(--ok); }
+.dc-meta-fill--warn { background: var(--warn); }
+.dc-meta-fill--crit { background: var(--crit); }
+
+.dc-meta-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dc-meta-label--ok   { color: var(--ok); }
+.dc-meta-label--warn { color: var(--warn); }
+.dc-meta-label--crit { color: var(--crit); }
+
 /* ── Corpo: gasto + veredito ── */
 .dc-body {
   display: flex;

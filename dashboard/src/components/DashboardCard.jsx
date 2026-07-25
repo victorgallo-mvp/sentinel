@@ -11,9 +11,24 @@ const OBJ_LABEL = {
   alcance:   'Alcance',
 };
 
+const CHAVE_TO_METRICA = {
+  mensagem:  'messaging_conversations_started',
+  conversao: 'conversions',
+  lead:      'leads',
+  trafego:   'clicks',
+  alcance:   'reach',
+};
+
 function fmtContagem(n) {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k`;
   return String(Math.round(n));
+}
+
+function metaAlvo7d(meta) {
+  if (meta.janela === '7d') return meta.valor;
+  if (meta.janela === '1d') return meta.valor * 7;
+  if (meta.janela === '30d') return Math.round(meta.valor * 7 / 30);
+  return meta.valor * 7;
 }
 
 function piorSaldo(lista) {
@@ -58,6 +73,19 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
   const objetivos   = (conta.perfil?.objetivos ?? []).slice().sort((a, b) => a.ordem - b.ordem);
   const primObj     = objetivos[0] ?? null;
   const detalhesMap = Object.fromEntries((veredito?.detalhes ?? []).map((d) => [d.chave, d]));
+
+  // Meta do objetivo principal
+  const primMetrica  = primObj ? CHAVE_TO_METRICA[primObj.chave] : null;
+  const primMetaDef  = primMetrica
+    ? (conta.perfil?.metasPersonalizadas ?? []).find((m) => m.metrica === primMetrica && m.ativo && m.operador === 'acima_de')
+    : null;
+  const primDet      = primObj ? detalhesMap[primObj.chave] : null;
+  const primMetaAlvo = primMetaDef ? metaAlvo7d(primMetaDef) : null;
+  const primAtual    = primDet?.atual ?? null;
+  const primPct      = primMetaAlvo > 0 && primAtual != null
+    ? Math.min(Math.round((primAtual / primMetaAlvo) * 100), 150)
+    : null;
+  const primTom      = primPct == null ? null : primPct >= 100 ? 'ok' : primPct >= 60 ? 'warn' : 'crit';
   const pctMes   = temPlano ? Math.min(Math.round((gastoMes / investimentoMensalPlanejado) * 100), 100) : null;
   const barCls   = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
   const vd       = veredito ? VERD[veredito.direcao] : null;
@@ -85,6 +113,21 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
           {objetivos.length > 1 && (
             <span className="dc-obj-extra">+{objetivos.length - 1}</span>
           )}
+        </div>
+      )}
+
+      {/* Meta de resultado */}
+      {primMetaAlvo != null && primAtual != null && (
+        <div className="dc-meta-row">
+          <div className="dc-meta-track">
+            <div
+              className={`dc-meta-fill dc-meta-fill--${primTom}`}
+              style={{ width: `${Math.min(primPct ?? 0, 100)}%` }}
+            />
+          </div>
+          <span className={`dc-meta-label dc-meta-label--${primTom}`}>
+            {fmtContagem(primAtual)}/{fmtContagem(primMetaAlvo)} · {primPct ?? 0}%
+          </span>
         </div>
       )}
 
