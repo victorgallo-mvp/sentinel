@@ -101,13 +101,14 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
     .filter((m) => m.ativo && m.operador === 'acima_de')
     .map((m) => {
       const chave = Object.entries(CHAVE_TO_METRICA).find(([, v]) => v === m.metrica)?.[0];
-      const res   = chave ? resultadoMap[chave] : null;
-      if (!res) return null;
+      if (!chave) return null;
+      const res   = resultadoMap[chave];
+      const atual = res?.valor ?? 0; // 0 quando ainda não há resultados no período
       const alvo  = Math.round(metaAlvoPeriodo(m, periodo.dias));
-      const atual = res.valor;
       const pct   = alvo > 0 ? Math.min(Math.round((atual / alvo) * 100), 150) : null;
       const tom   = pct == null ? 'muted' : pct >= 100 ? 'ok' : pct >= 60 ? 'warn' : 'crit';
-      return { rotulo: res.rotulo, atual, alvo, pct, tom };
+      const rotulo = res?.rotulo ?? OBJ_LABEL[chave] ?? chave;
+      return { rotulo, atual, alvo, pct, tom };
     })
     .filter(Boolean);
   const pctMes   = temPlano ? Math.min(Math.round(((gastoMes ?? 0) / investimentoMensalPlanejado) * 100), 100) : null;

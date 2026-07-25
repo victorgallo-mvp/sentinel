@@ -85,7 +85,7 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
     : null;
   const primRes      = primObj ? resultadoMap[primObj.chave] : null;
   const primMetaAlvo = primMetaDef ? Math.round(metaAlvoPeriodo(primMetaDef, periodo.dias)) : null;
-  const primAtual    = primRes?.valor ?? null;
+  const primAtual    = primMetaDef ? (primRes?.valor ?? 0) : null; // 0 quando sem resultados mas com meta
   const primPct      = primMetaAlvo > 0 && primAtual != null
     ? Math.min(Math.round((primAtual / primMetaAlvo) * 100), 150)
     : null;
