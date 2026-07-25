@@ -11,7 +11,7 @@
   margin-left: var(--sb-w);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
   transition: margin-left .2s ease;
 }
 
