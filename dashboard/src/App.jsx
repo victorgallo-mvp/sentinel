@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar.jsx';
+import CockpitBar from './components/CockpitBar.jsx';
 import AccountList from './components/AccountList.jsx';
+import AccountDetailPanel from './components/AccountDetailPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import DashboardView from './components/DashboardView.jsx';
-import DateRangePicker from './components/DateRangePicker.jsx';
 import './App.css';
 
 const API_URL    = import.meta.env.VITE_API_URL ?? '';
@@ -94,19 +95,10 @@ export default function App() {
     try { localStorage.setItem(LS_GESTOR, JSON.stringify(g)); } catch {}
   }
 
-  function handleModo(novoModo) {
-    setModo(novoModo);
-    try { localStorage.setItem(LS_MODO, JSON.stringify(novoModo)); } catch {}
-  }
-
-  const atualStr = ultimaAtualizacao
-    ? segundos < 5 ? 'agora mesmo' : `há ${segundos}s`
-    : '—';
-
   if (erro) {
     return (
       <div className="error-screen">
-        <span className="error-icon" aria-hidden="true">
+        <span className="error-icon">
           <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor"
             strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
@@ -121,6 +113,8 @@ export default function App() {
   if (!dados) return <div className="loading">Carregando...</div>;
 
   const contas = dados.contas ?? [];
+  const contaSelecionada = contaSelecionadaId ? contas.find((c) => c.id === contaSelecionadaId) ?? null : null;
+  const painelAberto = contaSelecionada !== null;
 
   return (
     <div className="app-shell">
@@ -134,59 +128,57 @@ export default function App() {
       />
 
       <div className="app-main">
-        {/* ── Top bar ── */}
-        <div className="topbar">
-          <div className="topbar-left">
-            <nav className="topbar-nav">
-              <button
-                className={`topbar-tab${modo === 'monitoramento' ? ' topbar-tab--ativo' : ''}`}
-                onClick={() => handleModo('monitoramento')}
-              >Monitoramento</button>
-              <button
-                className={`topbar-tab${modo === 'dashboard' ? ' topbar-tab--ativo' : ''}`}
-                onClick={() => handleModo('dashboard')}
-              >Dashboard</button>
-            </nav>
-          </div>
-          <div className="topbar-right">
-            <DateRangePicker
-              dataInicio={dataInicio}
-              dataFim={dataFim}
-              onChange={({ dataInicio: ini, dataFim: fim }) => {
-                setDataInicio(ini);
-                setDataFim(fim);
-              }}
-            />
-            {usuario?.nome && <span className="topbar-usuario">{usuario.nome}</span>}
-            <span className="topbar-refresh">{atualStr}</span>
-          </div>
-        </div>
+        <CockpitBar
+          contas={contas}
+          contaSelecionada={contaSelecionada}
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          onPeriodoChange={({ dataInicio: ini, dataFim: fim }) => { setDataInicio(ini); setDataFim(fim); }}
+          usuario={usuario}
+          segundos={segundos}
+          onVoltar={() => setContaSelecionadaId(null)}
+        />
 
-        {/* ── Content ── */}
-        <main className="app-content">
-          {modo === 'dashboard' ? (
-            <DashboardView contas={contas} notificacoes={dados.notificacoes} />
-          ) : (
-            <>
-              <AccountList
-                contas={contas}
-                favoritos={favoritos}
-                customNames={customNames}
-                onFavorito={handleFavorito}
-                onRename={handleRename}
+        <div className={`app-body${painelAberto ? ' app-body--split' : ''}`}>
+          {/* ── Lista central ── */}
+          <div className="app-list">
+            {modo === 'dashboard' ? (
+              <DashboardView contas={contas} notificacoes={dados.notificacoes} />
+            ) : (
+              <>
+                <AccountList
+                  contas={contas}
+                  favoritos={favoritos}
+                  customNames={customNames}
+                  onFavorito={handleFavorito}
+                  onRename={handleRename}
+                  contaSelecionadaId={contaSelecionadaId}
+                  onSelectConta={setContaSelecionadaId}
+                />
+                {!painelAberto && (
+                  <AlertsPanel
+                    anomalias={dados.anomalias}
+                    investigacoes={dados.investigacoes}
+                    notificacoes={dados.notificacoes}
+                    stats={dados.stats}
+                  />
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Painel de detalhe ── */}
+          {painelAberto && (
+            <div className="app-panel">
+              <AccountDetailPanel
+                conta={contaSelecionada}
+                customName={customNames[contaSelecionada.id] ?? null}
+                onMetricasSalvas={buscarDados}
                 onRefresh={buscarDados}
-                contaSelecionadaId={contaSelecionadaId}
-                onSelectConta={setContaSelecionadaId}
               />
-              <AlertsPanel
-                anomalias={dados.anomalias}
-                investigacoes={dados.investigacoes}
-                notificacoes={dados.notificacoes}
-                stats={dados.stats}
-              />
-            </>
+            </div>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );

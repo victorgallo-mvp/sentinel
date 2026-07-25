@@ -1,86 +1,74 @@
 .ac-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 2px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: box-shadow .15s, border-color .15s, transform .15s;
   cursor: pointer;
+  transition: box-shadow .15s, border-color .15s;
 }
+
 .ac-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   border-color: var(--border-strong);
 }
 
-/* Acento de status na borda esquerda — cor só onde importa */
-.ac-card--critico { border-left-color: var(--crit); }
-.ac-card--atencao { border-left-color: var(--warn); }
-.ac-card--pausado { border-left-color: var(--border-strong); }
-.ac-card--normal  { border-left-color: var(--ok); }
+.ac-card--selected {
+  border-left-color: var(--accent) !important;
+  box-shadow: var(--shadow-sm);
+  background: var(--accent-soft);
+}
 
-/* ── Header ── */
+/* Status: borda esquerda colorida */
+.ac-card--critico { border-left-color: var(--crit); background: var(--crit-soft); }
+.ac-card--atencao { border-left-color: var(--warn); background: var(--warn-soft); }
+.ac-card--pausado { border-left-color: var(--border-strong); }
+.ac-card--normal  { border-left-color: var(--border); }
+
+/* ── Cabeçalho ── */
 .ac-header {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-5);
-  user-select: none;
+  gap: 10px;
+  padding: 12px 16px 8px;
 }
 
-.ac-status-dot {
-  width: 7px;
-  height: 7px;
+.ac-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--text-subtle);
 }
-.ac-card--normal  .ac-status-dot { background: var(--ok); }
-.ac-card--critico .ac-status-dot { background: var(--crit); }
-.ac-card--atencao .ac-status-dot { background: var(--warn); }
-.ac-card--pausado .ac-status-dot { background: var(--text-subtle); }
+.ac-dot--normal  { background: var(--ok); }
+.ac-dot--critico { background: var(--crit); box-shadow: 0 0 0 2px rgba(220,38,38,.15); }
+.ac-dot--atencao { background: var(--warn); }
+.ac-dot--pausado { background: var(--text-subtle); }
 
-.ac-favorito {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: var(--text-subtle);
-  opacity: .55;
-  transition: opacity .12s, color .12s, transform .12s;
-  flex-shrink: 0;
-}
-.ac-favorito:hover { opacity: 1; color: var(--text); transform: scale(1.1); }
-.ac-favorito--on { opacity: 1; color: var(--accent); }
-
-/* Nome */
-.ac-nome-wrapper {
+.ac-nome-wrap {
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
 
 .ac-nome {
-  font-size: var(--fs-md);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text);
-  letter-spacing: -.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .ac-nome-input {
-  font-size: var(--fs-md);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text);
   border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: 3px 7px;
+  border-radius: 5px;
+  padding: 2px 6px;
   outline: none;
   background: var(--surface);
   flex: 1;
@@ -90,116 +78,131 @@
 .ac-rename-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text-subtle);
   padding: 3px;
-  border-radius: 5px;
+  border-radius: 4px;
   opacity: 0;
-  transition: opacity .12s, color .12s, background .12s;
+  transition: opacity .12s;
   flex-shrink: 0;
 }
-.ac-nome-wrapper:hover .ac-rename-btn { opacity: 1; }
-.ac-rename-btn:hover { color: var(--text); background: var(--surface-2); }
+.ac-header:hover .ac-rename-btn { opacity: 1; }
+.ac-rename-btn:hover { color: var(--text); background: var(--surface-hover); }
 
-/* Resumo */
-.ac-resumo {
+.ac-gestor {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 99px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Corpo: gasto hoje + veredito ── */
+.ac-body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 4px 16px 10px;
+  gap: 8px;
+}
+
+.ac-gasto-hoje {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.ac-gasto-valor {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+
+.ac-gasto-label {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+.ac-verd {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.ac-verd-label {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+}
+
+.ac-verd--ok   { color: var(--ok);   background: var(--ok-soft);   border: 1px solid var(--ok-border); }
+.ac-verd--crit { color: var(--crit); background: var(--crit-soft); border: 1px solid var(--crit-border); }
+.ac-verd--muted { color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); }
+
+/* ── Progress bar de meta ── */
+.ac-progress {
+  padding: 0 16px 10px;
+}
+
+.ac-progress-track {
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.ac-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .3s ease;
+}
+.ac-progress-fill--ok   { background: var(--ok); }
+.ac-progress-fill--warn { background: var(--warn); }
+.ac-progress-fill--crit { background: var(--crit); }
+
+.ac-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Rodapé: saldo + alertas ── */
+.ac-footer {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
 }
 
-/* Saldo — texto, sem preenchimento */
 .ac-saldo {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .ac-saldo--muted { color: var(--text-muted); }
 .ac-saldo--warn  { color: var(--warn); font-weight: 600; }
 .ac-saldo--crit  { color: var(--crit); font-weight: 600; }
 
-/* Gasto dos últimos 30 dias — informativo, discreto */
-.ac-gasto30d {
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--text-subtle);
-}
-
-/* Botão "Abrir na BM" — deep-link para o Ads Manager */
-.ac-bm-link {
+.ac-alertas {
   font-size: var(--fs-xs);
   font-weight: 600;
-  white-space: nowrap;
-  padding: 3px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  text-decoration: none;
+  color: var(--crit);
+  margin-left: auto;
 }
-.ac-bm-link:hover { border-color: var(--text-muted); }
-
-/* Veredito de tendência (melhorou/estável/piorou) */
-.ac-veredito {
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-}
-.ac-veredito--ok    { color: var(--ok); font-weight: 600; }
-.ac-veredito--warn  { color: var(--warn); font-weight: 600; }
-.ac-veredito--crit  { color: var(--crit); font-weight: 600; }
-.ac-veredito--muted { color: var(--text-subtle); }
-
-/* Barra de gasto do mês vs. investimento planejado */
-.ac-gastobar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: 8px;
-}
-.ac-gastobar-track {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--ok-soft);
-  overflow: hidden;
-}
-.ac-gastobar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-.ac-gastobar-fill--ok   { background: var(--ok); }
-.ac-gastobar-fill--warn { background: var(--warn); }
-.ac-gastobar-fill--crit { background: var(--crit); }
-.ac-gastobar-label {
-  font-size: var(--fs-xs);
-  color: var(--text-subtle);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Tags textuais discretas */
-.ac-tag {
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ac-tag--crit  { color: var(--crit); }
-.ac-tag--warn  { color: var(--warn); }
-.ac-tag--muted { color: var(--text-subtle); font-weight: 500; }
-
-.ac-toggle {
-  display: inline-flex;
-  align-items: center;
-  color: var(--text-subtle);
-  flex-shrink: 0;
-  transition: color .12s, transform .12s;
-}
-.ac-card:hover .ac-toggle { color: var(--text-muted); transform: translateX(2px); }

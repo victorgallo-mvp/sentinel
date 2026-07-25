@@ -1,0 +1,130 @@
+.cb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 20px;
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Back button */
+.cb-back {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: color .13s, background .13s;
+  flex-shrink: 0;
+}
+.cb-back:hover { color: var(--text); background: var(--surface-2); }
+
+.cb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+/* Account name */
+.cb-conta-nome {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.cb-gestor {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+/* KPI chips */
+.cb-kpi {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cb-kpi-label {
+  font-weight: 400;
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+}
+
+.cb-kpi--label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  padding-left: 0;
+}
+
+.cb-kpi--crit {
+  color: var(--crit);
+  border-color: var(--crit-border);
+  background: var(--crit-soft);
+}
+
+.cb-kpi--warn {
+  color: var(--warn);
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+
+.cb-kpi--ok {
+  color: var(--ok);
+  border-color: var(--ok-border);
+  background: var(--ok-soft);
+}
+
+/* Veredito no contexto de conta */
+.cb-kpi--verd.cb-kpi--melhorou { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.cb-kpi--verd.cb-kpi--piorou   { color: var(--crit); border-color: var(--crit-border); background: var(--crit-soft); }
+.cb-kpi--verd.cb-kpi--estavel  { color: var(--text-muted); }
+
+/* Right side */
+.cb-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.cb-usuario {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cb-refresh {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  white-space: nowrap;
+}

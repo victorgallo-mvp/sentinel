@@ -1,174 +1,92 @@
 import { useState, useRef, useEffect } from 'react';
 import './AccountCard.css';
 
-const STATUS_TITLE = { critico: 'Alerta ativo', atencao: 'Anomalia detectada', pausado: 'Conta pausada', normal: 'Sem alertas' };
-
-// ── Saldo pré-pago: do mais grave ao mais tranquilo ──
 const SALDO_ORDEM = { zerado: 0, bloqueado: 1, critico: 2, acabando: 3, ok: 4 };
-// Tom do saldo: 'crit' | 'warn' | 'muted' (sem cor de "ok" — minimalismo)
-const SALDO_TOM = { zerado: 'crit', bloqueado: 'crit', critico: 'crit', acabando: 'warn', ok: 'muted' };
-// Veredito de melhora/queda por objetivos (tendência 7d vs 7d anterior)
+const SALDO_TOM   = { zerado: 'crit', bloqueado: 'crit', critico: 'crit', acabando: 'warn', ok: 'muted' };
+
 const VEREDITO_UI = {
-  melhorou: { icon: '📈', tom: 'ok',    label: 'melhorou' },
-  estavel:  { icon: '➖', tom: 'muted', label: 'estável' },
-  piorou:   { icon: '📉', tom: 'crit',  label: 'piorou' },
+  melhorou: { arrow: '↑', tom: 'ok' },
+  estavel:  { arrow: '—', tom: 'muted' },
+  piorou:   { arrow: '↓', tom: 'crit' },
 };
 
-// Deep-link para o Ads Manager da conta (nível BM) — investigação a fundo é na Meta
-function urlMetaBm(conta) {
-  const act = conta.contaAnuncioId?.replace(/^act_/, '');
-  if (!act) return null;
-  const base = 'https://adsmanager.facebook.com/adsmanager/manage/campaigns';
-  return `${base}?act=${act}${conta.bmId ? `&business_id=${conta.bmId}` : ''}`;
-}
-
-function fmtRunway(h) {
-  if (h == null) return null;
-  const horas = Math.max(0, Math.round(h));
-  if (horas < 24) return `${horas}h`;
-  const d = Math.floor(horas / 24);
-  const r = horas % 24;
-  return r > 0 ? `${d}d ${r}h` : `${d}d`;
-}
-
 function piorSaldo(lista) {
-  if (!lista || !lista.length) return null;
+  if (!lista?.length) return null;
   return [...lista].sort((a, b) => (SALDO_ORDEM[a.nivel] ?? 9) - (SALDO_ORDEM[b.nivel] ?? 9))[0];
 }
 
 function textoSaldo(s) {
-  const runway = fmtRunway(s.runwayHoras);
-  const reais = s.saldoReais != null
-    ? `R$ ${s.saldoReais.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
-    : null;
+  const h = s.runwayHoras != null ? Math.max(0, Math.round(s.runwayHoras)) : null;
+  const runway = h != null ? (h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`) : null;
   switch (s.nivel) {
     case 'zerado':    return 'saldo zerado';
     case 'bloqueado': return 'conta bloqueada';
-    case 'critico':   return runway ? `acaba ~${runway}` : 'saldo crítico';
-    case 'acabando':  return runway ? `acaba ~${runway}` : (reais ? `${reais} restante` : 'saldo baixo');
-    default:          return reais ? `${reais}${runway ? ` · ~${runway}` : ''}` : null;
+    case 'critico':   return runway ? `~${runway} de saldo` : 'saldo crítico';
+    case 'acabando':  return runway ? `~${runway} restantes` : 'saldo baixo';
+    default:          return null;
   }
-}
-
-function tituloSaldo(s) {
-  const p = [];
-  if (s.saldoReais != null) p.push(`Saldo estimado: R$ ${s.saldoReais.toFixed(2)}`);
-  if (s.ritmoHora)          p.push(`Ritmo: R$ ${s.ritmoHora.toFixed(2)}/h`);
-  if (s.runwayHoras != null) p.push(`Autonomia: ~${fmtRunway(s.runwayHoras)}`);
-  if (s.motivoBloqueio)     p.push(`Motivo: ${s.motivoBloqueio}`);
-  if (s.atualizadoEm)       p.push(`Atualizado: ${new Date(s.atualizadoEm).toLocaleString('pt-BR')}`);
-  return p.join('\n');
-}
-
-function IconStar({ filled }) {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
-      fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"
-      strokeLinejoin="round">
-      <path d="M12 17.3l-5.4 3.1 1.4-6.1L3.2 10l6.2-.5L12 3.8l2.6 5.7 6.2.5-4.8 4.3 1.4 6.1z" />
-    </svg>
-  );
 }
 
 function IconPencil() {
   return (
-    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"
-      fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 20h4l10-10a2 2 0 0 0-3-3L5 17z" />
     </svg>
   );
 }
 
-function IconChevron() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
-      fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-export default function AccountCard({ conta, favorito, customName, onFavorito, onRename, onClick }) {
-  const [editando, setEditando]   = useState(false);
+export default function AccountCard({ conta, customName, onRename, onClick, isSelected }) {
+  const [editando,  setEditando]  = useState(false);
   const [valorEdit, setValorEdit] = useState('');
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (editando && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
+    if (editando && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
   }, [editando]);
 
   const nomeExibido = customName ?? conta.nome;
-  const { status, alertas = [], saldoPrepago = [], gasto7d, gasto30d, gasto30dAnterior, gastoMes, investimentoMensalPlanejado, veredito, veredito30d } = conta.resumo;
-  const saldo = piorSaldo(saldoPrepago);
-  const saldoTexto = saldo ? textoSaldo(saldo) : null;
-  const fmtGasto = (v) => `R$ ${(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+  const r = conta.resumo ?? {};
+  const {
+    status = 'normal', alertas = [], saldoPrepago = [],
+    gastoHoje, gastoMes, investimentoMensalPlanejado,
+    veredito, gerenteResponsavel,
+  } = r;
 
-  // Barra de gasto do mês vs. investimento planejado (substitui os números quando há plano)
-  const temPlano = investimentoMensalPlanejado > 0;
-  const pctMes = temPlano ? Math.round((gastoMes / investimentoMensalPlanejado) * 100) : null;
+  const saldo    = piorSaldo(saldoPrepago);
+  const saldoTxt = saldo && saldo.nivel !== 'ok' ? textoSaldo(saldo) : null;
+  const saldoTom = saldo ? SALDO_TOM[saldo.nivel] ?? 'muted' : 'muted';
+
+  const temPlano = (investimentoMensalPlanejado ?? 0) > 0;
+  const pctMes   = temPlano ? Math.min(Math.round(((gastoMes ?? 0) / investimentoMensalPlanejado) * 100), 100) : null;
   const tomBarra = pctMes == null ? 'ok' : pctMes >= 100 ? 'crit' : pctMes >= 80 ? 'warn' : 'ok';
 
-  // Variação % do gasto 30d vs. período anterior (deve vir antes de gasto30dTexto)
-  const var30d = gasto30dAnterior > 0
-    ? Math.round(((gasto30d - gasto30dAnterior) / gasto30dAnterior) * 100)
-    : null;
-
-  const gasto30dTexto = gasto30d > 0
-    ? `30d: ${fmtGasto(gasto30d)}${var30d != null ? ` (${var30d > 0 ? '+' : ''}${var30d}%)` : ''}`
-    : null;
-  const partesGasto = [
-    gasto7d > 0 ? `7d: ${fmtGasto(gasto7d)}` : null,
-    gasto30dTexto,
-  ].filter(Boolean);
-  const gastoTexto = !temPlano && partesGasto.length ? partesGasto.join(' · ') : null;
-
-  const vd   = veredito   ? VEREDITO_UI[veredito.direcao]   : null;
-  const vd30 = veredito30d ? VEREDITO_UI[veredito30d.direcao] : null;
-
-  const linkBm = urlMetaBm(conta);
+  const vd = veredito ? VEREDITO_UI[veredito.direcao] : null;
 
   function iniciarEdicao(e) {
     e.stopPropagation();
     setValorEdit(nomeExibido);
     setEditando(true);
   }
-
   function confirmarEdicao() {
     const nome = valorEdit.trim();
-    if (nome) onRename(conta.id, nome);
+    if (nome) onRename?.(conta.id, nome);
     setEditando(false);
   }
-
   function handleKeyDown(e) {
     if (e.key === 'Enter') confirmarEdicao();
     if (e.key === 'Escape') setEditando(false);
   }
 
-  function handleCardClick() {
-    if (!editando && onClick) onClick(conta.id);
-  }
-
   return (
     <div
-      className={`ac-card ac-card--${status}`}
-      onClick={handleCardClick}
-      style={{ cursor: onClick ? 'pointer' : undefined }}
+      className={`ac-card ac-card--${status}${isSelected ? ' ac-card--selected' : ''}`}
+      onClick={() => { if (!editando) onClick?.(conta.id); }}
     >
+      {/* ── Cabeçalho ── */}
       <div className="ac-header">
-        <span className="ac-status-dot" title={STATUS_TITLE[status] ?? status} />
-
-        <button
-          className={`ac-favorito ${favorito ? 'ac-favorito--on' : ''}`}
-          onClick={(e) => { e.stopPropagation(); onFavorito(conta.id); }}
-          title={favorito ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-        >
-          <IconStar filled={favorito} />
-        </button>
-
-        <div className="ac-nome-wrapper" onClick={(e) => e.stopPropagation()}>
+        <span className={`ac-dot ac-dot--${status}`} />
+        <div className="ac-nome-wrap" onClick={(e) => e.stopPropagation()}>
           {editando ? (
             <input
               ref={inputRef}
@@ -185,79 +103,50 @@ export default function AccountCard({ conta, favorito, customName, onFavorito, o
             <IconPencil />
           </button>
         </div>
-
-        <div className="ac-resumo">
-          {saldoTexto && (
-            <span
-              className={`ac-saldo ac-saldo--${SALDO_TOM[saldo.nivel] ?? 'muted'}`}
-              title={tituloSaldo(saldo)}
-            >
-              {saldoTexto}
-            </span>
-          )}
-          {gastoTexto && (
-            <span className="ac-gasto30d" title="Gasto nos últimos 7 e 30 dias">
-              {gastoTexto}
-            </span>
-          )}
-          {vd && (
-            <span
-              className={`ac-veredito ac-veredito--${vd.tom}`}
-              title={`7d vs 7d anterior (${veredito.scorePct > 0 ? '+' : ''}${veredito.scorePct}%): ${vd.label}`}
-            >
-              {vd.icon} 7d
-            </span>
-          )}
-          {vd30 && (
-            <span
-              className={`ac-veredito ac-veredito--${vd30.tom}`}
-              title={`30d vs 30d anterior (${veredito30d.scorePct > 0 ? '+' : ''}${veredito30d.scorePct}%): ${vd30.label}`}
-            >
-              {vd30.icon} 30d
-            </span>
-          )}
-          {alertas.length > 0 && (
-            <span className="ac-tag ac-tag--crit">
-              {alertas.length} alerta{alertas.length !== 1 ? 's' : ''}
-            </span>
-          )}
-          {status === 'atencao' && alertas.length === 0 && (
-            <span className="ac-tag ac-tag--warn">atenção</span>
-          )}
-          {status === 'pausado' && (
-            <span className="ac-tag ac-tag--muted">pausada</span>
-          )}
-          {linkBm && (
-            <a
-              className="ac-bm-link"
-              href={linkBm}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Abrir esta conta no Meta Ads Manager (BM)"
-            >
-              Abrir na BM ↗
-            </a>
-          )}
-        </div>
-
-        <span className="ac-toggle"><IconChevron /></span>
+        {gerenteResponsavel && <span className="ac-gestor">{gerenteResponsavel}</span>}
       </div>
 
+      {/* ── Corpo ── */}
+      <div className="ac-body">
+        <div className="ac-gasto-hoje">
+          <span className="ac-gasto-valor">
+            {(gastoHoje ?? 0) > 0
+              ? `R$ ${(gastoHoje).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : '—'}
+          </span>
+          <span className="ac-gasto-label">hoje</span>
+        </div>
+        {vd && (
+          <span className={`ac-verd ac-verd--${vd.tom}`}>
+            {vd.arrow} {veredito.scorePct > 0 ? '+' : ''}{veredito.scorePct}%
+            <span className="ac-verd-label">7d</span>
+          </span>
+        )}
+      </div>
+
+      {/* ── Barra de meta mensal ── */}
       {temPlano && (
-        <div
-          className="ac-gastobar"
-          title={`Gasto do mês: ${fmtGasto(gastoMes)} de ${fmtGasto(investimentoMensalPlanejado)} planejados`}
-        >
-          <div className="ac-gastobar-track">
+        <div className="ac-progress">
+          <div className="ac-progress-track">
             <div
-              className={`ac-gastobar-fill ac-gastobar-fill--${tomBarra}`}
-              style={{ width: `${Math.min(pctMes, 100)}%` }}
+              className={`ac-progress-fill ac-progress-fill--${tomBarra}`}
+              style={{ width: `${pctMes}%` }}
             />
           </div>
-          <span className="ac-gastobar-label">
-            {fmtGasto(gastoMes)} / {fmtGasto(investimentoMensalPlanejado)} · {pctMes}%
-          </span>
+          <div className="ac-progress-labels">
+            <span>Meta {pctMes}%</span>
+            <span>R$ {Math.round(gastoMes ?? 0).toLocaleString('pt-BR')} / R$ {Math.round(investimentoMensalPlanejado).toLocaleString('pt-BR')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Rodapé ── */}
+      {(saldoTxt || alertas.length > 0) && (
+        <div className="ac-footer">
+          {saldoTxt && <span className={`ac-saldo ac-saldo--${saldoTom}`}>{saldoTxt}</span>}
+          {alertas.length > 0 && (
+            <span className="ac-alertas">{alertas.length} alerta{alertas.length > 1 ? 's' : ''}</span>
+          )}
         </div>
       )}
     </div>

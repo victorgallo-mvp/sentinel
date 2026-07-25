@@ -1,6 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import AccountCard from './AccountCard.jsx';
-import AccountModal from './AccountModal.jsx';
 import './AccountList.css';
 
 function IconSearch() {
@@ -15,37 +14,14 @@ function IconSearch() {
 
 const ORDEM_STATUS = { critico: 0, atencao: 1, pausado: 2, normal: 3 };
 
-const SORTS = [
-  { id: 'alertas', label: 'Alertas' },
-  { id: 'gasto',   label: 'Gasto' },
-  { id: 'nome',    label: 'Nome' },
-];
-
-export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, onRefresh, contaSelecionadaId, onSelectConta }) {
-  const [busca, setBusca]             = useState('');
-  const [sort,  setSort]              = useState('alertas');
-  const [openModalContaId, setOpenModalContaId] = useState(null);
-
-  // Sidebar selection opens the modal
-  useEffect(() => {
-    if (contaSelecionadaId) setOpenModalContaId(contaSelecionadaId);
-  }, [contaSelecionadaId]);
-
-  function handleCloseModal() {
-    setOpenModalContaId(null);
-    onSelectConta?.(null);
-  }
-
-  const contaModal = openModalContaId ? contas.find((c) => c.id === openModalContaId) ?? null : null;
+export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, contaSelecionadaId, onSelectConta }) {
+  const [busca, setBusca] = useState('');
+  const [sort,  setSort]  = useState('alertas');
 
   const contasOrdenadas = useMemo(() => {
-    const termoBusca = busca.trim().toLowerCase();
-
-    const filtradas = termoBusca
-      ? contas.filter((c) => {
-          const nome = (customNames[c.id] ?? c.nome).toLowerCase();
-          return nome.includes(termoBusca);
-        })
+    const termo = busca.trim().toLowerCase();
+    const filtradas = termo
+      ? contas.filter((c) => (customNames[c.id] ?? c.nome).toLowerCase().includes(termo))
       : contas;
 
     return [...filtradas].sort((a, b) => {
@@ -54,14 +30,11 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
       if (aFav !== bFav) return aFav - bFav;
 
       if (sort === 'alertas') {
-        const diffStatus = (ORDEM_STATUS[a.resumo.status] ?? 9) - (ORDEM_STATUS[b.resumo.status] ?? 9);
-        if (diffStatus !== 0) return diffStatus;
+        const ds = (ORDEM_STATUS[a.resumo.status] ?? 9) - (ORDEM_STATUS[b.resumo.status] ?? 9);
+        if (ds !== 0) return ds;
         return (b.resumo.gastoHoje ?? 0) - (a.resumo.gastoHoje ?? 0);
       }
-      if (sort === 'gasto') {
-        return (b.resumo.gastoHoje ?? 0) - (a.resumo.gastoHoje ?? 0);
-      }
-      // nome
+      if (sort === 'gasto') return (b.resumo.gastoHoje ?? 0) - (a.resumo.gastoHoje ?? 0);
       const nA = (customNames[a.id] ?? a.nome).toLowerCase();
       const nB = (customNames[b.id] ?? b.nome).toLowerCase();
       return nA.localeCompare(nB, 'pt-BR');
@@ -70,64 +43,46 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
 
   return (
     <div className="al-wrapper">
-      {/* ── Barra de busca + sort ── */}
       <div className="al-toolbar">
         <div className="al-search-wrapper">
           <span className="al-search-icon"><IconSearch /></span>
           <input
             className="al-search"
             type="text"
-            placeholder="Buscar conta..."
+            placeholder="Buscar conta…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
-          {busca && (
-            <button className="al-search-clear" onClick={() => setBusca('')} title="Limpar busca">×</button>
-          )}
+          {busca && <button className="al-search-clear" onClick={() => setBusca('')}>×</button>}
         </div>
-
         <div className="al-sort">
-          <span className="al-sort-label">Ordenar:</span>
-          {SORTS.map((s) => (
+          {['alertas', 'gasto', 'nome'].map((s) => (
             <button
-              key={s.id}
-              className={`al-sort-btn ${sort === s.id ? 'ativo' : ''}`}
-              onClick={() => setSort(s.id)}
+              key={s}
+              className={`al-sort-btn${sort === s ? ' ativo' : ''}`}
+              onClick={() => setSort(s)}
             >
-              {s.label}
+              {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Lista de contas ── */}
       {contasOrdenadas.length === 0 ? (
-        <p className="al-vazio">Nenhuma conta encontrada para "{busca}".</p>
+        <p className="al-vazio">Nenhuma conta para "{busca}".</p>
       ) : (
         <div className="al-lista">
           {contasOrdenadas.map((conta) => (
             <AccountCard
               key={conta.id}
               conta={conta}
-              favorito={favoritos.includes(conta.id)}
               customName={customNames[conta.id] ?? null}
-              onFavorito={onFavorito}
               onRename={onRename}
-              onClick={(id) => setOpenModalContaId(id)}
+              onClick={onSelectConta}
+              isSelected={conta.id === contaSelecionadaId}
             />
           ))}
         </div>
-      )}
-
-      {/* ── Modal de conta ── */}
-      {contaModal && (
-        <AccountModal
-          conta={contaModal}
-          customName={customNames[contaModal.id] ?? null}
-          onClose={handleCloseModal}
-          onMetricasSalvas={onRefresh}
-          onRefresh={onRefresh}
-        />
       )}
     </div>
   );
