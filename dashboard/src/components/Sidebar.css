@@ -1,8 +1,6 @@
 /* ── Layout base ── */
 .sb {
-  position: fixed;
-  top: 0;
-  left: 0;
+  flex-shrink: 0;
   height: 100vh;
   width: var(--sb-w);
   background: var(--sb-bg);

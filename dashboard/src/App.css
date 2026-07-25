@@ -8,11 +8,10 @@
 /* ── Main (tudo à direita da sidebar) ── */
 .app-main {
   flex: 1;
-  margin-left: var(--sb-w);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  transition: margin-left .2s ease;
+  min-width: 0;
 }
 
 /* ── Body: lista + painel ── */
