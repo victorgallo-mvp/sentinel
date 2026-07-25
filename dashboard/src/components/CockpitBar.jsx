@@ -7,7 +7,7 @@ function fmtBRL(v) {
   return `R$ ${Math.round(v ?? 0).toLocaleString('pt-BR')}`;
 }
 
-export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, dataFim, onPeriodoChange, usuario, segundos, onVoltar }) {
+export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, dataFim, onPeriodoChange, usuario, segundos, onVoltar, modo, onModo }) {
   const atualStr = segundos < 5 ? 'agora' : `há ${segundos}s`;
 
   if (contaSelecionada) {
@@ -52,7 +52,21 @@ export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, 
 
   return (
     <div className="cb">
-      <span className="cb-kpi cb-kpi--label">{contas.length} contas</span>
+      {/* Abas de modo */}
+      <nav className="cb-nav">
+        <button
+          className={`cb-tab${modo === 'monitoramento' ? ' cb-tab--ativo' : ''}`}
+          onClick={() => onModo?.('monitoramento')}
+        >Monitoramento</button>
+        <button
+          className={`cb-tab${modo === 'dashboard' ? ' cb-tab--ativo' : ''}`}
+          onClick={() => onModo?.('dashboard')}
+        >Dashboard</button>
+      </nav>
+
+      <span className="cb-sep" />
+
+      {/* KPIs agregados */}
       {gastoTotal > 0 && (
         <span className="cb-kpi">{fmtBRL(gastoTotal)} <span className="cb-kpi-label">hoje</span></span>
       )}
@@ -63,6 +77,7 @@ export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, 
         <span className="cb-kpi cb-kpi--warn">{nAlerta} alerta{nAlerta > 1 ? 's' : ''}</span>
       )}
       {tudo_ok && <span className="cb-kpi cb-kpi--ok">✓ tudo ok</span>}
+
       <div className="cb-right">
         <DateRangePicker dataInicio={dataInicio} dataFim={dataFim} onChange={onPeriodoChange} />
         {usuario?.nome && <span className="cb-usuario">{usuario.nome}</span>}

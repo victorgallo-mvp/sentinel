@@ -95,6 +95,12 @@ export default function App() {
     try { localStorage.setItem(LS_GESTOR, JSON.stringify(g)); } catch {}
   }
 
+  function handleModo(m) {
+    setModo(m);
+    setContaSelecionadaId(null);
+    try { localStorage.setItem(LS_MODO, JSON.stringify(m)); } catch {}
+  }
+
   if (erro) {
     return (
       <div className="error-screen">
@@ -137,13 +143,21 @@ export default function App() {
           usuario={usuario}
           segundos={segundos}
           onVoltar={() => setContaSelecionadaId(null)}
+          modo={modo}
+          onModo={handleModo}
         />
 
         <div className={`app-body${painelAberto ? ' app-body--split' : ''}`}>
-          {/* ── Lista central ── */}
+          {/* ── Conteúdo principal ── */}
           <div className="app-list">
             {modo === 'dashboard' ? (
-              <DashboardView contas={contas} notificacoes={dados.notificacoes} />
+              <DashboardView
+                contas={contas}
+                notificacoes={dados.notificacoes}
+                customNames={customNames}
+                contaSelecionadaId={contaSelecionadaId}
+                onSelectConta={setContaSelecionadaId}
+              />
             ) : (
               <>
                 <AccountList
@@ -167,7 +181,7 @@ export default function App() {
             )}
           </div>
 
-          {/* ── Painel de detalhe ── */}
+          {/* ── Painel de detalhe (ambos os modos) ── */}
           {painelAberto && (
             <div className="app-panel">
               <AccountDetailPanel
