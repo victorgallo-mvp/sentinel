@@ -13,7 +13,7 @@ import { Usuario } from '../../dominio/usuario.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
-import { CATALOGO_METRICAS, metricaResultado } from '../../config/metricas.config.js';
+import { CATALOGO_METRICAS, metricaResultado, metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { resolverMetricasEntidade } from '../../config/metricas-por-objetivo.js';
 import { OBJETIVOS, objetivoValido } from '../../config/objetivos.config.js';
 import { buscarGastoMes, buscarGasto30dAnterior, computarVeredito, computarVeredito30d } from '../../core/analise/veredito.servico.js';
@@ -304,7 +304,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             const metricasEntidade = metricasSelecionadas.length > 0
               ? metricasSelecionadas
               : resolverMetricasEntidade(entidade);
-            const resultadoKey = metricaResultado(entidade.objetivo);
+            const resultadoKey = metricaResultadoEntidade(entidade);
             const metricas = metricasEntidade.map((chave) => {
               const meta = CATALOGO_METRICAS[chave];
               if (!meta || meta.tipo === 'enum') return null;

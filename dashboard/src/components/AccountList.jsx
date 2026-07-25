@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import AccountCard from './AccountCard.jsx';
 import AccountModal from './AccountModal.jsx';
 import './AccountList.css';
@@ -21,10 +21,20 @@ const SORTS = [
   { id: 'nome',    label: 'Nome' },
 ];
 
-export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, onRefresh }) {
+export default function AccountList({ contas, favoritos, customNames, onFavorito, onRename, onRefresh, contaSelecionadaId, onSelectConta }) {
   const [busca, setBusca]             = useState('');
   const [sort,  setSort]              = useState('alertas');
   const [openModalContaId, setOpenModalContaId] = useState(null);
+
+  // Sidebar selection opens the modal
+  useEffect(() => {
+    if (contaSelecionadaId) setOpenModalContaId(contaSelecionadaId);
+  }, [contaSelecionadaId]);
+
+  function handleCloseModal() {
+    setOpenModalContaId(null);
+    onSelectConta?.(null);
+  }
 
   const contaModal = openModalContaId ? contas.find((c) => c.id === openModalContaId) ?? null : null;
 
@@ -114,7 +124,7 @@ export default function AccountList({ contas, favoritos, customNames, onFavorito
         <AccountModal
           conta={contaModal}
           customName={customNames[contaModal.id] ?? null}
-          onClose={() => setOpenModalContaId(null)}
+          onClose={handleCloseModal}
           onMetricasSalvas={onRefresh}
           onRefresh={onRefresh}
         />

@@ -208,9 +208,22 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
     }
   }
 
-  // Métrica principal da BM = aquela que recebeu mais gasto entre as campanhas
-  const metricaPrincipal = Object.entries(volumePorMetrica)
-    .sort(([, a], [, b]) => b - a)[0]?.[0] ?? 'conversions';
+  // Métrica principal da BM = aquela que recebeu mais gasto entre as campanhas.
+  // Se nenhuma campanha tem objetivo mapeado (volumePorMetrica vazio ou só 'clicks'),
+  // auto-detecta pelo primeiro resultado com valor real — evita citar 'conversions'
+  // em contas sem pixel.
+  let metricaPrincipal = Object.entries(volumePorMetrica)
+    .sort(([, a], [, b]) => b - a)[0]?.[0] ?? null;
+
+  if (!metricaPrincipal || metricaPrincipal === 'clicks') {
+    // Auto-detecção por dados reais do período
+    if (totais.conversasWpp > 0)      metricaPrincipal = 'messaging_conversations_started';
+    else if (totais.leads > 0)        metricaPrincipal = 'leads';
+    else if (totais.conversoes > 0)   metricaPrincipal = 'conversions';
+    else if (totais.thruplay > 0)     metricaPrincipal = 'video_thruplay_watched_actions';
+    else                              metricaPrincipal = metricaPrincipal ?? 'clicks';
+  }
+
   const nomeMetricaPrincipal = NOME_METRICA_RESULTADO[metricaPrincipal] ?? metricaPrincipal;
 
   // Se ninguém gastou ontem, não manda nada.

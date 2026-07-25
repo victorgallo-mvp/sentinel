@@ -333,9 +333,13 @@ const RESULTADO_POR_OBJETIVO = {
   VIDEO_VIEWS:           'video_p25_watched_actions',
 };
 
-/** Chave da métrica de resultado para um objetivo de campanha (fallback: conversões). */
+/**
+ * Chave da métrica de resultado para um objetivo de campanha.
+ * Retorna null para objetivos desconhecidos — não assume conversions,
+ * para não gerar alertas falsos em contas sem pixel instalado.
+ */
 export function metricaResultado(objetivo) {
-  return RESULTADO_POR_OBJETIVO[String(objetivo || '').toUpperCase()] ?? 'conversions';
+  return RESULTADO_POR_OBJETIVO[String(objetivo || '').toUpperCase()] ?? null;
 }
 
 /**
@@ -373,9 +377,13 @@ export function metricaResultadoPorGoal(optimizationGoal) {
   return RESULTADO_POR_OPTIMIZATION_GOAL[String(optimizationGoal).toUpperCase()] ?? null;
 }
 
-/** Resolve a métrica de resultado para uma entidade, preferindo optimizationGoal quando disponível. */
+/**
+ * Resolve a métrica de resultado para uma entidade, preferindo optimizationGoal quando disponível.
+ * Fallback seguro: 'clicks' — nunca assume 'conversions' para campanha sem objetivo mapeado,
+ * pois isso geraria alertas de "sem conversão" em contas sem pixel instalado.
+ */
 export function metricaResultadoEntidade(entidade) {
-  return metricaResultadoPorGoal(entidade?.optimizationGoal) ?? metricaResultado(entidade?.objetivo);
+  return metricaResultadoPorGoal(entidade?.optimizationGoal) ?? metricaResultado(entidade?.objetivo) ?? 'clicks';
 }
 
 /**
