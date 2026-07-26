@@ -10,6 +10,7 @@ import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { obterConfiguracaoAdset, obterConfiguracaoCampanha, obterDetalhesContaAnuncio } from '../coleta/meta-api.cliente.js';
 import { query } from '../../infra/postgres.js';
+import { inicioDiaBRT } from '../../shared/utils.js';
 // `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
 // Para problemas de pagamento, usamos exclusivamente account_status.
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
@@ -107,11 +108,11 @@ async function verificarSpikeDiarioConta(conta) {
   const ids = campanhas.map((c) => String(c._id));
 
   // 1. Verificar atividade recente: quantos dos últimos 3 dias (excl. hoje) tiveram gasto > R$1
-  const hoje0h = new Date(); hoje0h.setHours(0, 0, 0, 0);
-  const ha3dias = new Date(hoje0h); ha3dias.setDate(ha3dias.getDate() - 3);
+  const hoje0h  = inicioDiaBRT(0);
+  const ha3dias = inicioDiaBRT(3);
 
   const res3d = await query(
-    `SELECT COUNT(DISTINCT date_trunc('day', coletada_em))::int AS dias_ativos
+    `SELECT COUNT(DISTINCT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo'))::int AS dias_ativos
      FROM metricas_serie_temporal
      WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
        AND valor::float > 1 AND coletada_em >= $2 AND coletada_em < $3`,
@@ -121,20 +122,20 @@ async function verificarSpikeDiarioConta(conta) {
   if (diasAtivos3d < SPIKE_DIAS_ATIVOS_3D) return; // foi pausada recentemente — pula
 
   // 2. Média diária dos últimos 7 dias (excl. hoje), usando só dias com gasto
-  const ha7dias = new Date(hoje0h); ha7dias.setDate(ha7dias.getDate() - 7);
+  const ha7dias = inicioDiaBRT(7);
 
   const res7d = await query(
     `SELECT AVG(dia_total)::float AS media_diaria, COUNT(*)::int AS dias_com_gasto
      FROM (
        SELECT dia, SUM(max_por_entidade) AS dia_total
        FROM (
-         SELECT date_trunc('day', coletada_em) AS dia,
+         SELECT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo') AS dia,
                 entidade_id,
                 MAX(valor::float) AS max_por_entidade
          FROM metricas_serie_temporal
          WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
            AND coletada_em >= $2 AND coletada_em < $3
-         GROUP BY date_trunc('day', coletada_em), entidade_id
+         GROUP BY date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo'), entidade_id
        ) por_entidade
        WHERE max_por_entidade > 0
        GROUP BY dia
@@ -583,10 +584,8 @@ async function estimarRitmoHoraPrepago(contaId, contaAnuncioId) {
   if (!entidades.length) return null;
 
   const entidadeIds = entidades.map((e) => String(e._id));
-  const hojeInicio = new Date();
-  hojeInicio.setUTCHours(0, 0, 0, 0);
-  const tresDiasAtras = new Date(hojeInicio);
-  tresDiasAtras.setDate(tresDiasAtras.getDate() - 3);
+  const hojeInicio    = inicioDiaBRT(0);
+  const tresDiasAtras = inicioDiaBRT(3);
 
   // Média do gasto diário (soma do máximo por entidade em cada dia, depois média entre dias)
   const res = await query(
@@ -594,11 +593,11 @@ async function estimarRitmoHoraPrepago(contaId, contaAnuncioId) {
        FROM (
          SELECT dia, SUM(max_gasto) AS dia_total
          FROM (
-           SELECT date_trunc('day', coletada_em) AS dia, entidade_id, MAX(valor) AS max_gasto
+           SELECT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo') AS dia, entidade_id, MAX(valor) AS max_gasto
            FROM metricas_serie_temporal
            WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 24
              AND coletada_em >= $2 AND coletada_em < $3
-           GROUP BY dia, entidade_id
+           GROUP BY date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo'), entidade_id
          ) por_entidade
          GROUP BY dia
        ) por_dia`,

@@ -22,11 +22,11 @@ export async function agregarResultadoPeriodo(campanhaIds, metrica, desde, ate) 
   const r = await query(
     `SELECT COALESCE(SUM(m.valor), 0)::float AS total
      FROM (
-       SELECT entidade_id, date_trunc('day', coletada_em) AS dia, MAX(coletada_em) AS ts
+       SELECT entidade_id, date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo') AS dia, MAX(coletada_em) AS ts
        FROM metricas_serie_temporal
        WHERE entidade_id = ANY($1) AND metrica = $2 AND janela_horas = 24
          AND coletada_em >= $3 AND coletada_em < $4
-       GROUP BY entidade_id, date_trunc('day', coletada_em)
+       GROUP BY entidade_id, date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
      ) d
      JOIN metricas_serie_temporal m
        ON m.entidade_id = d.entidade_id AND m.coletada_em = d.ts

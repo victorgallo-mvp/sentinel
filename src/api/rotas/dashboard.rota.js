@@ -75,8 +75,9 @@ function derivarCustoPorResultado(dados, resultadoKey) {
  * onde "anterior" é o período equivalente imediatamente anterior.
  */
 async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
-  const ini  = new Date(dataInicio + 'T00:00:00Z');
-  const fim  = new Date(dataFim   + 'T00:00:00Z');
+  // T03:00:00Z = meia-noite BRT (UTC-3). Cada "data" do filtro corresponde ao dia BRT.
+  const ini  = new Date(dataInicio + 'T03:00:00Z');
+  const fim  = new Date(dataFim   + 'T03:00:00Z');
   const fimEx = new Date(fim); fimEx.setUTCDate(fimEx.getUTCDate() + 1); // exclusive
 
   const diffMs = fim - ini;
@@ -91,7 +92,7 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
          FROM metricas_serie_temporal
          WHERE entidade_id = $1 AND janela_horas = 24
            AND coletada_em >= $2 AND coletada_em < $3
-         GROUP BY date_trunc('day', coletada_em)
+         GROUP BY date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
        )
        SELECT m.metrica, m.valor
        FROM metricas_serie_temporal m
@@ -283,7 +284,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       ? todasContas
       : todasContas.filter((c) => req.usuario.contaIds.includes(String(c._id)));
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const isoHoje    = new Date().toISOString().slice(0, 10);
+    const isoHoje    = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10); // data BRT
     const dataInicio = req.query.dataInicio ?? isoHoje;
     const dataFim    = req.query.dataFim    ?? isoHoje;
 

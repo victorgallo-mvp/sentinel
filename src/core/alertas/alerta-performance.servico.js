@@ -17,6 +17,7 @@ import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 import { metricaResultadoEntidade } from '../../config/metricas.config.js';
+import { inicioDiaBRT } from '../../shared/utils.js';
 
 const THRESHOLD_FREQUENCIA = 3.0;
 const LIMIAR_GASTO_ZERO_CONVERSOES = 30; // R$
@@ -179,18 +180,18 @@ async function verificarFadigaCriativo(conta, entidade, destinatarios) {
 
   // 2. CTR 7d atual vs 7d anterior — calcula via soma de snapshots diários (24h)
   //    CTR ponderado: cliques_totais / impressões_totais × 100
-  const agora = new Date();
-  const ini7 = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const ini14 = new Date(agora.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const ini14 = inicioDiaBRT(14);
+  const ini7  = inicioDiaBRT(7);
+  const agora = inicioDiaBRT(0);
 
   const ctrPeriodo = async (de, ate) => {
     const r = await query(
       `WITH dias AS (
-         SELECT date_trunc('day', coletada_em) AS d, MAX(coletada_em) AS ts
+         SELECT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo') AS d, MAX(coletada_em) AS ts
          FROM metricas_serie_temporal
          WHERE entidade_id = $1 AND janela_horas = 24 AND metrica IN ('clicks', 'impressions')
            AND coletada_em >= $2 AND coletada_em < $3
-         GROUP BY date_trunc('day', coletada_em)
+         GROUP BY date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
        )
        SELECT m.metrica, SUM(m.valor)::float AS total
        FROM dias

@@ -145,11 +145,11 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
   // somar os snapshots diários dá o total correto do período.
   const res = await query(
     `WITH ultimas AS (
-       SELECT entidade_id, metrica, date_trunc('day', coletada_em) AS dia, MAX(coletada_em) AS ts
+       SELECT entidade_id, metrica, date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo') AS dia, MAX(coletada_em) AS ts
        FROM metricas_serie_temporal
        WHERE entidade_id = ANY($1) AND janela_horas = 24 AND metrica = ANY($2)
          AND coletada_em >= $3 AND coletada_em < $4
-       GROUP BY entidade_id, metrica, date_trunc('day', coletada_em)
+       GROUP BY entidade_id, metrica, date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
      )
      SELECT u.entidade_id, u.metrica, SUM(m.valor)::float AS valor
      FROM ultimas u
