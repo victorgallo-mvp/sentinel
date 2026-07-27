@@ -139,7 +139,7 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
       {/* ── Cabeçalho ── */}
       <div className="ac-header">
         <span className={`ac-dot ac-dot--${status}`} />
-        <div className="ac-nome-wrap" onClick={(e) => e.stopPropagation()}>
+        <div className="ac-nome-wrap">
           {editando ? (
             <input
               ref={inputRef}
