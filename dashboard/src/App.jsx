@@ -5,6 +5,7 @@ import AccountList from './components/AccountList.jsx';
 import AccountDetailPanel from './components/AccountDetailPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import DashboardView from './components/DashboardView.jsx';
+import { isDemoToken } from './demo/mockApi.js';
 import './App.css';
 
 const API_URL    = import.meta.env.VITE_API_URL ?? '';
@@ -133,8 +134,20 @@ export default function App() {
   const painelAberto = contaSelecionada !== null;
   const periodo = calcPeriodo(dataInicio, dataFim);
 
+  const emDemo = isDemoToken(token);
+  const BANNER_H = 26;
+
   return (
-    <div className="app-shell">
+    <>
+      {emDemo && (
+        <div style={{
+          height: BANNER_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 600, letterSpacing: '.02em', color: '#fff', background: '#7c3aed',
+        }}>
+          Ambiente demonstrativo — dados fictícios, apenas para fins de apresentação
+        </div>
+      )}
+      <div className="app-shell" style={emDemo ? { height: `calc(100vh - ${BANNER_H}px)` } : undefined}>
       <Sidebar
         contas={contas}
         contaSelecionadaId={contaSelecionadaId}
@@ -207,6 +220,7 @@ export default function App() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
