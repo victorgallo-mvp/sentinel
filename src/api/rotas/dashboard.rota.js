@@ -77,7 +77,133 @@ function derivarCustoPorResultado(dados, resultadoKey) {
  * Retorna { atual: {métrica: valor}, anterior: {métrica: valor} }
  * onde "anterior" é o período equivalente imediatamente anterior.
  */
-async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
+const METRICAS_NATIVAS_ROAS = [
+  'purchase_roas', 'website_purchase_roas', 'purchase_revenue', 'website_purchase_revenue',
+];
+
+/**
+ * Agrega as linhas diárias de UMA entidade num período.
+ * Counters somam; gauges viram média; as razões são recalculadas a partir dos
+ * componentes somados. `nativo` sobrepõe ROAS/receita com o snapshot da Meta.
+ */
+export function agregarLinhasPeriodo(linhas, nativo = {}) {
+  if (!linhas.length) return {};
+
+  const soma = {}, contagem = {};
+  for (const { metrica, valor } of linhas) {
+    soma[metrica]     = (soma[metrica]     ?? 0) + Number(valor);
+    contagem[metrica] = (contagem[metrica] ?? 0) + 1;
+  }
+
+  const resultado = Object.fromEntries(
+    Object.entries(soma).map(([k, v]) => [
+      k,
+      METRICAS_COUNTER.has(k) ? v : v / (contagem[k] || 1),
+    ])
+  );
+
+  // Recalcula as razões a partir dos componentes somados do período.
+  for (const [metrica, [num, den, fator]] of Object.entries(RATIOS_RECALCULAVEIS)) {
+    if (soma[den] > 0 && soma[num] != null) {
+      resultado[metrica] = (soma[num] / soma[den]) * fator;
+    }
+  }
+
+  // ROAS: 1 dia = valor real da Meta (correto). Multi-dia NÃO pode ser média das
+  // ROAS diárias (dias de gasto baixo + uma venda inflam pra 300x+). Recompõe de
+  // Σreceita/Σgasto quando houver receita coletada; senão OMITE (evita número errado).
+  for (const [roasKey, revKey] of [['purchase_roas', 'purchase_revenue'], ['website_purchase_roas', 'website_purchase_revenue']]) {
+    if (soma[roasKey] === undefined) continue;
+    const dias = contagem[roasKey] ?? 0;
+    if (dias <= 1) {
+      resultado[roasKey] = soma[roasKey]; // 1 dia: soma == o valor daquele dia
+    } else if (soma[revKey] > 0 && soma['spend'] > 0) {
+      resultado[roasKey] = soma[revKey] / soma['spend'];
+    } else {
+      resultado[roasKey] = null; // multi-dia sem receita: não exibir a média inflada
+    }
+  }
+
+  for (const [metrica, valor] of Object.entries(nativo)) resultado[metrica] = valor;
+
+  return resultado;
+}
+
+/**
+ * Snapshot nativo da Meta (janela 168h/720h) de ROAS e receita, para várias
+ * entidades. Elimina o drift do denominador (spend) causado por gaps de coleta.
+ */
+async function buscarNativoLote(entidadeIds, janelaHoras) {
+  const mapa = new Map();
+  if (entidadeIds.length === 0) return mapa;
+
+  const r = await query(
+    `SELECT DISTINCT ON (entidade_id, metrica) entidade_id, metrica, valor::float
+     FROM metricas_serie_temporal
+     WHERE entidade_id = ANY($1) AND janela_horas = $2 AND metrica = ANY($3)
+     ORDER BY entidade_id, metrica, coletada_em DESC`,
+    [entidadeIds, janelaHoras, METRICAS_NATIVAS_ROAS]
+  );
+
+  for (const row of r.rows) {
+    if (!mapa.has(row.entidade_id)) mapa.set(row.entidade_id, {});
+    mapa.get(row.entidade_id)[row.metrica] = Number(row.valor);
+  }
+  return mapa;
+}
+
+/** Agrega um período para VÁRIAS entidades numa única consulta. */
+async function agregarPeriodoLote(entidadeIds, desde, ate) {
+  const r = await query(
+    `WITH dias AS (
+       SELECT entidade_id, MAX(coletada_em) AS ts
+       FROM metricas_serie_temporal
+       WHERE entidade_id = ANY($1) AND janela_horas = 24
+         AND coletada_em >= $2 AND coletada_em < $3
+       GROUP BY entidade_id, date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
+     )
+     SELECT m.entidade_id, m.metrica, m.valor
+     FROM metricas_serie_temporal m
+     JOIN dias ON m.entidade_id = dias.entidade_id AND m.coletada_em = dias.ts
+     WHERE m.janela_horas = 24`,
+    [entidadeIds, desde, ate]
+  );
+
+  const linhasPorEntidade = new Map();
+  for (const row of r.rows) {
+    if (!linhasPorEntidade.has(row.entidade_id)) linhasPorEntidade.set(row.entidade_id, []);
+    linhasPorEntidade.get(row.entidade_id).push(row);
+  }
+
+  // Para períodos de ~7d ou ~30d o agregado nativo da Meta é sempre exato.
+  const diffDias = Math.round((ate - desde) / 86400000);
+  const janelaNativa = diffDias >= 6 && diffDias <= 8 ? 168 : diffDias >= 28 && diffDias <= 32 ? 720 : null;
+  const nativoPorEntidade = janelaNativa
+    ? await buscarNativoLote([...linhasPorEntidade.keys()], janelaNativa)
+    : new Map();
+
+  const resultado = new Map();
+  for (const [id, linhas] of linhasPorEntidade) {
+    resultado.set(id, agregarLinhasPeriodo(linhas, nativoPorEntidade.get(id) ?? {}));
+  }
+  return resultado;
+}
+
+/**
+ * Métricas do período escolhido e do período equivalente anterior, para VÁRIAS
+ * entidades de uma vez. Para cada dia no intervalo pega o último snapshot.
+ *
+ * É deliberadamente em lote: são duas consultas para o dashboard inteiro, não
+ * uma por entidade. Com milhares de entidades monitoradas, o formato anterior
+ * (3 a 5 consultas cada) esgotava o pool de conexões antes de terminar e a rota
+ * morria em "timeout exceeded when trying to connect".
+ *
+ * @returns {Map<string, {atual: Object, anterior: Object}>} indexado por entidadeId
+ */
+async function buscarMetricasIntervaloLote(entidadeIds, dataInicio, dataFim) {
+  const porEntidade = new Map();
+  if (entidadeIds.length === 0) return porEntidade;
+
   // T03:00:00Z = meia-noite BRT (UTC-3). Cada "data" do filtro corresponde ao dia BRT.
   const ini  = new Date(dataInicio + 'T03:00:00Z');
   const fim  = new Date(dataFim   + 'T03:00:00Z');
@@ -88,99 +214,41 @@ async function buscarMetricasIntervalo(entidadeId, dataInicio, dataFim) {
   const compIni = new Date(compFim); compIni.setUTCDate(compIni.getUTCDate() - Math.round(diffMs / 86400000));
   const compFimEx = new Date(ini); // compFim exclusive = ini
 
-  async function agregarPeriodo(desde, ate) {
-    const r = await query(
-      `WITH dias AS (
-         SELECT MAX(coletada_em) AS ts
-         FROM metricas_serie_temporal
-         WHERE entidade_id = $1 AND janela_horas = 24
-           AND coletada_em >= $2 AND coletada_em < $3
-         GROUP BY date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')
-       )
-       SELECT m.metrica, m.valor
-       FROM metricas_serie_temporal m
-       JOIN dias ON m.coletada_em = dias.ts
-       WHERE m.entidade_id = $1 AND m.janela_horas = 24`,
-      [entidadeId, desde, ate]
-    );
-    if (!r.rows.length) return {};
-
-    const soma = {}, contagem = {};
-    for (const { metrica, valor } of r.rows) {
-      soma[metrica]      = (soma[metrica]      ?? 0) + Number(valor);
-      contagem[metrica]  = (contagem[metrica]  ?? 0) + 1;
-    }
-    const resultado = Object.fromEntries(
-      Object.entries(soma).map(([k, v]) => [
-        k,
-        METRICAS_COUNTER.has(k) ? v : v / (contagem[k] || 1),
-      ])
-    );
-
-    // Recalcula as razões a partir dos componentes somados do período.
-    for (const [metrica, [num, den, fator]] of Object.entries(RATIOS_RECALCULAVEIS)) {
-      if (soma[den] > 0 && soma[num] != null) {
-        resultado[metrica] = (soma[num] / soma[den]) * fator;
-      }
-    }
-
-    // ROAS: 1 dia = valor real da Meta (correto). Multi-dia NÃO pode ser média das
-    // ROAS diárias (dias de gasto baixo + uma venda inflam pra 300x+). Recompõe de
-    // Σreceita/Σgasto quando houver receita coletada; senão OMITE (evita número errado).
-    for (const [roasKey, revKey] of [['purchase_roas', 'purchase_revenue'], ['website_purchase_roas', 'website_purchase_revenue']]) {
-      if (soma[roasKey] === undefined) continue;
-      const dias = contagem[roasKey] ?? 0;
-      if (dias <= 1) {
-        resultado[roasKey] = soma[roasKey]; // 1 dia: soma == o valor daquele dia
-      } else if (soma[revKey] > 0 && soma['spend'] > 0) {
-        resultado[roasKey] = soma[revKey] / soma['spend'];
-      } else {
-        resultado[roasKey] = null; // multi-dia sem receita: não exibir a média inflada
-      }
-    }
-
-    // Para períodos de exatamente ~7d ou ~30d, sobrepõe ROAS e receita com o snapshot
-    // nativo da Meta (janela 168h/720h). Elimina o drift do denominador (spend) causado
-    // por gaps de coleta diária — o agregado nativo da Meta é sempre exato.
-    const diffDias = Math.round((ate - desde) / 86400000);
-    const janelaNativa = diffDias >= 6 && diffDias <= 8 ? 168 : diffDias >= 28 && diffDias <= 32 ? 720 : null;
-    if (janelaNativa) {
-      const rNativo = await query(
-        `SELECT DISTINCT ON (metrica) metrica, valor::float
-         FROM metricas_serie_temporal
-         WHERE entidade_id = $1 AND janela_horas = $2
-           AND metrica IN ('purchase_roas','website_purchase_roas','purchase_revenue','website_purchase_revenue')
-         ORDER BY metrica, coletada_em DESC`,
-        [entidadeId, janelaNativa]
-      );
-      for (const row of rNativo.rows) resultado[row.metrica] = Number(row.valor);
-    }
-
-    return resultado;
-  }
-
   const [atual, anterior] = await Promise.all([
-    agregarPeriodo(ini, fimEx),
-    agregarPeriodo(compIni, compFimEx),
+    agregarPeriodoLote(entidadeIds, ini, fimEx),
+    agregarPeriodoLote(entidadeIds, compIni, compFimEx),
   ]);
 
-  return { atual, anterior };
+  for (const id of entidadeIds) {
+    porEntidade.set(id, { atual: atual.get(id) ?? {}, anterior: anterior.get(id) ?? {} });
+  }
+  return porEntidade;
 }
 
 /**
- * Lê o último snapshot real de 30 dias (janela_horas=720) das métricas
- * deduplicadas (frequência, alcance, únicos) — coletado 1×/dia direto da Meta,
- * que faz a deduplicação correta entre dias. Retorna {} se ainda não houver coleta.
+ * Último snapshot real de 30 dias (janela_horas=720) das métricas deduplicadas
+ * (frequência, alcance, únicos) — coletado 1×/dia direto da Meta, que faz a
+ * deduplicação correta entre dias. Em lote, pelo mesmo motivo acima.
+ *
+ * @returns {Map<string, Object>} indexado por entidadeId; ausente = sem coleta
  */
-async function buscarDeduplicadas30d(entidadeId) {
+async function buscarDeduplicadas30dLote(entidadeIds) {
+  const mapa = new Map();
+  if (entidadeIds.length === 0) return mapa;
+
   const r = await query(
-    `SELECT DISTINCT ON (metrica) metrica, valor
+    `SELECT DISTINCT ON (entidade_id, metrica) entidade_id, metrica, valor
      FROM metricas_serie_temporal
-     WHERE entidade_id = $1 AND janela_horas = $2 AND metrica = ANY($3)
-     ORDER BY metrica, coletada_em DESC`,
-    [entidadeId, JANELA_30D_HORAS, METRICAS_30D]
+     WHERE entidade_id = ANY($1) AND janela_horas = $2 AND metrica = ANY($3)
+     ORDER BY entidade_id, metrica, coletada_em DESC`,
+    [entidadeIds, JANELA_30D_HORAS, METRICAS_30D]
   );
-  return Object.fromEntries(r.rows.map((row) => [row.metrica, Number(row.valor)]));
+
+  for (const row of r.rows) {
+    if (!mapa.has(row.entidade_id)) mapa.set(row.entidade_id, {});
+    mapa.get(row.entidade_id)[row.metrica] = Number(row.valor);
+  }
+  return mapa;
 }
 
 /**
@@ -363,16 +431,34 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
     const dataInicio = req.query.dataInicio ?? isoHoje;
     const dataFim    = req.query.dataFim    ?? isoHoje;
 
+    // Uma leitura de métricas para TODAS as entidades visíveis, e não uma por
+    // entidade: com milhares de entidades monitoradas, o formato por entidade
+    // esgotava o pool de conexões do Postgres antes de a resposta ficar pronta.
+    const todasEntidades = await Entidade.find({
+      contaId: { $in: contas.map((c) => c._id) },
+      'configuracoes.monitorada': true,
+    }).lean();
+
+    const entidadesPorConta = new Map(contas.map((c) => [String(c._id), []]));
+    for (const entidade of todasEntidades) {
+      entidadesPorConta.get(String(entidade.contaId))?.push(entidade);
+    }
+
+    const idsEntidades = todasEntidades.map((e) => String(e._id));
+    const [metricasPorEntidade, dedupPorEntidade] = await Promise.all([
+      buscarMetricasIntervaloLote(idsEntidades, dataInicio, dataFim),
+      buscarDeduplicadas30dLote(idsEntidades),
+    ]);
+
     const dadosContas = await Promise.all(
       contas.map(async (conta) => {
-        const entidades = await Entidade.find({ contaId: conta._id, 'configuracoes.monitorada': true }).lean();
+        const entidades = entidadesPorConta.get(String(conta._id)) ?? [];
 
         const dadosEntidades = await Promise.all(
           entidades.map(async (entidade) => {
-            const [{ atual, anterior }, dados30d] = await Promise.all([
-              buscarMetricasIntervalo(String(entidade._id), dataInicio, dataFim),
-              buscarDeduplicadas30d(String(entidade._id)),
-            ]);
+            const { atual, anterior } =
+              metricasPorEntidade.get(String(entidade._id)) ?? { atual: {}, anterior: {} };
+            const dados30d = dedupPorEntidade.get(String(entidade._id)) ?? {};
             const tsAtual   = dataInicio; // referência textual para exibição
             const tsAnterior = null;
 
