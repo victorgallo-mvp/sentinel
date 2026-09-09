@@ -1,6 +1,7 @@
 /**
- * Rota pública de leitura para o dashboard externo (Vercel).
- * Autenticação via token simples em query param ou header.
+ * Rota de leitura para o dashboard externo (Vercel).
+ * Autenticação por e-mail + senha: `POST /dashboard/login` devolve um token de
+ * sessão assinado, enviado nas demais rotas em `Authorization: Bearer <token>`.
  * Retorna métricas com comparação ao período anterior + anomalias/investigações recentes.
  */
 import { Router } from 'express';
@@ -20,6 +21,8 @@ import { buscarGastoMes, buscarGasto30dAnterior, computarVeredito, computarVered
 import { montarDadosResumoBm } from '../../core/relatorio/resumo-diario.servico.js';
 import { redigirMiniResumo } from '../../core/relatorio/resumo-diario.agente.js';
 import { listarContasAnuncio } from '../../core/coleta/meta-api.cliente.js';
+import { verificarSenha } from '../../core/auth/senha.js';
+import { emitirSessao, verificarSessao, extrairTokenSessao } from '../../core/auth/sessao.js';
 
 // Métricas acumulativas (somam entre dias); as demais são gauge (média entre dias)
 const METRICAS_COUNTER = new Set(
@@ -203,21 +206,19 @@ export const rotaDashboard = Router();
 
 async function autenticarDashboard(req, res, next) {
   try {
-    const token = req.query.token ?? req.headers['x-dashboard-token'];
-    if (!token) return res.status(401).json({ erro: 'Token não fornecido' });
+    const token = extrairTokenSessao(req);
+    if (!token) return res.status(401).json({ erro: 'Sessão não fornecida', codigo: 'SEM_SESSAO' });
 
-    // Env var → super-admin (vê todas as contas)
-    if (config.dashboardToken && token === config.dashboardToken) {
-      req.usuario = { nome: null, superAdmin: true, contaIds: [] };
-      return next();
-    }
+    const sessao = verificarSessao(token);
+    if (!sessao) return res.status(401).json({ erro: 'Sessão inválida ou expirada', codigo: 'SESSAO_INVALIDA' });
 
-    // Usuário cadastrado no banco
-    const usuario = await Usuario.findOne({ token, ativo: true }).lean();
-    if (!usuario) return res.status(401).json({ erro: 'Token inválido' });
+    const usuario = await Usuario.findOne({ _id: sessao.sub, ativo: true }).lean();
+    if (!usuario) return res.status(401).json({ erro: 'Sessão inválida ou expirada', codigo: 'SESSAO_INVALIDA' });
 
     req.usuario = {
+      id:         String(usuario._id),
       nome:       usuario.nome,
+      email:      usuario.email,
       superAdmin: usuario.superAdmin ?? false,
       contaIds:   (usuario.contaIds ?? []).map(String),
     };
@@ -227,10 +228,84 @@ async function autenticarDashboard(req, res, next) {
   }
 }
 
+// Freio simples de força bruta: tentativas falhas por e-mail, em memória.
+const MAX_TENTATIVAS = 5;
+const JANELA_BLOQUEIO_MS = 15 * 60 * 1000;
+const tentativasLogin = new Map(); // email -> { falhas, ate }
+
+function loginBloqueado(email) {
+  const registro = tentativasLogin.get(email);
+  if (!registro) return false;
+  if (Date.now() > registro.ate) { tentativasLogin.delete(email); return false; }
+  return registro.falhas >= MAX_TENTATIVAS;
+}
+
+function registrarFalhaLogin(email) {
+  const registro = tentativasLogin.get(email);
+  const base = registro && Date.now() <= registro.ate ? registro.falhas : 0;
+  tentativasLogin.set(email, { falhas: base + 1, ate: Date.now() + JANELA_BLOQUEIO_MS });
+}
+
+/** POST /dashboard/login — troca e-mail + senha por um token de sessão. */
+rotaDashboard.post('/login', async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    const senha = String(req.body?.senha ?? '');
+
+    if (!email || !senha) {
+      return res.status(400).json({ erro: 'Informe e-mail e senha' });
+    }
+
+    if (loginBloqueado(email)) {
+      return res.status(429).json({ erro: 'Muitas tentativas. Tente novamente em alguns minutos.' });
+    }
+
+    const usuario = await Usuario.findOne({ email, ativo: true }).select('+senhaHash').lean();
+    const senhaOk = usuario ? await verificarSenha(senha, usuario.senhaHash) : false;
+
+    if (!usuario || !senhaOk) {
+      registrarFalhaLogin(email);
+      logger.warn({ msg: 'Login de dashboard recusado', email });
+      return res.status(401).json({ erro: 'E-mail ou senha inválidos' });
+    }
+
+    tentativasLogin.delete(email);
+    await Usuario.updateOne({ _id: usuario._id }, { $set: { ultimoLoginEm: new Date() } });
+
+    const { token, expiraEm } = emitirSessao(usuario._id);
+    logger.info({ msg: 'Login de dashboard', usuarioId: String(usuario._id), email });
+
+    res.json({
+      token,
+      expiraEm,
+      usuario: {
+        nome:       usuario.nome,
+        email:      usuario.email,
+        superAdmin: usuario.superAdmin ?? false,
+      },
+    });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/** GET /dashboard/eu — valida a sessão guardada no navegador. */
+rotaDashboard.get('/eu', autenticarDashboard, (req, res) => {
+  corsHeaders(res);
+  res.json({
+    usuario: {
+      nome:       req.usuario.nome,
+      email:      req.usuario.email,
+      superAdmin: req.usuario.superAdmin,
+    },
+  });
+});
+
 function corsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'x-dashboard-token, Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
 // Preflight catch-all: responde OPTIONS para qualquer rota do dashboard

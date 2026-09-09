@@ -216,6 +216,7 @@ Todos em `scripts/`, executados com `npm run <nome>`. Operam sobre a conta padr�
 | `npm run simular-anomalia` | Cria uma anomalia sintética e a enfileira para triagem (requer os workers rodando) |
 | `npm run testar-agente` | Roda triagem + investigação de ponta a ponta de forma síncrona (sem depender dos workers), imprimindo diagnóstico, recomendação, tools chamadas e custo. Use `--notificar` para também enviar via WhatsApp |
 | `npm run enviar-relatorio-manual` | Gera e envia o relatório semanal imediatamente (use `-- --dias=N` para outro período) |
+| `npm run usuarios` | Lista/cria/edita os usuários do dashboard (login por e-mail e senha) — veja "Dashboard: login e sessão" |
 | `npm test` | Roda os testes unitários (Vitest) das funções puras |
 
 ---
@@ -238,6 +239,48 @@ Rotas abaixo exigem header `Authorization: Bearer <ADMIN_TOKEN>`:
 - `GET /admin/estatisticas?contaId=` — contadores gerais, atividade dos últimos 7 dias e custo dos últimos 30 dias
 - `POST /admin/disparar/coleta` / `POST /admin/disparar/baselines` / `POST /admin/disparar/sincronizar-entidades` / `POST /admin/disparar/relatorio` — disparam manualmente os jobs correspondentes (respondem `202` e processam em background)
 - `GET /admin/feedback/sugestoes-sensibilidade?contaId=&dias=` / `POST /admin/feedback/sugestoes-sensibilidade/aplicar` — sugestões e aplicação de ajuste de sensibilidade por entidade, com base no histórico de feedback
+- `GET /admin/usuarios` / `POST /admin/usuarios` (nome, e-mail, senha, `contaIds`, `superAdmin`) / `PATCH /admin/usuarios/:id` (inclusive trocar `senha`) / `DELETE /admin/usuarios/:id`
+
+---
+
+## Dashboard: login e sessão
+
+O dashboard usa **e-mail + senha**. As senhas são gravadas só como hash scrypt
+(`src/core/auth/senha.js`) e o login devolve um token de sessão assinado com
+HMAC (`src/core/auth/sessao.js`), válido por 12h.
+
+- `POST /dashboard/login` — recebe `{ email, senha }`, devolve `{ token, expiraEm, usuario }`
+- `GET /dashboard/eu` — valida a sessão guardada no navegador
+- Todas as demais rotas `/dashboard/*` exigem `Authorization: Bearer <token>`
+
+Configure `SESSAO_SECRET` no `.env` (`openssl rand -hex 32`). Sem ele, o servidor
+sobe com um segredo aleatório e todo mundo é deslogado a cada reinício.
+
+Gestão dos usuários pela linha de comando:
+
+```bash
+npm run usuarios                                                  # lista
+npm run usuarios -- criar "Victor" victor@empresa.com senhaForte --admin
+npm run usuarios -- senha victor@empresa.com novaSenha            # redefine
+npm run usuarios -- desativar victor@empresa.com                  # bloqueia
+```
+
+Sem `--admin`, o usuário só enxerga as contas vinculadas em `contaIds`.
+
+**Migração do acesso antigo por token.** Bancos criados antes do login por senha
+têm o índice único `token_1` na coleção `usuarios`; sem removê-lo, o segundo
+cadastro falha com "duplicate key: null" (os usuários novos não têm `token`).
+
+```bash
+npm run usuarios -- migrar-token
+```
+
+O comando é destrutivo — apaga o campo `token` e derruba qualquer link por token
+ainda em uso. Rode **depois** que esta versão estiver no ar, nunca antes: com o
+código antigo em produção e os tokens apagados, ninguém consegue entrar.
+
+O modo demonstração (dados fictícios, sem backend e sem login) fica em
+`?demo=1`; `?demo=0` sai dele.
 
 ---
 

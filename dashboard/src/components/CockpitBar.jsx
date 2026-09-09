@@ -7,7 +7,7 @@ function fmtBRL(v) {
   return `R$ ${Math.round(v ?? 0).toLocaleString('pt-BR')}`;
 }
 
-export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, dataFim, onPeriodoChange, usuario, segundos, onVoltar, modo, onModo }) {
+export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, dataFim, onPeriodoChange, usuario, segundos, onVoltar, modo, onModo, onSair }) {
   const atualStr = segundos < 5 ? 'agora' : `há ${segundos}s`;
 
   if (contaSelecionada) {
@@ -82,6 +82,9 @@ export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, 
         <DateRangePicker dataInicio={dataInicio} dataFim={dataFim} onChange={onPeriodoChange} />
         {usuario?.nome && <span className="cb-usuario">{usuario.nome}</span>}
         <span className="cb-refresh">{atualStr}</span>
+        {onSair && (
+          <button className="cb-sair" onClick={onSair} title="Sair da conta">Sair</button>
+        )}
       </div>
     </div>
   );

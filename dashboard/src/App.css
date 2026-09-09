@@ -91,3 +91,16 @@
 
 .event-detail { flex: 1; color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.4; }
 .event-time   { font-size: var(--fs-xs); color: var(--text-subtle); white-space: nowrap; margin-left: auto; }
+
+.error-sair {
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.error-sair:hover { background: var(--surface-hover); }

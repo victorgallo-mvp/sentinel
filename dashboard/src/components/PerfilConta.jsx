@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 import './PerfilConta.css';
-
-const API_URL = import.meta.env.VITE_API_URL ?? '';
-
-function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('token') ?? sessionStorage.getItem('dash_token') ?? '';
-}
 
 const OBJETIVOS_OPTS = [
   { chave: 'conversao', nome: 'Conversões / Vendas' },
@@ -59,12 +53,9 @@ export default function PerfilConta({ conta, onSalvo }) {
   const [salvandoMetas, setSalvandoMetas] = useState(false);
   const [msgMetas, setMsgMetas] = useState('');
 
-  const token = getToken();
-
   useEffect(() => {
     // Carregar contas disponíveis na BM
-    fetch(`${API_URL}/dashboard/contas/${conta.id}/contas-anuncio?token=${token}`)
-      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+    apiFetch(`/dashboard/contas/${conta.id}/contas-anuncio`)
       .then((d) => {
         setContasDisponiveis(d.contas ?? []);
         setContasSelecionadas(new Set(
@@ -74,8 +65,7 @@ export default function PerfilConta({ conta, onSalvo }) {
       .catch(() => setErroContas('Falha ao carregar contas disponíveis'));
 
     // Carregar catálogo de métricas para metas
-    fetch(`${API_URL}/dashboard/metricas/catalogo-metas?token=${token}`)
-      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+    apiFetch('/dashboard/metricas/catalogo-metas')
       .then((d) => setCatalogoMetas(d.metricas ?? []))
       .catch(() => {});
   }, [conta.id]);
@@ -118,16 +108,14 @@ export default function PerfilConta({ conta, onSalvo }) {
     setMsgPerfil('');
     const objetivos = obj.map((chave, i) => (chave ? { ordem: i + 1, chave } : null)).filter(Boolean);
     try {
-      const res = await fetch(`${API_URL}/dashboard/contas/${conta.id}/perfil?token=${token}`, {
+      await apiFetch(`/dashboard/contas/${conta.id}/perfil`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gerenteResponsavel: gerente,
           investimentoMensalPlanejado: investimento === '' ? null : Number(investimento),
           objetivos,
         }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       setMsgPerfil('Salvo ✓');
       onSalvo?.();
     } catch {
@@ -143,12 +131,10 @@ export default function PerfilConta({ conta, onSalvo }) {
     setSalvandoContas(true);
     setMsgContas('');
     try {
-      const res = await fetch(`${API_URL}/dashboard/contas/${conta.id}/contas-anuncio?token=${token}`, {
+      await apiFetch(`/dashboard/contas/${conta.id}/contas-anuncio`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contasAnuncioIds: [...contasSelecionadas] }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       setMsgContas('Salvo ✓');
       onSalvo?.();
     } catch {
@@ -163,12 +149,10 @@ export default function PerfilConta({ conta, onSalvo }) {
     setSalvandoMetas(true);
     setMsgMetas('');
     try {
-      const res = await fetch(`${API_URL}/dashboard/contas/${conta.id}/metas?token=${token}`, {
+      await apiFetch(`/dashboard/contas/${conta.id}/metas`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ metasPersonalizadas: metas }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       setMsgMetas('Salvo ✓');
       onSalvo?.();
     } catch {
