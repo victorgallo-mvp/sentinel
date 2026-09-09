@@ -1,14 +1,6 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api.js';
 import './MetricSelector.css';
-
-const API_URL = import.meta.env.VITE_API_URL ?? '';
-
-function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  const fromUrl = params.get('token');
-  if (fromUrl) return fromUrl;
-  return sessionStorage.getItem('dash_token') ?? '';
-}
 
 export default function MetricSelector({ contaId, selecionadas = [], onClose, onSalvo }) {
   const [catalogo, setCatalogo]   = useState([]);
@@ -17,9 +9,7 @@ export default function MetricSelector({ contaId, selecionadas = [], onClose, on
   const [erro, setErro]           = useState(null);
 
   useEffect(() => {
-    const token = getToken();
-    fetch(`${API_URL}/dashboard/metricas/catalogo?token=${token}`)
-      .then((r) => r.json())
+    apiFetch('/dashboard/metricas/catalogo')
       .then((d) => setCatalogo(d.catalogo ?? []))
       .catch(() => setErro('Falha ao carregar catálogo'));
   }, []);
@@ -36,13 +26,10 @@ export default function MetricSelector({ contaId, selecionadas = [], onClose, on
     setSalvando(true);
     setErro(null);
     try {
-      const token = getToken();
-      const res = await fetch(`${API_URL}/dashboard/contas/${contaId}/metricas?token=${token}`, {
+      await apiFetch(`/dashboard/contas/${contaId}/metricas`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ metricasSelecionadas: [...escolhidas] }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       onSalvo([...escolhidas]);
       onClose();
     } catch {

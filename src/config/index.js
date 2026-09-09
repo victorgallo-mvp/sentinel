@@ -54,7 +54,8 @@ const esquemaEnv = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.string().default('info'),
   ADMIN_TOKEN: z.string().optional().default(''),
-  DASHBOARD_TOKEN: z.string().optional().default(''),
+  // Segredo usado pra assinar as sessões do dashboard (login por e-mail/senha).
+  SESSAO_SECRET: z.string().optional().default(''),
 });
 
 const resultado = esquemaEnv.safeParse(process.env);
@@ -73,7 +74,7 @@ export const config = {
   porta: env.PORT,
   logLevel: env.LOG_LEVEL,
   adminToken: env.ADMIN_TOKEN,
-  dashboardToken: env.DASHBOARD_TOKEN,
+  sessaoSecret: env.SESSAO_SECRET,
 
   contaIdPadrao: env.CONTA_ID,
 

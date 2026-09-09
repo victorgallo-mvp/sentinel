@@ -1,6 +1,6 @@
-// Interceptador de rede do modo demonstração. Ativado só quando o token da URL
-// é DEMO_TOKEN — nesse caso, TODA chamada a /dashboard/* é respondida aqui,
-// com dados fictícios, sem nenhum request sair para o backend real. Fora do
+// Interceptador de rede do modo demonstração. Ativado pela URL (`?demo=1`) —
+// nesse caso, TODA chamada a /dashboard/* é respondida aqui, com dados
+// fictícios, sem nenhum request sair para o backend real e sem login. Fora do
 // modo demo, `window.fetch` funciona exatamente como sempre funcionou.
 import {
   montarRespostaDashboardData,
@@ -9,10 +9,32 @@ import {
 } from './gerarDados.js';
 import { catalogoMetricasResposta, catalogoMetasResposta } from './catalogos.js';
 
-export const DEMO_TOKEN = 'demo';
+const LS_DEMO = 'sentinela_demo';
 
-export function isDemoToken(token) {
-  return token === DEMO_TOKEN;
+/**
+ * O modo demo é ligado por `?demo=1` na URL (ou pelo antigo `?token=demo`) e
+ * fica marcado na sessão da aba, para sobreviver à limpeza da query string.
+ * Sai com `?demo=0` ou fechando a aba.
+ */
+function detectarDemo() {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  const pedido = params.get('demo') ?? (params.get('token') === 'demo' ? '1' : null);
+
+  if (pedido !== null) {
+    const ligado = pedido !== '0' && pedido !== 'false';
+    try { ligado ? sessionStorage.setItem(LS_DEMO, '1') : sessionStorage.removeItem(LS_DEMO); } catch {}
+    return ligado;
+  }
+
+  try { return sessionStorage.getItem(LS_DEMO) === '1'; } catch { return false; }
+}
+
+let demoAtivo = false;
+
+/** Indica se a aba está no modo demonstração (dados fictícios, sem backend). */
+export function isDemo() {
+  return demoAtivo;
 }
 
 // Estado mutável do modo demo — vive só na memória da aba, some ao recarregar.
@@ -133,14 +155,18 @@ async function tratarRequisicaoDemo(url, init) {
 let instalado = false;
 
 /**
- * Substitui `window.fetch` por uma versão que intercepta chamadas a /dashboard/*
- * feitas com o token de demonstração e as responde localmente. Chamadas com
- * qualquer outro token (ou a outras rotas) seguem para o fetch original,
- * inclusive do mesmo token real do cliente continua batendo no backend de verdade.
+ * Quando a aba está em modo demonstração, substitui `window.fetch` por uma
+ * versão que intercepta as chamadas a /dashboard/* e as responde localmente.
+ * Fora do modo demo, não mexe em `window.fetch` — o dashboard real segue
+ * batendo no backend normalmente.
  */
 export function instalarInterceptadorDemo() {
   if (instalado || typeof window === 'undefined') return;
   instalado = true;
+
+  demoAtivo = detectarDemo();
+  if (!demoAtivo) return;
+
   const fetchOriginal = window.fetch.bind(window);
 
   window.fetch = async (input, init) => {
@@ -152,7 +178,7 @@ export function instalarInterceptadorDemo() {
       return fetchOriginal(input, init);
     }
 
-    if (!url.pathname.startsWith('/dashboard/') || url.searchParams.get('token') !== DEMO_TOKEN) {
+    if (!url.pathname.startsWith('/dashboard/')) {
       return fetchOriginal(input, init);
     }
 

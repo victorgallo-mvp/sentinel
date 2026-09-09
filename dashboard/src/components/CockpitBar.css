@@ -151,3 +151,22 @@
   color: var(--text-subtle);
   white-space: nowrap;
 }
+
+/* Sair da sessão */
+.cb-sair {
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.cb-sair:hover {
+  color: var(--crit);
+  border-color: var(--crit-border);
+  background: var(--crit-soft);
+}

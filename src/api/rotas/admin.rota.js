@@ -4,7 +4,6 @@
  * de jobs (coleta, baselines, relatório). Protegidas por `autenticarAdmin`.
  */
 import { Router } from 'express';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
@@ -13,6 +12,7 @@ import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Relatorio } from '../../dominio/relatorio.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
+import { gerarHashSenha, SENHA_TAMANHO_MINIMO } from '../../core/auth/senha.js';
 import { coletarMetricasConta } from '../../core/coleta/coletor-metricas.servico.js';
 import { sincronizarEntidades } from '../../core/coleta/descobridor-entidades.servico.js';
 import { calcularBaselinesConta } from '../../core/deteccao/calculador-baseline.servico.js';
@@ -28,44 +28,67 @@ const CAMPOS_SENSIVEIS_CONTA = '-metaConfig.systemUserToken -metaConfig.appSecre
 
 const esquemaNovoUsuario = z.object({
   nome:       z.string().min(1),
+  email:      z.string().email(),
+  senha:      z.string().min(SENHA_TAMANHO_MINIMO, `Senha deve ter ao menos ${SENHA_TAMANHO_MINIMO} caracteres`),
   contaIds:   z.array(z.string()).default([]),
   superAdmin: z.boolean().default(false),
 });
 
-/** GET /admin/usuarios — lista usuários (sem expor tokens) */
+/** GET /admin/usuarios — lista usuários (nunca expõe o hash da senha) */
 rotaAdmin.get('/usuarios', async (req, res, next) => {
   try {
-    const usuarios = await Usuario.find().select('-token').sort({ nome: 1 });
+    const usuarios = await Usuario.find().sort({ nome: 1 });
     res.json({ usuarios });
   } catch (erro) {
     next(erro);
   }
 });
 
-/** POST /admin/usuarios — cria usuário e gera token automaticamente */
+/** POST /admin/usuarios — cria usuário com e-mail e senha */
 rotaAdmin.post('/usuarios', async (req, res, next) => {
   try {
-    const dados = esquemaNovoUsuario.parse(req.body);
-    const token = randomUUID().replace(/-/g, '');
-    const usuario = await Usuario.create({ ...dados, token });
-    logger.info({ msg: 'Usuário dashboard criado', usuarioId: String(usuario._id), nome: usuario.nome });
-    res.status(201).json({ usuario: usuario.toObject() }); // token visível só na criação
+    const { senha, email, ...dados } = esquemaNovoUsuario.parse(req.body);
+    const emailNormalizado = email.trim().toLowerCase();
+
+    if (await Usuario.exists({ email: emailNormalizado })) {
+      throw new ErroValidacao(`Já existe um usuário com o e-mail ${emailNormalizado}`);
+    }
+
+    const usuario = await Usuario.create({
+      ...dados,
+      email: emailNormalizado,
+      senhaHash: await gerarHashSenha(senha),
+    });
+
+    logger.info({ msg: 'Usuário dashboard criado', usuarioId: String(usuario._id), email: emailNormalizado });
+    res.status(201).json({ usuario });
   } catch (erro) {
     if (erro instanceof z.ZodError) return next(new ErroValidacao('Dados inválidos', erro.flatten()));
     next(erro);
   }
 });
 
-/** PATCH /admin/usuarios/:id — atualiza nome, contaIds ou ativo */
+/** PATCH /admin/usuarios/:id — atualiza nome, e-mail, senha, contaIds ou ativo */
 rotaAdmin.patch('/usuarios/:id', async (req, res, next) => {
   try {
-    const dados = z.object({
-      nome:     z.string().min(1).optional(),
-      contaIds: z.array(z.string()).optional(),
-      ativo:    z.boolean().optional(),
+    const { senha, email, ...dados } = z.object({
+      nome:       z.string().min(1).optional(),
+      email:      z.string().email().optional(),
+      senha:      z.string().min(SENHA_TAMANHO_MINIMO).optional(),
+      contaIds:   z.array(z.string()).optional(),
+      superAdmin: z.boolean().optional(),
+      ativo:      z.boolean().optional(),
     }).parse(req.body);
 
-    const usuario = await Usuario.findByIdAndUpdate(req.params.id, { $set: dados }, { new: true }).select('-token');
+    if (email) {
+      const emailNormalizado = email.trim().toLowerCase();
+      const conflito = await Usuario.findOne({ email: emailNormalizado, _id: { $ne: req.params.id } }).lean();
+      if (conflito) throw new ErroValidacao(`Já existe um usuário com o e-mail ${emailNormalizado}`);
+      dados.email = emailNormalizado;
+    }
+    if (senha) dados.senhaHash = await gerarHashSenha(senha);
+
+    const usuario = await Usuario.findByIdAndUpdate(req.params.id, { $set: dados }, { new: true });
     if (!usuario) throw new ErroNaoEncontrado(`Usuário ${req.params.id} não encontrado`);
     res.json({ usuario });
   } catch (erro) {

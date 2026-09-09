@@ -19,7 +19,8 @@
     "testar-agente": "node scripts/testar-agente.js",
     "enviar-relatorio-manual": "node scripts/enviar-relatorio-manual.js",
     "recalcular-saldo": "node scripts/recalcular-saldo-prepago.js",
-    "migrate": "node scripts/executar-migrations.js"
+    "migrate": "node scripts/executar-migrations.js",
+    "usuarios": "node scripts/gerenciar-usuarios.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

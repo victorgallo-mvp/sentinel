@@ -1,0 +1,107 @@
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background:
+    radial-gradient(1100px 600px at 50% -15%, #1a2740 0%, transparent 60%),
+    var(--sb-bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-5) var(--sp-5);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.login-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  letter-spacing: -.01em;
+  color: var(--text);
+}
+.login-marca-ponto {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.login-sub {
+  margin-top: -6px;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.login-campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.login-campo span {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.login-campo input {
+  padding: 10px 12px;
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.login-campo input:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.login-erro {
+  padding: 8px 10px;
+  font-size: var(--fs-sm);
+  color: var(--crit);
+  background: var(--crit-soft);
+  border: 1px solid var(--crit-border);
+  border-radius: var(--radius-sm);
+}
+
+.login-botao {
+  margin-top: var(--sp-2);
+  padding: 11px 12px;
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .15s;
+}
+.login-botao:hover:not(:disabled) { background: var(--accent-hover); }
+.login-botao:disabled { opacity: .55; cursor: not-allowed; }
+
+.login-rodape {
+  margin-top: var(--sp-1);
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+}

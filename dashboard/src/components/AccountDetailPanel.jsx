@@ -3,14 +3,8 @@ import { createPortal } from 'react-dom';
 import HierarchyView from './HierarchyView.jsx';
 import MetricSelector from './MetricSelector.jsx';
 import PerfilConta from './PerfilConta.jsx';
+import { apiFetch } from '../api.js';
 import './AccountDetailPanel.css';
-
-const API_URL = import.meta.env.VITE_API_URL ?? '';
-
-function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('token') ?? sessionStorage.getItem('dash_token') ?? '';
-}
 
 const FILTROS = [
   { id: 'todas',    label: 'Todas' },
@@ -44,8 +38,7 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
     setCarregando(true);
     setMiniResumo(null);
     setMostrarDetalhe(false);
-    fetch(`${API_URL}/dashboard/contas/${conta.id}/mini-resumo?token=${getToken()}`)
-      .then((r) => (r.ok ? r.json() : { texto: null }))
+    apiFetch(`/dashboard/contas/${conta.id}/mini-resumo`)
       .then((d) => { if (vivo) setMiniResumo(d.texto ?? null); })
       .catch(() => { if (vivo) setMiniResumo(null); })
       .finally(() => { if (vivo) setCarregando(false); });
@@ -55,12 +48,10 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
   async function marcarCiente(alerta) {
     setReconhecendo(alerta.chave);
     try {
-      const res = await fetch(`${API_URL}/dashboard/contas/${conta.id}/alertas?token=${getToken()}`, {
+      await apiFetch(`/dashboard/contas/${conta.id}/alertas`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chave: alerta.chave, reconhecer: true }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       setAlertas((prev) => prev.filter((a) => a.chave !== alerta.chave));
       onRefresh?.();
     } catch { /* mantém na lista */ }

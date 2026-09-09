@@ -5,29 +5,25 @@ import AccountList from './components/AccountList.jsx';
 import AccountDetailPanel from './components/AccountDetailPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import DashboardView from './components/DashboardView.jsx';
-import { isDemoToken } from './demo/mockApi.js';
+import Login from './components/Login.jsx';
+import { isDemo } from './demo/mockApi.js';
+import { apiFetch, lerSessao, encerrarSessao } from './api.js';
 import './App.css';
 
-const API_URL    = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_MS = 60_000;
 const LS_NOMES   = 'sentinela_nomes_customizados';
 const LS_FAVS    = 'sentinela_favoritos';
 const LS_GESTOR  = 'sentinela_gestor_filtro';
 const LS_MODO    = 'sentinela_modo';
 
-function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  const fromUrl = params.get('token');
-  if (fromUrl) { sessionStorage.setItem('dash_token', fromUrl); return fromUrl; }
-  return sessionStorage.getItem('dash_token') ?? '';
-}
-
 function lerStorage(chave, fallback) {
   try { return JSON.parse(localStorage.getItem(chave)) ?? fallback; } catch { return fallback; }
 }
 
 export default function App() {
-  const [token]  = useState(getToken);
+  const emDemo = isDemo();
+  // Em demo não há login: as chamadas são respondidas pelo interceptador local.
+  const [sessao, setSessao] = useState(() => (emDemo ? { usuario: null } : lerSessao()));
   const [dados,  setDados]  = useState(null);
   const [erro,   setErro]   = useState(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
@@ -58,21 +54,21 @@ export default function App() {
   rangeRef.current = { dataInicio, dataFim };
 
   const buscarDados = useCallback(async () => {
-    if (!token) { setErro('Token não encontrado na URL. Adicione ?token=SEU_TOKEN'); return; }
+    if (!sessao) return;
     try {
       const { dataInicio: ini, dataFim: fim } = rangeRef.current;
-      const res = await fetch(`${API_URL}/dashboard/data?token=${token}&dataInicio=${ini}&dataFim=${fim}`);
-      if (!res.ok) { setErro(`Erro ${res.status}: token inválido ou servidor indisponível.`); return; }
-      const json = await res.json();
+      const json = await apiFetch(`/dashboard/data?dataInicio=${ini}&dataFim=${fim}`);
       setDados(json);
       setUsuario(json.usuario ?? null);
       setUltimaAtualizacao(new Date());
       setSegundos(0);
       setErro(null);
-    } catch {
-      setErro('Não foi possível conectar ao servidor.');
+    } catch (e) {
+      // Sessão caiu (expirou ou usuário desativado): volta pra tela de login.
+      if (e.status === 401) { setSessao(null); setDados(null); return; }
+      setErro(e.message ?? 'Não foi possível conectar ao servidor.');
     }
-  }, [token]);
+  }, [sessao]);
 
   useEffect(() => { buscarDados(); }, [buscarDados]);
   useEffect(() => { buscarDados(); }, [dataInicio, dataFim]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -106,10 +102,22 @@ export default function App() {
     try { localStorage.setItem(LS_GESTOR, JSON.stringify(g)); } catch {}
   }
 
+  function handleSair() {
+    encerrarSessao();
+    setSessao(null);
+    setDados(null);
+    setUsuario(null);
+    setErro(null);
+  }
+
   function handleModo(m) {
     setModo(m);
     setContaSelecionadaId(null);
     try { localStorage.setItem(LS_MODO, JSON.stringify(m)); } catch {}
+  }
+
+  if (!sessao) {
+    return <Login onEntrar={(nova) => { setErro(null); setSessao(nova); }} />;
   }
 
   if (erro) {
@@ -123,6 +131,7 @@ export default function App() {
           </svg>
         </span>
         <p>{erro}</p>
+        <button className="error-sair" onClick={handleSair}>Sair</button>
       </div>
     );
   }
@@ -134,7 +143,6 @@ export default function App() {
   const painelAberto = contaSelecionada !== null;
   const periodo = calcPeriodo(dataInicio, dataFim);
 
-  const emDemo = isDemoToken(token);
   const BANNER_H = 26;
 
   return (
@@ -169,6 +177,7 @@ export default function App() {
           onVoltar={() => setContaSelecionadaId(null)}
           modo={modo}
           onModo={handleModo}
+          onSair={emDemo ? null : handleSair}
         />
 
         <div className={`app-body${painelAberto ? ' app-body--split' : ''}`}>

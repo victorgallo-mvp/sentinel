@@ -3,14 +3,8 @@ import { createPortal } from 'react-dom';
 import HierarchyView from './HierarchyView.jsx';
 import MetricSelector from './MetricSelector.jsx';
 import PerfilConta from './PerfilConta.jsx';
+import { apiFetch } from '../api.js';
 import './AccountModal.css';
-
-const API_URL = import.meta.env.VITE_API_URL ?? '';
-
-function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('token') ?? sessionStorage.getItem('dash_token') ?? '';
-}
 
 const FILTROS = [
   { id: 'todas',    label: 'Todas' },
@@ -45,9 +39,7 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
     let vivo = true;
     setCarregandoResumo(true);
     setMiniResumo(null);
-    const token = getToken();
-    fetch(`${API_URL}/dashboard/contas/${conta.id}/mini-resumo?token=${token}`)
-      .then((r) => (r.ok ? r.json() : { texto: null }))
+    apiFetch(`/dashboard/contas/${conta.id}/mini-resumo`)
       .then((d) => { if (vivo) setMiniResumo(d.texto ?? null); })
       .catch(() => { if (vivo) setMiniResumo(null); })
       .finally(() => { if (vivo) setCarregandoResumo(false); });
@@ -62,13 +54,10 @@ export default function AccountModal({ conta, customName, onClose, onMetricasSal
   async function marcarCiente(alerta) {
     setReconhecendo(alerta.chave);
     try {
-      const token = getToken();
-      const res = await fetch(`${API_URL}/dashboard/contas/${conta.id}/alertas?token=${token}`, {
+      await apiFetch(`/dashboard/contas/${conta.id}/alertas`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chave: alerta.chave, reconhecer: true }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       // Remoção otimista no modal + refetch do pai para o card/status ficarem
       // consistentes (senão o alerta reaparece ao reabrir o modal).
       setAlertas((prev) => prev.filter((a) => a.chave !== alerta.chave));
