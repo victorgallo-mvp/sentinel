@@ -582,9 +582,14 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
         // Status agregado: alertas reconhecidos não pesam (usuário já está ciente)
         const statusConta = computarStatusConta(dadosEntidades, reconhecidos);
 
-        // Saldo pré-pago: snapshot persistido pelo job horário de orçamento
+        // Saldo pré-pago: snapshot persistido pelo job horário de orçamento.
+        // Filtra pelas contas de anúncio vinculadas HOJE — o snapshot de uma
+        // conta desvinculada continua no array e apareceria como saldo zerado.
+        const contasAnuncioVinculadas = new Set(conta.metaConfig?.contasAnuncioIds ?? []);
         const saldoPrepago = conta.configuracoes?.prepago
-          ? (conta.saldoPrepago ?? []).map((s) => ({
+          ? (conta.saldoPrepago ?? [])
+            .filter((s) => contasAnuncioVinculadas.has(s.contaAnuncioId))
+            .map((s) => ({
               contaAnuncioId: s.contaAnuncioId,
               saldoReais: s.saldoReais ?? null,
               ritmoHora: s.ritmoHora ?? null,
@@ -902,7 +907,13 @@ rotaDashboard.patch('/contas/:contaId/contas-anuncio', autenticarDashboard, asyn
       return res.status(400).json({ erro: 'contasAnuncioIds deve ser um array não-vazio' });
     }
     const ids = contasAnuncioIds.map(String).filter(Boolean);
-    await Conta.findByIdAndUpdate(contaId, { $set: { 'metaConfig.contasAnuncioIds': ids } });
+    await Conta.findByIdAndUpdate(contaId, {
+      $set: { 'metaConfig.contasAnuncioIds': ids },
+      // Descarta o snapshot de saldo das contas que saíram: sem isso ele fica
+      // órfão no array e o dashboard mostra o saldo de uma conta que não é mais
+      // monitorada (tipicamente zerado, porque foi esgotada antes de trocar).
+      $pull: { saldoPrepago: { contaAnuncioId: { $nin: ids } } },
+    });
     res.json({ ok: true, contasAnuncioIds: ids });
   } catch (erro) {
     next(erro);
