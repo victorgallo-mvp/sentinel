@@ -415,12 +415,29 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
   const detalhes = await obterDetalhesContaAnuncio(contaAnuncioId, token);
   const status = Number(detalhes.account_status);
   const labelProblema = STATUS_PROBLEMA[status];
+
+  // Quem manda sobre ser pré-pago é a Meta, e a resposta é POR CONTA DE ANÚNCIO
+  // (`is_prepay_account`). A flag `configuracoes.prepago` é manual e por conta —
+  // uma conta com várias contas de anúncio, só algumas pré-pagas, não cabe nela.
+  // Quando divergem, a Meta vence e a flag é acertada: sem isso o saldo não
+  // aparece no dashboard e o alerta de saldo baixo nunca dispara.
+  const isPrepago = detalhes.is_prepay_account === true
+    || (detalhes.is_prepay_account == null && conta.configuracoes?.prepago === true);
+
+  if (isPrepago && conta.configuracoes?.prepago !== true) {
+    await Conta.updateOne({ _id: conta._id }, { $set: { 'configuracoes.prepago': true } });
+    if (conta.configuracoes) conta.configuracoes.prepago = true;
+    logger.info({
+      msg: 'Conta marcada como pré-paga a partir da Meta — saldo passa a ser monitorado',
+      conta: conta.nome, contaAnuncioId,
+    });
+  }
+
   const destinatarios = resolverDestinatarios(conta);
   if (!destinatarios.length) return;
 
   // Conta com status problemático
   if (labelProblema) {
-    const isPrepago = conta.configuracoes?.prepago === true;
     const anteriorBloq = (conta.saldoPrepago ?? []).find((s) => s.contaAnuncioId === contaAnuncioId);
 
     // Pré-pago: só notifica na MUDANÇA de estado (não repete enquanto bloqueado).
@@ -457,8 +474,8 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
   }
 
   // Saldo pré-pago via funding_source_details (valor REAL carregado na conta),
-  // com fallback para spend_cap - amount_spent. (só para contas marcadas como prepago)
-  if (conta.configuracoes?.prepago) {
+  // com fallback para spend_cap - amount_spent.
+  if (isPrepago) {
     const snap = await computarSaldoPrepago(conta, contaAnuncioId, detalhes, token);
     if (!snap) return; // saldo indeterminável — não é pré-pago real
     const { saldoReais: saldoEstimadoReais, ritmoHora, runwayHoras, nivel } = snap;
