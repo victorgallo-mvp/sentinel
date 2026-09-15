@@ -62,7 +62,7 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
   const gestor  = conta.perfil?.gerenteResponsavel;
   const r       = conta.resumo ?? {};
   const {
-    gastoHoje = 0, gastoMes = 0, investimentoMensalPlanejado,
+    gastoHoje = 0, gastoMes = 0, investimentoMensalPlanejado, ciclo,
     alertas = [], saldoPrepago = [], veredito,
   } = r;
 
@@ -153,7 +153,8 @@ export default function DashboardCard({ conta, customName, notificacoesConta, is
             <div className={`dc-progress-fill dc-progress-fill--${barCls}`} style={{ width: `${pctMes}%` }} />
           </div>
           <div className="dc-progress-label">
-            <span>Meta {pctMes}%</span>
+            {/* Mostra o período só quando o ciclo do cliente não é o mês-calendário */}
+            <span>Meta {pctMes}%{ciclo?.rotulo && ciclo.diaInicio !== 1 ? ` · ${ciclo.rotulo}` : ''}</span>
             <span>{fmtBRL(gastoMes)} / {fmtBRL(investimentoMensalPlanejado)}</span>
           </div>
         </div>

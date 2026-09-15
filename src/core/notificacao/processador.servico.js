@@ -10,7 +10,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { podeNotificar, msAteProximaAberturaJanela } from './throttling.js';
 import { construirMensagem, construirMensagemConsolidada } from './construtor-mensagem.js';
-import { enviarMensagemWhatsapp, resolverDestinatarios } from './enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatariosAlerta } from './enviador-whatsapp.servico.js';
 import { adicionarJob, FILAS } from '../../infra/fila.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
@@ -107,7 +107,7 @@ export async function processarDigestConta(contaId) {
 
   if (itens.length === 0) return { enviada: false, motivo: 'Todas as pendências foram suprimidas (throttling).' };
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) {
     logger.warn({ msg: 'Digest não enviado — destinatário não configurado', contaId: String(conta._id) });
     await Investigacao.updateMany({ _id: { $in: itens.map((i) => i.investigacao._id) } }, { notificadoEm: new Date() });
@@ -185,7 +185,7 @@ export async function processarNotificacao(investigacaoId) {
     return { enviada: false, motivo };
   }
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) {
     logger.warn({ msg: 'Notificação não enviada — destinatário não configurado', investigacaoId, contaId: String(conta._id) });
     return { enviada: false, motivo: 'Destinatário WhatsApp não configurado para a conta.' };

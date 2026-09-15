@@ -79,7 +79,7 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
   const r = conta.resumo ?? {};
   const {
     status = 'normal', alertas = [], saldoPrepago = [],
-    gastoHoje, gastoMes, investimentoMensalPlanejado,
+    gastoHoje, gastoMes, investimentoMensalPlanejado, ciclo,
     veredito, gerenteResponsavel,
   } = r;
 
@@ -222,7 +222,8 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
             />
           </div>
           <div className="ac-progress-labels">
-            <span>Meta {pctMes}%</span>
+            {/* Mostra o período só quando o ciclo do cliente não é o mês-calendário */}
+            <span>Meta {pctMes}%{ciclo?.rotulo && ciclo.diaInicio !== 1 ? ` · ${ciclo.rotulo}` : ''}</span>
             <span>R$ {Math.round(gastoMes ?? 0).toLocaleString('pt-BR')} / R$ {Math.round(investimentoMensalPlanejado).toLocaleString('pt-BR')}</span>
           </div>
         </div>

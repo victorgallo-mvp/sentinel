@@ -14,6 +14,7 @@ import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { ErroNaoEncontrado } from '../../shared/erros.js';
 import { arredondarParaIntervalo } from '../../shared/utils.js';
+import { janelaCicloAtual, JANELA_CICLO_HORAS } from '../../shared/ciclo.js';
 
 const JANELA_ARREDONDAMENTO_MINUTOS = 5;
 const CONJUNTO_METRICAS_NUMERICAS = new Set(metricasNumericas());
@@ -28,6 +29,7 @@ const PERIODOS_AGREGADOS = [
   { datePreset: 'last_30d',   janelaHoras: 720 },
   { datePreset: 'this_month', janelaHoras: 744 },
 ];
+
 
 /**
  * Coleta métricas de todas as entidades monitoradas de uma conta.
@@ -65,15 +67,18 @@ export async function coletarMetricasConta(contaId) {
 }
 
 /**
- * Coleta o agregado REAL de um período (`last_Nd`, linha única) de uma entidade e
- * persiste em `metricas_serie_temporal` com a `janelaHoras` do período. A Meta
- * deduplica alcance/frequência entre dias — algo impossível de reconstruir dos
- * snapshots diários. Usado pelas métricas deduplicadas e pelo gasto 7d/30d. Roda 1×/dia.
+ * Coleta o agregado REAL de um período (linha única) de uma entidade e persiste
+ * em `metricas_serie_temporal` com a `janelaHoras` do período. A Meta deduplica
+ * alcance/frequência entre dias — algo impossível de reconstruir dos snapshots
+ * diários. Usado pelas métricas deduplicadas e pelo gasto 7d/30d/mês. Roda 1×/dia.
+ *
+ * Aceita `datePreset` (períodos fixos) ou `timeRange` (`{since, until}`), usado
+ * pelo ciclo de faturamento do cliente, que não tem preset equivalente.
  */
-export async function coletarMetricasPeriodoEntidade(conta, entidade, { datePreset, janelaHoras }, coletadaEm = new Date()) {
+export async function coletarMetricasPeriodoEntidade(conta, entidade, { datePreset, timeRange, janelaHoras }, coletadaEm = new Date()) {
   const token = conta.metaConfig?.systemUserToken || undefined;
   const linhas = await obterInsights(entidade.tipo, entidade.metaId, {
-    datePreset,
+    ...(timeRange ? { timeRange: { since: timeRange.since, until: timeRange.until } } : { datePreset }),
     timeIncrement: 'all_days', // uma única linha agregada do período inteiro
     token,
   });
@@ -92,14 +97,21 @@ export async function coletarMetricasPeriodosConta(contaId) {
   let sucesso = 0;
   let falhas = 0;
 
+  // Ciclo do cliente: só faz sentido quando difere do mês-calendário, que o
+  // preset `this_month` já cobre.
+  const diaInicioCiclo = conta.configuracoes?.diaInicioCiclo ?? 1;
+  const periodos = diaInicioCiclo === 1
+    ? PERIODOS_AGREGADOS
+    : [...PERIODOS_AGREGADOS, { timeRange: janelaCicloAtual(diaInicioCiclo), janelaHoras: JANELA_CICLO_HORAS }];
+
   for (const entidade of entidades) {
-    for (const periodo of PERIODOS_AGREGADOS) {
+    for (const periodo of periodos) {
       try {
         await coletarMetricasPeriodoEntidade(conta, entidade, periodo, agora);
         sucesso++;
       } catch (erro) {
         falhas++;
-        logger.error({ msg: 'Falha ao coletar período de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, periodo: periodo.datePreset, erro: erro.message });
+        logger.error({ msg: 'Falha ao coletar período de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
       }
     }
   }

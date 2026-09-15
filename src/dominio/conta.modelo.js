@@ -72,6 +72,9 @@ const configuracoesSchema = new Schema(
     diasHistoricoBaseline: { type: Number, default: 21 },
     googleSheetsId: { type: String, default: '' },
     prepago: { type: Boolean, default: false },
+    // Dia em que o ciclo de faturamento do cliente vira (1-31). 1 = mês-calendário.
+    // Dias que não existem no mês (31 em abril, 30 em fevereiro) caem no último dia.
+    diaInicioCiclo: { type: Number, min: 1, max: 31, default: 1 },
     limiarAlertaSaldoReais: { type: Number, default: 50 },
     metricasSelecionadas: { type: [String], default: [] }, // [] = usar padrão por objetivo
     // Alertas de entrega que o usuário marcou como "ciente" no dashboard.
@@ -114,7 +117,8 @@ const metaPersonalizadaSchema = new Schema(
 
 const perfilSchema = new Schema(
   {
-    gerenteResponsavel:          { type: String, default: '' },
+    gerenteResponsavel:          { type: String, default: '' }, // nome exibido; espelha o gestor quando há gestorId
+    gestorId:                    { type: Schema.Types.ObjectId, ref: 'Gestor', default: null },
     investimentoMensalPlanejado: { type: Number, default: null }, // R$/mês
     objetivos:                   { type: [objetivoContaSchema], default: [] },
     metasPersonalizadas:         { type: [metaPersonalizadaSchema], default: [] },

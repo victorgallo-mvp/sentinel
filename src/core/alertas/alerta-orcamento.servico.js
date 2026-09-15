@@ -13,7 +13,7 @@ import { query } from '../../infra/postgres.js';
 import { inicioDiaBRT } from '../../shared/utils.js';
 // `balance` da Meta API é não-confiável (flutua com créditos/estornos em contas pós-pagas).
 // Para problemas de pagamento, usamos exclusivamente account_status.
-import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatariosAlerta } from '../notificacao/enviador-whatsapp.servico.js';
 import { buscarGastoMes } from '../analise/veredito.servico.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
@@ -98,7 +98,7 @@ async function verificarSpikeDiarioConta(conta) {
   const meta = conta.perfil?.investimentoMensalPlanejado;
   // Sem meta cadastrada não temos referência de "normal" para sub-utilização,
   // mas ainda verificamos spike alto (pode gastar demais sem meta também).
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   const campanhas = await Entidade.find({
@@ -229,7 +229,7 @@ async function verificarRitmoMensalBaixo(conta) {
   const meta = conta.perfil?.investimentoMensalPlanejado;
   if (!meta || meta <= 0) return;
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   const agora = new Date();
@@ -242,7 +242,7 @@ async function verificarRitmoMensalBaixo(conta) {
   if (!campanhas.length) return;
 
   const campanhaIds = campanhas.map((c) => String(c._id));
-  const gastoMes = await buscarGastoMes(campanhaIds);
+  const gastoMes = await buscarGastoMes(campanhaIds, conta.configuracoes?.diaInicioCiclo);
   if (gastoMes === 0) return;
 
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
@@ -294,7 +294,7 @@ async function verificarMetaMensalConta(conta) {
   const meta = conta.perfil?.investimentoMensalPlanejado;
   if (!meta || meta <= 0) return;
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   const campanhas = await Entidade.find({
@@ -303,7 +303,7 @@ async function verificarMetaMensalConta(conta) {
   if (!campanhas.length) return;
 
   const campanhaIds = campanhas.map((c) => String(c._id));
-  const gastoMes = await buscarGastoMes(campanhaIds);
+  const gastoMes = await buscarGastoMes(campanhaIds, conta.configuracoes?.diaInicioCiclo);
   if (gastoMes === 0) return;
 
   const agora = new Date();
@@ -433,7 +433,7 @@ async function avaliarStatusContaAnuncio(conta, contaAnuncioId, token) {
     });
   }
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   // Conta com status problemático
@@ -702,7 +702,7 @@ async function estimarOrcamentoDiarioPrevisto(contaId, contaAnuncioId, token) {
  * usada tanto pelo alerta horário quanto pelo backfill do dashboard.
  * @returns {Promise<{saldoReais, ritmoHora, runwayHoras, nivel}|null>} ou null se não for pré-pago real
  */
-async function computarSaldoPrepago(conta, contaAnuncioId, detalhes, token) {
+export async function computarSaldoPrepago(conta, contaAnuncioId, detalhes, token) {
   const saldoReais = extrairSaldoPrepago(detalhes);
   if (saldoReais == null) return null;
 
@@ -846,7 +846,7 @@ async function avaliarSaldoAdset(conta, adset, token) {
   });
   if (jaAvisou) return;
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) {
     logger.warn({ msg: 'Alerta de saldo sem destinatário configurado', contaId: String(conta._id) });
     return;

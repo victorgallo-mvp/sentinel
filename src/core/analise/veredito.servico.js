@@ -8,6 +8,7 @@
  * Compartilhado entre o dashboard (badge no card) e o resumo diário (texto IA).
  */
 import { query } from '../../infra/postgres.js';
+import { janelaCicloAtual, JANELA_CICLO_HORAS } from '../../shared/ciclo.js';
 import { resolverObjetivosConta } from '../../config/objetivos.config.js';
 import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
 
@@ -37,27 +38,39 @@ export async function agregarResultadoPeriodo(campanhaIds, metrica, desde, ate) 
 }
 
 /**
- * Gasto do mês corrente — lê o snapshot nativo de `this_month` (janela_horas=744)
- * coletado 1×/dia direto da Meta. Muito mais preciso do que somar snapshots diários
- * de 24h, que têm drift de UTC vs. fuso do anunciante (~9% a menos no acumulado).
- * Fallback para soma diária enquanto a primeira coleta de 744h não rodou ainda.
+ * Gasto do ciclo de faturamento corrente — lê o snapshot nativo coletado 1×/dia
+ * direto da Meta. Muito mais preciso do que somar snapshots diários de 24h, que
+ * têm drift de UTC vs. fuso do anunciante (~9% a menos no acumulado).
+ *
+ * Quando o cliente tem ciclo próprio (`diaInicioCiclo` ≠ 1), lê a janela do
+ * ciclo (janela_horas=1); senão, o mês-calendário (`this_month`, 744). Cai para
+ * a soma diária enquanto a primeira coleta nativa não rodou.
+ *
+ * @param {string[]} campanhaIds
+ * @param {number} [diaInicioCiclo] - 1 = mês-calendário
  */
-export async function buscarGastoMes(campanhaIds) {
+export async function buscarGastoMes(campanhaIds, diaInicioCiclo = 1) {
   if (!campanhaIds?.length) return 0;
+
+  const usaCiclo = Number(diaInicioCiclo) > 1;
+  const janela = usaCiclo ? JANELA_CICLO_HORAS : 744;
+
   const r = await query(
     `SELECT COALESCE(SUM(s), 0)::float AS total, COUNT(*) AS n FROM (
        SELECT DISTINCT ON (entidade_id) valor AS s
        FROM metricas_serie_temporal
-       WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = 744
+       WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = $2
        ORDER BY entidade_id, coletada_em DESC
      ) x`,
-    [campanhaIds]
+    [campanhaIds, janela]
   );
   if (Number(r.rows[0]?.n) > 0) return Number(r.rows[0]?.total ?? 0);
   // Fallback: soma diária até a primeira coleta nativa rodar
-  const inicioMes = inicioMesBRT();
-  const amanha    = new Date(inicioDiaBRT(0).getTime() + 24 * 60 * 60 * 1000);
-  return agregarResultadoPeriodo(campanhaIds, 'spend', inicioMes, amanha);
+  const inicio = usaCiclo
+    ? new Date(janelaCicloAtual(Number(diaInicioCiclo)).inicio.getTime() + 3 * 60 * 60 * 1000)
+    : inicioMesBRT();
+  const amanha = new Date(inicioDiaBRT(0).getTime() + 24 * 60 * 60 * 1000);
+  return agregarResultadoPeriodo(campanhaIds, 'spend', inicio, amanha);
 }
 
 /** Gasto do mês anterior (30 dias antes do início do período de 30d). */

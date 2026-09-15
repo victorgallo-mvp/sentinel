@@ -22,6 +22,7 @@ import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
 import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
 import { enfileirarRelatoriosSemanais, criarWorkerRelatorio } from './relatorio-semanal.job.js';
 import { executarLimpezaDadosAntigos } from './limpeza-dados-antigos.job.js';
+import { executarAlertaFimDeSemana } from '../core/alertas/alerta-fim-semana.servico.js';
 import { executarAlertaOrcamento } from './alerta-orcamento.job.js';
 import { executarAlertaEntrega } from './alerta-entrega.job.js';
 import { executarAlertaPerformance } from './alerta-performance.job.js';
@@ -45,6 +46,8 @@ const TAREFAS_CRON = [
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
   { nome: 'resumo-diario', expressao: '0 8 * * 1,4', executar: executarResumoDiario },
   { nome: 'relatorio-semanal', expressao: '0 8 * * 1', executar: enfileirarRelatoriosSemanais, requerIA: true },
+  // Sexta ao meio-dia (BRT): margem para recarregar em horário bancário.
+  { nome: 'alerta-fim-semana', expressao: '0 12 * * 5', executar: executarAlertaFimDeSemana, timezone: 'America/Sao_Paulo' },
   { nome: 'limpeza-dados-antigos', expressao: '0 3 * * *', executar: executarLimpezaDadosAntigos },
 ];
 
@@ -63,7 +66,10 @@ export function iniciarOrquestrador() {
 
   const tarefasCron = TAREFAS_CRON
     .filter(({ requerIA }) => iaAtiva || !requerIA)
-    .map(({ nome, expressao, executar }) =>
+    .map(({ nome, expressao, executar, timezone }) =>
+      // `timezone` é opcional: sem ele o node-cron usa o fuso do servidor (UTC no
+      // Railway), que é como os jobs antigos sempre rodaram. Jobs cujo horário
+      // importa para quem recebe a mensagem declaram o fuso explicitamente.
       cron.schedule(expressao, async () => {
         logger.info({ msg: 'Executando job agendado', job: nome });
         try {
@@ -71,7 +77,7 @@ export function iniciarOrquestrador() {
         } catch (erro) {
           logger.error({ msg: 'Job agendado falhou', job: nome, erro: erro.message });
         }
-      })
+      }, timezone ? { timezone } : undefined)
     );
 
   if (!iaAtiva) {

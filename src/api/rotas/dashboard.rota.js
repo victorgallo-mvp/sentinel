@@ -11,6 +11,8 @@ import { Anomalia } from '../../dominio/anomalia.modelo.js';
 import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
+import { Gestor } from '../../dominio/gestor.modelo.js';
+import { rotuloCiclo } from '../../shared/ciclo.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -554,7 +556,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
         const [gasto7d, gasto30d, gastoMes, gasto30dAnterior, veredito, veredito30d] = await Promise.all([
           buscarGastoPeriodo(campanhaIds, JANELA_7D_HORAS),
           buscarGastoPeriodo(campanhaIds, JANELA_30D_HORAS),
-          buscarGastoMes(campanhaIds),
+          buscarGastoMes(campanhaIds, conta.configuracoes?.diaInicioCiclo),
           buscarGasto30dAnterior(campanhaIds),
           computarVeredito(campanhaIds, conta.perfil),
           computarVeredito30d(campanhaIds, conta.perfil),
@@ -610,6 +612,7 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
           metricasSelecionadas: conta.configuracoes?.metricasSelecionadas ?? [],
           perfil: {
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
+            gestorId: conta.perfil?.gestorId ? String(conta.perfil.gestorId) : '',
             investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
             objetivos: (conta.perfil?.objetivos ?? []).map((o) => ({ ordem: o.ordem, chave: o.chave })),
             metasPersonalizadas: conta.perfil?.metasPersonalizadas ?? [],
@@ -624,6 +627,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             gasto30d,
             gasto30dAnterior,
             gastoMes,
+            ciclo: {
+              diaInicio: conta.configuracoes?.diaInicioCiclo ?? 1,
+              rotulo: rotuloCiclo(conta.configuracoes?.diaInicioCiclo ?? 1),
+            },
             investimentoMensalPlanejado: conta.perfil?.investimentoMensalPlanejado ?? null,
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
             veredito,
@@ -807,7 +814,7 @@ rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, 
   corsHeaders(res);
   try {
     const { contaId } = req.params;
-    const { gerenteResponsavel, investimentoMensalPlanejado, objetivos } = req.body;
+    const { gerenteResponsavel, investimentoMensalPlanejado, objetivos, gestorId, diaInicioCiclo } = req.body;
 
     const conta = await Conta.findById(contaId).lean();
     if (!conta) return res.status(404).json({ erro: 'Conta não encontrada' });
@@ -822,6 +829,24 @@ rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, 
     if (investimentoMensalPlanejado !== undefined) {
       const v = Number(investimentoMensalPlanejado);
       set['perfil.investimentoMensalPlanejado'] = Number.isFinite(v) && v > 0 ? v : null;
+    }
+    if (gestorId !== undefined) {
+      if (gestorId === null || gestorId === '') {
+        set['perfil.gestorId'] = null;
+      } else {
+        const gestor = await Gestor.findById(gestorId).lean();
+        if (!gestor) return res.status(400).json({ erro: 'Gestor não encontrado' });
+        set['perfil.gestorId'] = gestor._id;
+        // Espelha o nome: o filtro por gestor do dashboard lê gerenteResponsavel.
+        set['perfil.gerenteResponsavel'] = gestor.nome;
+      }
+    }
+    if (diaInicioCiclo !== undefined) {
+      const dia = Number(diaInicioCiclo);
+      if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+        return res.status(400).json({ erro: 'diaInicioCiclo deve ser um inteiro de 1 a 31' });
+      }
+      set['configuracoes.diaInicioCiclo'] = dia;
     }
     if (objetivos !== undefined) {
       if (!Array.isArray(objetivos)) return res.status(400).json({ erro: 'objetivos deve ser um array' });
@@ -841,8 +866,8 @@ rotaDashboard.patch('/contas/:contaId/perfil', autenticarDashboard, async (req, 
     }
 
     await Conta.findByIdAndUpdate(contaId, { $set: set });
-    const atualizada = await Conta.findById(contaId).select('perfil').lean();
-    res.json({ ok: true, perfil: atualizada.perfil });
+    const atualizada = await Conta.findById(contaId).select('perfil configuracoes.diaInicioCiclo').lean();
+    res.json({ ok: true, perfil: atualizada.perfil, diaInicioCiclo: atualizada.configuracoes?.diaInicioCiclo ?? 1 });
   } catch (erro) {
     next(erro);
   }
@@ -862,6 +887,17 @@ const METRICAS_ALERTAVEIS_META = [
   { chave: 'conversions',           nome: 'Conversões',           unidade: 'integer',    operadorPadrao: 'acima_de',  janelas: ['1d', '7d']  },
   { chave: 'messaging_conversations_started', nome: 'Conversas WPP', unidade: 'integer', operadorPadrao: 'acima_de', janelas: ['1d', '7d'] },
 ];
+
+/** GET /dashboard/gestores — lista para o seletor de gestor responsável */
+rotaDashboard.get('/gestores', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const gestores = await Gestor.find({ ativo: true }).sort({ nome: 1 }).select('nome whatsappJid').lean();
+    res.json({ gestores: gestores.map((g) => ({ id: String(g._id), nome: g.nome, temWhatsapp: Boolean(g.whatsappJid) })) });
+  } catch (erro) {
+    next(erro);
+  }
+});
 
 rotaDashboard.get('/metricas/catalogo-metas', autenticarDashboard, (req, res) => {
   corsHeaders(res);

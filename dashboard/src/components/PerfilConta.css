@@ -169,3 +169,10 @@
   .pc-nova-meta { flex-direction: column; align-items: stretch; }
   .pc-select-meta, .pc-input-meta { width: 100%; min-width: unset; }
 }
+
+/* Texto de apoio abaixo de um campo */
+.pc-ajuda {
+  margin-top: -4px;
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+}

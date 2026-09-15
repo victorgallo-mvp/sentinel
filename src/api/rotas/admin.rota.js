@@ -12,6 +12,7 @@ import { Investigacao } from '../../dominio/investigacao.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Relatorio } from '../../dominio/relatorio.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
+import { Gestor } from '../../dominio/gestor.modelo.js';
 import { gerarHashSenha, SENHA_TAMANHO_MINIMO } from '../../core/auth/senha.js';
 import { coletarMetricasConta } from '../../core/coleta/coletor-metricas.servico.js';
 import { sincronizarEntidades } from '../../core/coleta/descobridor-entidades.servico.js';
@@ -103,6 +104,80 @@ rotaAdmin.delete('/usuarios/:id', async (req, res, next) => {
     const usuario = await Usuario.findByIdAndDelete(req.params.id);
     if (!usuario) throw new ErroNaoEncontrado(`Usuário ${req.params.id} não encontrado`);
     logger.info({ msg: 'Usuário dashboard removido', usuarioId: req.params.id });
+    res.json({ removido: true });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+// ===== Gestores responsáveis =====
+
+const esquemaGestor = z.object({
+  nome:        z.string().min(1),
+  whatsappJid: z.string().default(''),
+  email:       z.string().email().optional().or(z.literal('')),
+  ativo:       z.boolean().default(true),
+});
+
+/** GET /admin/gestores — lista os gestores e quantas contas cada um atende */
+rotaAdmin.get('/gestores', async (req, res, next) => {
+  try {
+    const gestores = await Gestor.find().sort({ nome: 1 }).lean();
+    const contagem = await Conta.aggregate([
+      { $match: { 'perfil.gestorId': { $ne: null } } },
+      { $group: { _id: '$perfil.gestorId', n: { $sum: 1 } } },
+    ]);
+    const porGestor = new Map(contagem.map((c) => [String(c._id), c.n]));
+    res.json({ gestores: gestores.map((g) => ({ ...g, totalContas: porGestor.get(String(g._id)) ?? 0 })) });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/** POST /admin/gestores — cadastra um gestor */
+rotaAdmin.post('/gestores', async (req, res, next) => {
+  try {
+    const dados = esquemaGestor.parse(req.body);
+    const gestor = await Gestor.create(dados);
+    logger.info({ msg: 'Gestor criado', gestorId: String(gestor._id), nome: gestor.nome });
+    res.status(201).json({ gestor });
+  } catch (erro) {
+    if (erro instanceof z.ZodError) return next(new ErroValidacao('Dados inválidos', erro.flatten()));
+    next(erro);
+  }
+});
+
+/** PATCH /admin/gestores/:id — atualiza nome, número, e-mail ou ativo */
+rotaAdmin.patch('/gestores/:id', async (req, res, next) => {
+  try {
+    const dados = esquemaGestor.partial().parse(req.body);
+    const gestor = await Gestor.findByIdAndUpdate(req.params.id, { $set: dados }, { new: true });
+    if (!gestor) throw new ErroNaoEncontrado(`Gestor ${req.params.id} não encontrado`);
+
+    // O nome também vive em `perfil.gerenteResponsavel` (usado pelo filtro do
+    // dashboard). Mantém os dois em sincronia para não divergirem na tela.
+    if (dados.nome) {
+      await Conta.updateMany({ 'perfil.gestorId': gestor._id }, { $set: { 'perfil.gerenteResponsavel': dados.nome } });
+    }
+    res.json({ gestor });
+  } catch (erro) {
+    if (erro instanceof z.ZodError) return next(new ErroValidacao('Dados inválidos', erro.flatten()));
+    next(erro);
+  }
+});
+
+/** DELETE /admin/gestores/:id — recusa se ainda houver conta vinculada */
+rotaAdmin.delete('/gestores/:id', async (req, res, next) => {
+  try {
+    const vinculadas = await Conta.countDocuments({ 'perfil.gestorId': req.params.id });
+    if (vinculadas > 0) {
+      throw new ErroValidacao(
+        `Gestor ainda responde por ${vinculadas} conta(s). Reatribua antes de remover, ou marque como inativo.`
+      );
+    }
+    const gestor = await Gestor.findByIdAndDelete(req.params.id);
+    if (!gestor) throw new ErroNaoEncontrado(`Gestor ${req.params.id} não encontrado`);
+    logger.info({ msg: 'Gestor removido', gestorId: req.params.id });
     res.json({ removido: true });
   } catch (erro) {
     next(erro);

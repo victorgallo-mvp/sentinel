@@ -270,7 +270,7 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
   // Perfil (gerente/investimento/objetivos) — usa a conta da BM que tiver objetivos.
   const contaPerfil = contasBm.find((c) => (c.perfil?.objetivos ?? []).length > 0) ?? contasBm[0];
   const [gastoMes, veredito] = await Promise.all([
-    buscarGastoMes(ids),
+    buscarGastoMes(ids, contaPerfil?.configuracoes?.diaInicioCiclo),
     computarVeredito(ids, contaPerfil?.perfil),
   ]);
   const investimentoMensal = contaPerfil?.perfil?.investimentoMensalPlanejado ?? null;

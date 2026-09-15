@@ -34,6 +34,9 @@ export default function PerfilConta({ conta, onSalvo }) {
 
   // ── Perfil básico ────────────────────────────────────────────────────────
   const [gerente, setGerente] = useState(p.gerenteResponsavel ?? '');
+  const [gestores, setGestores] = useState([]);
+  const [gestorId, setGestorId] = useState(p.gestorId ?? '');
+  const [diaCiclo, setDiaCiclo] = useState(conta.ciclo?.diaInicio ?? 1);
   const [investimento, setInvestimento] = useState(p.investimentoMensalPlanejado ?? '');
   const [obj, setObj] = useState([objInicial(1), objInicial(2), objInicial(3)]);
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
@@ -63,6 +66,11 @@ export default function PerfilConta({ conta, onSalvo }) {
         ));
       })
       .catch(() => setErroContas('Falha ao carregar contas disponíveis'));
+
+    // Gestores disponíveis para o seletor
+    apiFetch('/dashboard/gestores')
+      .then((d) => setGestores(d.gestores ?? []))
+      .catch(() => setGestores([]));
 
     // Carregar catálogo de métricas para metas
     apiFetch('/dashboard/metricas/catalogo-metas')
@@ -111,7 +119,8 @@ export default function PerfilConta({ conta, onSalvo }) {
       await apiFetch(`/dashboard/contas/${conta.id}/perfil`, {
         method: 'PATCH',
         body: JSON.stringify({
-          gerenteResponsavel: gerente,
+          ...(gestorId ? { gestorId } : { gerenteResponsavel: gerente }),
+          diaInicioCiclo: Number(diaCiclo),
           investimentoMensalPlanejado: investimento === '' ? null : Number(investimento),
           objetivos,
         }),
@@ -174,7 +183,18 @@ export default function PerfilConta({ conta, onSalvo }) {
       <div className="pc-linha">
         <label className="pc-campo">
           <span>Gerente responsável</span>
-          <input value={gerente} onChange={(e) => setGerente(e.target.value)} placeholder="Nome do gestor" />
+          {gestores.length > 0 ? (
+            <select value={gestorId} onChange={(e) => setGestorId(e.target.value)}>
+              <option value="">— sem gestor —</option>
+              {gestores.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nome}{g.temWhatsapp ? '' : ' (sem WhatsApp)'}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={gerente} onChange={(e) => setGerente(e.target.value)} placeholder="Nome do gestor" />
+          )}
         </label>
         <label className="pc-campo">
           <span>Investimento mensal (R$)</span>
@@ -185,7 +205,19 @@ export default function PerfilConta({ conta, onSalvo }) {
             placeholder="ex.: 5000"
           />
         </label>
+        <label className="pc-campo">
+          <span>Ciclo vira no dia</span>
+          <select value={diaCiclo} onChange={(e) => setDiaCiclo(e.target.value)}>
+            <option value={1}>1 (mês-calendário)</option>
+            {Array.from({ length: 30 }, (_, i) => i + 2).map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </label>
       </div>
+      {Number(diaCiclo) !== 1 && conta.ciclo?.rotulo && (
+        <p className="pc-ajuda">Ciclo atual: {conta.ciclo.rotulo}</p>
+      )}
 
       <div className="pc-objetivos">
         {[0, 1, 2].map((i) => (

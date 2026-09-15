@@ -14,7 +14,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
-import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatariosAlerta } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { inicioDiaBRT } from '../../shared/utils.js';
@@ -57,7 +57,7 @@ export async function verificarPerformance() {
 }
 
 async function verificarPerformanceConta(conta) {
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   const entidades = await Entidade.find({
@@ -340,7 +340,7 @@ export async function verificarMetasPersonalizadas(conta, campanhaIds) {
   const metas = (conta.perfil?.metasPersonalizadas ?? []).filter((m) => m.ativo);
   if (!metas.length || !campanhaIds?.length) return;
 
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   for (const meta of metas) {

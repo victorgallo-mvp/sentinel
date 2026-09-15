@@ -11,17 +11,42 @@ import { ErroAplicacao } from '../../shared/erros.js';
  * Resolve a lista de JIDs de destinatários de uma conta.
  * Combina whatsappJid (primário) + whatsappJids (adicionais), deduplica.
  * Fallback para NOTIFICACAO_WHATSAPP_JID do env se nenhum JID configurado.
+ *
  * @param {Object} conta - documento Conta
+ * @param {Object} [opcoes]
+ * @param {string[]} [opcoes.extras] - JIDs a somar (ex.: o do gestor responsável)
  * @returns {string[]}
  */
-export function resolverDestinatarios(conta) {
+export function resolverDestinatarios(conta, { extras = [] } = {}) {
   const principal  = conta.notificacao?.whatsappJid ?? '';
   const adicionais = conta.notificacao?.whatsappJids ?? [];
-  const todos = [...new Set([principal, ...adicionais].filter(Boolean))];
+  const todos = [...new Set([principal, ...adicionais, ...extras].filter(Boolean))];
   if (todos.length === 0 && config.evolution.whatsappJidPadrao) {
     return [config.evolution.whatsappJidPadrao];
   }
   return todos;
+}
+
+/**
+ * Destinatários de um ALERTA: os da conta mais o gestor responsável.
+ *
+ * Só alertas incluem o gestor — relatório semanal e resumo diário continuam
+ * indo apenas para os contatos da conta. Se o gestor estiver inativo ou sem
+ * número, o comportamento é idêntico ao de `resolverDestinatarios`.
+ */
+export async function resolverDestinatariosAlerta(conta) {
+  const gestorId = conta.perfil?.gestorId;
+  if (!gestorId) return resolverDestinatarios(conta);
+
+  try {
+    const { Gestor } = await import('../../dominio/gestor.modelo.js');
+    const gestor = await Gestor.findOne({ _id: gestorId, ativo: true }).lean();
+    return resolverDestinatarios(conta, { extras: [gestor?.whatsappJid] });
+  } catch (erro) {
+    // Falha ao resolver o gestor nunca pode engolir o alerta.
+    logger.warn({ msg: 'Falha ao resolver gestor do alerta — notificando só a conta', conta: conta.nome, erro: erro.message });
+    return resolverDestinatarios(conta);
+  }
 }
 
 /**

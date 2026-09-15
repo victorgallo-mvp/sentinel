@@ -20,7 +20,7 @@ import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
 import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { obterStatusEIssues } from '../coleta/meta-api.cliente.js';
-import { enviarMensagemWhatsapp, resolverDestinatarios } from '../notificacao/enviador-whatsapp.servico.js';
+import { enviarMensagemWhatsapp, resolverDestinatariosAlerta } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
 
 // Estados persistentes (erro de entrega em entidade ACTIVE): não repetir todo dia.
@@ -94,7 +94,7 @@ export async function verificarErrosEntrega() {
 
 async function verificarErrosEntregaConta(conta) {
   const token = conta.metaConfig?.systemUserToken || undefined;
-  const destinatarios = resolverDestinatarios(conta);
+  const destinatarios = await resolverDestinatariosAlerta(conta);
   if (!destinatarios.length) return;
 
   const entidades = await Entidade.find({
