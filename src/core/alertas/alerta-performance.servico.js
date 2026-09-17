@@ -16,6 +16,7 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { query } from '../../infra/postgres.js';
 import { enviarMensagemWhatsapp, resolverDestinatariosAlerta } from '../notificacao/enviador-whatsapp.servico.js';
 import { logger } from '../../infra/logger.js';
+import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
 import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { inicioDiaBRT } from '../../shared/utils.js';
 
@@ -276,6 +277,7 @@ async function somarSnapshot(entidadeIds, metrica, janelaHoras) {
        SELECT DISTINCT ON (entidade_id) valor::float AS s
        FROM metricas_serie_temporal
        WHERE entidade_id = ANY($1) AND metrica = $2 AND janela_horas = $3
+         AND ${filtroSnapshotVigente(3)}
        ORDER BY entidade_id, coletada_em DESC
      ) x`,
     [entidadeIds, metrica, janelaHoras]

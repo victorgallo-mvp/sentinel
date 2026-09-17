@@ -15,6 +15,7 @@ import { computarVeredito, buscarGastoMes } from '../analise/veredito.servico.js
 import { metricaResultadoEntidade } from '../../config/metricas.config.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../infra/logger.js';
+import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
 import { inicioDiaBRT, diaDaSemananaBRT } from '../../shared/utils.js';
 
 const JANELA_30D_HORAS = 720;
@@ -244,6 +245,7 @@ export async function montarDadosResumoBm(contasBm, { diasAtras = 1 } = {}) {
        SELECT DISTINCT ON (entidade_id) valor AS s
        FROM metricas_serie_temporal
        WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = $2
+         AND ${filtroSnapshotVigente(2)}
        ORDER BY entidade_id, coletada_em DESC
      ) x`,
     [ids, JANELA_30D_HORAS]

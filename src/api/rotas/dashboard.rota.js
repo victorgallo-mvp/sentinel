@@ -13,6 +13,7 @@ import { Notificacao } from '../../dominio/notificacao.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
 import { Gestor } from '../../dominio/gestor.modelo.js';
 import { rotuloCiclo } from '../../shared/ciclo.js';
+import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -143,6 +144,7 @@ async function buscarNativoLote(entidadeIds, janelaHoras) {
     `SELECT DISTINCT ON (entidade_id, metrica) entidade_id, metrica, valor::float
      FROM metricas_serie_temporal
      WHERE entidade_id = ANY($1) AND janela_horas = $2 AND metrica = ANY($3)
+       AND ${filtroSnapshotVigente(2)}
      ORDER BY entidade_id, metrica, coletada_em DESC`,
     [entidadeIds, janelaHoras, METRICAS_NATIVAS_ROAS]
   );
@@ -242,6 +244,7 @@ async function buscarDeduplicadas30dLote(entidadeIds) {
     `SELECT DISTINCT ON (entidade_id, metrica) entidade_id, metrica, valor
      FROM metricas_serie_temporal
      WHERE entidade_id = ANY($1) AND janela_horas = $2 AND metrica = ANY($3)
+       AND ${filtroSnapshotVigente(2)}
      ORDER BY entidade_id, metrica, coletada_em DESC`,
     [entidadeIds, JANELA_30D_HORAS, METRICAS_30D]
   );
@@ -265,6 +268,7 @@ async function buscarGastoPeriodo(campanhaIds, janelaHoras) {
        SELECT DISTINCT ON (entidade_id) valor AS s
        FROM metricas_serie_temporal
        WHERE entidade_id = ANY($1) AND metrica = 'spend' AND janela_horas = $2
+         AND ${filtroSnapshotVigente(2)}
        ORDER BY entidade_id, coletada_em DESC
      ) x`,
     [campanhaIds, janelaHoras]
