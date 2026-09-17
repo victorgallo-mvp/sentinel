@@ -10,10 +10,14 @@ const BRT_MS = 3 * 60 * 60 * 1000;
 
 /**
  * `janela_horas` sob a qual o agregado do ciclo é gravado em
- * `metricas_serie_temporal`. O valor 1 estava livre — as demais janelas em uso
- * são 24 (diária), 168 (7d), 720 (30d) e 744 (mês-calendário).
+ * `metricas_serie_temporal`.
+ *
+ * Zero é sentinela de "janela variável, definida por `time_range`": o ciclo tem
+ * 28 a 31 dias, então nenhuma contagem fixa de horas o descreve. Os demais
+ * valores da coluna são durações reais e estão todos ocupados — 1 (hora),
+ * 6, 24, 168 (7d), 720 (30d) e 744 (mês-calendário).
  */
-export const JANELA_CICLO_HORAS = 1;
+export const JANELA_CICLO_HORAS = 0;
 
 /** Último dia do mês (1-12) de um ano — trata anos bissextos. */
 function ultimoDiaDoMes(ano, mes) {
