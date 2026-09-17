@@ -8,6 +8,7 @@
  * Compartilhado entre o dashboard (badge no card) e o resumo diário (texto IA).
  */
 import { query } from '../../infra/postgres.js';
+import { logger } from '../../infra/logger.js';
 import { janelaCicloAtual, JANELA_CICLO_HORAS } from '../../shared/ciclo.js';
 import { resolverObjetivosConta } from '../../config/objetivos.config.js';
 import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
@@ -18,6 +19,86 @@ import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
  * Obs.: reach é deduplicado e não estritamente aditivo entre dias — para tendência
  * (atual vs anterior somados igual) a direção continua válida.
  */
+// Cobertura mínima de dias coletados para que uma comparação entre períodos
+// signifique alguma coisa. Abaixo disso o veredito é omitido em vez de inventado.
+const COBERTURA_MINIMA = 0.5;
+
+// A saúde da coleta é global (ou o sistema gravou naquele dia, ou não gravou),
+// então o resultado serve para todas as contas do mesmo request.
+const cacheCobertura = new Map();
+const TTL_COBERTURA_MS = 5 * 60 * 1000;
+
+/**
+ * Quantos dias, dentro da janela, tiveram coleta do sistema.
+ *
+ * Distingue as duas causas de "dia sem linha", que são indistinguíveis olhando
+ * só uma conta: a conta não entregou (pausada — a comparação continua válida,
+ * zero é um resultado real) ou o sistema não coletou (a comparação é inválida,
+ * porque o zero é ausência de medição). Como a coleta é global, basta perguntar
+ * se QUALQUER entidade tem linha naquele dia.
+ */
+async function diasComColeta(desde, ate) {
+  // Em teste o cache atrapalha: os cenários usam as mesmas janelas de data.
+  const semCache = process.env.NODE_ENV === 'test';
+  const chave = `${desde.toISOString()}|${ate.toISOString()}`;
+  const cached = semCache ? null : cacheCobertura.get(chave);
+  if (cached && Date.now() - cached.em < TTL_COBERTURA_MS) return cached.dias;
+
+  const r = await query(
+    `SELECT count(DISTINCT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')) AS dias
+     FROM metricas_serie_temporal
+     WHERE janela_horas = 24 AND coletada_em >= $1 AND coletada_em < $2`,
+    [desde, ate]
+  );
+  const dias = Number(r.rows[0]?.dias ?? 0);
+  if (!semCache) cacheCobertura.set(chave, { dias, em: Date.now() });
+  return dias;
+}
+
+/** Dias corridos de uma janela. */
+function diasDaJanela(desde, ate) {
+  return Math.max(1, Math.round((ate - desde) / 86400000));
+}
+
+/**
+ * Compara dois períodos pela MÉDIA DIÁRIA, e não pelo total.
+ *
+ * Totais só são comparáveis quando os dois períodos têm o mesmo número de dias
+ * medidos. Depois de uma parada de coleta isso deixa de valer, e o total do
+ * período afetado despenca sem que nada tenha acontecido com as campanhas.
+ *
+ * @returns {{deltaPct: number, atual: number, anterior: number}|null} null quando
+ *   a cobertura de algum dos lados é baixa demais para comparar.
+ */
+async function compararPeriodos(campanhaIds, metrica, ini, fim, iniAnt) {
+  const [atual, anterior, diasAtual, diasAnterior] = await Promise.all([
+    agregarResultadoPeriodo(campanhaIds, metrica, ini, fim),
+    agregarResultadoPeriodo(campanhaIds, metrica, iniAnt, ini),
+    diasComColeta(ini, fim),
+    diasComColeta(iniAnt, ini),
+  ]);
+
+  if (atual <= 0 && anterior <= 0) return null;
+
+  const esperadoAtual = diasDaJanela(ini, fim);
+  const esperadoAnterior = diasDaJanela(iniAnt, ini);
+  if (diasAtual / esperadoAtual < COBERTURA_MINIMA || diasAnterior / esperadoAnterior < COBERTURA_MINIMA) {
+    logger.warn({
+      msg: 'Veredito omitido — coleta insuficiente no período',
+      metrica, diasAtual, esperadoAtual, diasAnterior, esperadoAnterior,
+    });
+    return null;
+  }
+
+  const mediaAtual = atual / diasAtual;
+  const mediaAnterior = anterior / diasAnterior;
+  const deltaPct = mediaAnterior > 0
+    ? ((mediaAtual - mediaAnterior) / mediaAnterior) * 100
+    : (mediaAtual > 0 ? 100 : 0);
+
+  return { deltaPct, atual, anterior };
+}
+
 export async function agregarResultadoPeriodo(campanhaIds, metrica, desde, ate) {
   if (!campanhaIds?.length) return 0;
   const r = await query(
@@ -109,12 +190,9 @@ export async function computarVeredito30d(campanhaIds, perfil) {
   let pesoTotal = 0;
   const detalhes = [];
   for (const obj of objetivos) {
-    const [atual, anterior] = await Promise.all([
-      agregarResultadoPeriodo(campanhaIds, obj.metricaResultado, ini, fim),
-      agregarResultadoPeriodo(campanhaIds, obj.metricaResultado, iniAnt, ini),
-    ]);
-    if (atual <= 0 && anterior <= 0) continue;
-    const deltaPct = anterior > 0 ? ((atual - anterior) / anterior) * 100 : (atual > 0 ? 100 : 0);
+    const comp = await compararPeriodos(campanhaIds, obj.metricaResultado, ini, fim, iniAnt);
+    if (!comp) continue;
+    const { deltaPct, atual, anterior } = comp;
     somaPonderada += deltaPct * obj.peso;
     pesoTotal += obj.peso;
     detalhes.push({ ordem: obj.ordem, chave: obj.chave, rotulo: obj.rotulo, valor30d: atual, valor30dAnterior: anterior, deltaPct: Number(deltaPct.toFixed(1)) });
@@ -167,12 +245,9 @@ export async function computarVeredito(campanhaIds, perfil) {
   let pesoTotal = 0;
   const detalhes = [];
   for (const obj of objetivos) {
-    const [atual, anterior] = await Promise.all([
-      agregarResultadoPeriodo(campanhaIds, obj.metricaResultado, ini, fim),
-      agregarResultadoPeriodo(campanhaIds, obj.metricaResultado, iniAnt, ini),
-    ]);
-    if (atual <= 0 && anterior <= 0) continue; // sem dados desse objetivo
-    const deltaPct = anterior > 0 ? ((atual - anterior) / anterior) * 100 : (atual > 0 ? 100 : 0);
+    const comp = await compararPeriodos(campanhaIds, obj.metricaResultado, ini, fim, iniAnt);
+    if (!comp) continue; // sem dados do objetivo, ou coleta insuficiente para comparar
+    const { deltaPct, atual, anterior } = comp;
     somaPonderada += deltaPct * obj.peso;
     pesoTotal += obj.peso;
     // valor7d / valor7dAnterior: nomes explícitos para o texto da IA não confundir com "ontem"
