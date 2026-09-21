@@ -116,6 +116,21 @@ export async function coletarMetricasPeriodosConta(contaId) {
     }
   }
 
+  // Nível conta: alcance e frequência deduplicados entre TODAS as campanhas.
+  // Não dá para reconstruir somando campanhas — a mesma pessoa é alcançada por
+  // várias, e a Meta só deduplica de verdade quando perguntada neste nível.
+  for (const contaAnuncioId of conta.metaConfig?.contasAnuncioIds ?? []) {
+    for (const periodo of periodos) {
+      try {
+        await coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, periodo, agora);
+        sucesso++;
+      } catch (erro) {
+        falhas++;
+        logger.error({ msg: 'Falha ao coletar período no nível conta — pulando', contaAnuncioId, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
+      }
+    }
+  }
+
   logger.info({ msg: 'Coleta de períodos (7d/30d) concluída', contaId: String(contaId), sucesso, falhas, entidades: entidades.length });
   return { sucesso, falhas, total: entidades.length };
 }
@@ -148,6 +163,35 @@ export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new 
   }
 
   await Entidade.findByIdAndUpdate(entidade._id, { ultimaSincronizacaoEm: coletadaEm });
+}
+
+/**
+ * Coleta um período no nível CONTA DE ANÚNCIO e persiste com
+ * `entidade_id = act_...` e `entidade_tipo = 'account'`.
+ *
+ * Essas linhas ficam FORA da coleção `entidades` do MongoDB de propósito: o
+ * dashboard, os alertas e a detecção de anomalias consultam por entidade
+ * monitorada, então nada disso passa a enxergar o nível conta por acidente —
+ * e, principalmente, nenhum somatório de gasto passa a contar o mesmo dinheiro
+ * duas vezes. Quem quiser o alcance deduplicado da conta lê explicitamente
+ * `entidade_tipo = 'account'`.
+ */
+export async function coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, { datePreset, timeRange, janelaHoras }, coletadaEm = new Date()) {
+  const token = conta.metaConfig?.systemUserToken || undefined;
+  const linhas = await obterInsights('account', contaAnuncioId, {
+    ...(timeRange ? { timeRange: { since: timeRange.since, until: timeRange.until } } : { datePreset }),
+    timeIncrement: 'all_days',
+    token,
+  });
+  if (!linhas.length) return;
+
+  await persistirMetricas(
+    conta,
+    { _id: contaAnuncioId, tipo: 'account' },
+    normalizarLinhaInsight(linhas[0]),
+    janelaHoras,
+    coletadaEm
+  );
 }
 
 /**

@@ -1,6 +1,7 @@
 import { Conta } from '../dominio/conta.modelo.js';
 import { sincronizarEntidades } from '../core/coleta/descobridor-entidades.servico.js';
 import { logger } from '../infra/logger.js';
+import { sincronizarDimensaoEntidades } from '../core/coleta/sincronizar-dimensao.servico.js';
 
 /**
  * Redescobre campanhas/adsets/ads ativos de cada conta de anúncio e
@@ -23,5 +24,13 @@ export async function executarSincronizacaoEntidades() {
         logger.error({ msg: 'Falha na sincronização de entidades — seguindo com as demais', contaId: String(conta._id), contaAnuncioId, erro: erro.message });
       }
     }
+  }
+
+  // Espelha nomes e hierarquia no Postgres, para relatórios que consultam o
+  // banco direto conseguirem agrupar por campanha sem passar pelo MongoDB.
+  try {
+    await sincronizarDimensaoEntidades();
+  } catch (erro) {
+    logger.error({ msg: 'Falha ao sincronizar a dimensão de entidades no Postgres', erro: erro.message });
   }
 }

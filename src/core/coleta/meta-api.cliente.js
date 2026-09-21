@@ -32,6 +32,11 @@ export const CAMPOS_INSIGHTS_BASE = [
   'unique_clicks',
   'ctr',
   'unique_ctr',
+  // Cliques no LINK — é o que o Gerenciador mostra por padrão como "cliques",
+  // e por isso CTR/CPC daqui divergiam do que o time lê na tela da Meta.
+  'inline_link_clicks',
+  'inline_link_click_ctr',
+  'cost_per_inline_link_click',
   'spend',
   'cpc',
   'cpm',
@@ -48,7 +53,10 @@ export const CAMPOS_INSIGHTS_BASE = [
   'conversion_rate_ranking',
 ];
 
-const CLASSES_POR_TIPO = { campaign: Campaign, adset: AdSet, ad: Ad };
+// 'account' permite pedir insights do nível conta, onde alcance e frequência
+// vêm deduplicados entre TODAS as campanhas — algo que não dá para reconstruir
+// somando os níveis abaixo, porque a mesma pessoa aparece em várias campanhas.
+const CLASSES_POR_TIPO = { account: AdAccount, campaign: Campaign, adset: AdSet, ad: Ad };
 
 function verificarRateLimit(respostaCrua) {
   try {

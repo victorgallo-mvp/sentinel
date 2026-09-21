@@ -45,6 +45,9 @@ const RATIOS_RECALCULAVEIS = {
   cpp:                 ['spend',         'reach',       1000],
   cost_per_conversion: ['spend',         'conversions', 1],
   conversion_rate:     ['conversions',   'impressions', 100],
+  inline_link_click_ctr:      ['inline_link_clicks', 'impressions',        100],
+  cost_per_inline_link_click: ['spend',              'inline_link_clicks', 1],
+  cost_per_add_to_cart:       ['spend',              'add_to_cart',        1],
   // purchase_roas fica de fora: não guardamos a receita como componente, então
   // não há como recompor de soma÷soma — segue como média (aproximação).
 };

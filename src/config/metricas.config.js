@@ -63,6 +63,33 @@ export const CATALOGO_METRICAS = {
     relevancia: 'media',
   },
 
+  inline_link_clicks: {
+    nome: 'Cliques no link',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+  },
+
+  inline_link_click_ctr: {
+    nome: 'CTR do link',
+    tipo: 'gauge',
+    unidade: 'percent',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+  },
+
+  cost_per_inline_link_click: {
+    nome: 'Custo por clique no link',
+    tipo: 'gauge',
+    unidade: 'currency',
+    direcaoBoa: 'menor',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+  },
+
   ctr: {
     nome: 'CTR',
     tipo: 'gauge',
@@ -201,6 +228,33 @@ export const CATALOGO_METRICAS = {
 
   // Receita de compra — componente para recompor o ROAS multi-dia (Σreceita/Σgasto).
   // Não exibida no dashboard por padrão (relevancia baixa); alimenta o recálculo.
+  add_to_cart: {
+    nome: 'Adições ao carrinho',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+  },
+
+  add_to_cart_value: {
+    nome: 'Valor em carrinho',
+    tipo: 'counter',
+    unidade: 'currency',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'media',
+  },
+
+  cost_per_add_to_cart: {
+    nome: 'Custo por adição ao carrinho',
+    tipo: 'gauge',
+    unidade: 'currency',
+    direcaoBoa: 'menor',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'media',
+  },
+
   purchase_revenue: {
     nome: 'Receita de compra',
     tipo: 'counter',

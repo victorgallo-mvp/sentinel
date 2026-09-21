@@ -16,6 +16,9 @@ export const EVENTO_CONVERSAO_PADRAO = 'omni_purchase';
 /** Evento usado especificamente para ROAS de site. */
 export const EVENTO_CONVERSAO_WEBSITE = 'offsite_conversion.fb_pixel_purchase';
 
+/** Adição ao carrinho, agregada entre web/app/loja (mesma lógica do omni_purchase). */
+export const EVENTO_CARRINHO = 'omni_add_to_cart';
+
 /** Extrai o valor de um `action_type` específico de uma lista `actions`/`action_values`. */
 export function extrairValorAction(lista, tipoAction) {
   if (!Array.isArray(lista)) return 0;
@@ -43,6 +46,13 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
   push('unique_clicks', linha.unique_clicks);
   push('ctr', linha.ctr);
   push('unique_ctr', linha.unique_ctr);
+
+  // Cliques no LINK. O Gerenciador chama isso de "cliques no link" e usa como
+  // padrão em CTR/CPC — `clicks` inclui qualquer clique no anúncio (foto,
+  // comentário, perfil), por isso os dois conjuntos nunca batem.
+  push('inline_link_clicks', linha.inline_link_clicks);
+  push('inline_link_click_ctr', linha.inline_link_click_ctr);
+  push('cost_per_inline_link_click', linha.cost_per_inline_link_click);
   push('spend', linha.spend);
   push('cpc', linha.cpc);
   push('cpm', linha.cpm);
@@ -70,6 +80,12 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
   if (conversoes > 0) {
     push('cost_per_conversion', gasto / conversoes);
   }
+
+  // Carrinho: etapa intermediária do funil de e-commerce, entre visita e compra.
+  const carrinhos = extrairValorAction(linha.actions, EVENTO_CARRINHO);
+  push('add_to_cart', carrinhos);
+  push('add_to_cart_value', extrairValorAction(linha.action_values, EVENTO_CARRINHO));
+  if (carrinhos > 0) push('cost_per_add_to_cart', gasto / carrinhos);
 
   const receitaOmni = extrairValorAction(linha.action_values, eventoConversao);
   const receitaWebsite = extrairValorAction(linha.action_values, EVENTO_CONVERSAO_WEBSITE);
