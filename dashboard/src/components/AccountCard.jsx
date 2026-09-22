@@ -66,6 +66,13 @@ function IconPencil() {
   );
 }
 
+/** Data curta (dd/mm) — a leitura pode estar até 3 dias atrás do que a tela mostra. */
+function fmtDataCurta(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export default function AccountCard({ conta, customName, onRename, onClick, isSelected, periodo = { label: 'hoje', dias: 1 } }) {
   const [editando,  setEditando]  = useState(false);
   const [valorEdit, setValorEdit] = useState('');
@@ -80,7 +87,7 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
   const {
     status = 'normal', alertas = [], saldoPrepago = [],
     gastoHoje, gastoMes, investimentoMensalPlanejado, ciclo,
-    veredito, gerenteResponsavel,
+    veredito, gerenteResponsavel, analise,
   } = r;
 
   const saldo    = piorSaldo(saldoPrepago);
@@ -204,13 +211,17 @@ export default function AccountCard({ conta, customName, onRename, onClick, isSe
           </span>
           <span className="ac-gasto-label">{periodo.label}</span>
         </div>
-        {vd && (
-          <span className={`ac-verd ac-verd--${vd.tom}`}>
-            {vd.arrow} {veredito.scorePct > 0 ? '+' : ''}{veredito.scorePct}%
-            <span className="ac-verd-label">7d</span>
-          </span>
-        )}
       </div>
+
+      {/* ── Leitura da triagem: uma frase, sem número solto ──
+           O percentual vive no painel de detalhe, encostado nos números que o
+           geram — como selo isolado ele engana, porque a base fica invisível. */}
+      {analise?.resumo && (
+        <div className={`ac-leitura ac-leitura--${analise.situacao}`}>
+          <p className="ac-leitura-texto">{analise.resumo}</p>
+          <span className="ac-leitura-data">análise de {fmtDataCurta(analise.analisadaEm)}</span>
+        </div>
+      )}
 
       {/* ── Barra de meta mensal ── */}
       {temPlano && (

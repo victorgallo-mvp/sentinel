@@ -1,0 +1,79 @@
+.anl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface);
+}
+.anl--saudavel { border-left-color: var(--ok); }
+.anl--atencao  { border-left-color: var(--warn); }
+.anl--critico  { border-left-color: var(--crit); }
+
+.anl-head { display: flex; align-items: center; gap: var(--sp-2); }
+
+.anl-selo {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.anl-selo--saudavel { color: var(--ok);   background: var(--ok-soft);   border: 1px solid var(--ok-border); }
+.anl-selo--atencao  { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn-border); }
+.anl-selo--critico  { color: var(--crit); background: var(--crit-soft); border: 1px solid var(--crit-border); }
+
+.anl-data { font-size: var(--fs-xs); color: var(--text-subtle); margin-left: auto; }
+
+.anl-resumo { font-size: var(--fs-md); line-height: 1.45; color: var(--text); }
+
+.anl-fatores {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.anl-acao {
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text);
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.anl-tabela-wrap { overflow-x: auto; }
+.anl-tabela { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+.anl-tabela th {
+  text-align: right;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-subtle);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.anl-tabela thead tr:first-child th { text-align: center; color: var(--text-muted); }
+.anl-tabela thead tr:first-child th:first-child { border-bottom: none; }
+.anl-sub th { font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.anl-tabela td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.anl-tabela tr:last-child td { border-bottom: none; }
+.anl-rot { color: var(--text-muted); white-space: nowrap; }
+.anl-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.anl-antes { color: var(--text-subtle); }
+
+.anl-rodape { font-size: var(--fs-xs); color: var(--text-muted); }
+.anl-nota { color: var(--text-subtle); }

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import HierarchyView from './HierarchyView.jsx';
 import MetricSelector from './MetricSelector.jsx';
 import PerfilConta from './PerfilConta.jsx';
+import AnaliseConta from './AnaliseConta.jsx';
 import { apiFetch } from '../api.js';
 import './AccountDetailPanel.css';
 
@@ -109,6 +110,13 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
         {mostrarPerfil && (
           <div className="adp-section">
             <PerfilConta conta={conta} onSalvo={() => onRefresh?.()} />
+          </div>
+        )}
+
+        {/* ── Leitura da triagem (a cada 3 dias) ── */}
+        {conta.resumo?.analise && (
+          <div className="adp-section">
+            <AnaliseConta analise={conta.resumo.analise} />
           </div>
         )}
 

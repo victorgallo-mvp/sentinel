@@ -277,3 +277,31 @@
   color: var(--crit);
   margin-left: auto;
 }
+
+/* ── Leitura da triagem ──
+   Uma frase e a data. A severidade vem pela borda, não por mais um selo — o
+   cartão já carrega o status factual (saldo, bloqueio) e dois indicadores de
+   severidade competindo confundem mais do que informam. */
+.ac-leitura {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.ac-leitura--saudavel { border-left-color: var(--ok);   background: var(--ok-soft); }
+.ac-leitura--atencao  { border-left-color: var(--warn); background: var(--warn-soft); }
+.ac-leitura--critico  { border-left-color: var(--crit); background: var(--crit-soft); }
+
+.ac-leitura-texto {
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--text);
+}
+.ac-leitura-data {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+}

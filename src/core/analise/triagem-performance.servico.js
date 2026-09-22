@@ -163,7 +163,8 @@ export async function executarTriagemPerformance({ identificador, persistir = tr
 export async function buscarAnalisesRecentes(identificadores) {
   if (!identificadores?.length) return new Map();
   const r = await query(
-    `SELECT DISTINCT ON (conta_id) conta_id, situacao, resumo, fatores, acao, metrica_resultado, analisada_em
+    `SELECT DISTINCT ON (conta_id) conta_id, situacao, resumo, fatores, acao, metrica_resultado,
+            metricas, analisada_em
      FROM analises_conta WHERE conta_id = ANY($1)
      ORDER BY conta_id, analisada_em DESC`,
     [identificadores]

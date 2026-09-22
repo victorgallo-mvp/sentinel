@@ -16,11 +16,23 @@ import { resolverObjetivosConta } from '../../config/objetivos.config.js';
 import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
 
 /**
- * Soma de um resultado (spend, leads, conversions, clicks, reach…) das campanhas
- * num intervalo, pegando o último snapshot de 24h de cada dia por campanha e somando.
- * Obs.: reach é deduplicado e não estritamente aditivo entre dias — para tendência
- * (atual vs anterior somados igual) a direção continua válida.
+ * Descobre por qual métrica avaliar uma conta sem objetivos configurados.
+ *
+ * Ancorada SEMPRE na janela de 30 dias, mesmo quando quem chama é o veredito de
+ * 7 dias. Antes cada função detectava na própria janela, e o resultado ficava
+ * incomparável consigo mesmo: a SIMsoluções aparecia com ThruPlay em 7 dias e
+ * conversas em 30, lado a lado, como se medissem a mesma coisa.
  */
+async function autoDetectarObjetivo(campanhaIds) {
+  const fim = inicioDiaBRT(0);
+  const ini = inicioDiaBRT(30);
+  for (const candidato of AUTO_DETECT_ORDEM) {
+    const total = await agregarResultadoPeriodo(campanhaIds, candidato.metricaResultado, ini, fim);
+    if (total > 0) return [{ ordem: 1, chave: 'auto', ...candidato, peso: 1 }];
+  }
+  return [];
+}
+
 /**
  * Compara dois períodos pela MÉDIA DIÁRIA, e não pelo total.
  *
@@ -60,6 +72,12 @@ async function compararPeriodos(campanhaIds, metrica, ini, fim, iniAnt) {
   return { deltaPct, atual, anterior };
 }
 
+/**
+ * Soma de um resultado (spend, leads, conversions, clicks, reach…) das campanhas
+ * num intervalo, pegando o último snapshot de 24h de cada dia por campanha e somando.
+ * Obs.: reach é deduplicado e não estritamente aditivo entre dias — para tendência
+ * (atual vs anterior somados igual) a direção continua válida.
+ */
 export async function agregarResultadoPeriodo(campanhaIds, metrica, desde, ate) {
   if (!campanhaIds?.length) return 0;
   const r = await query(
@@ -138,13 +156,7 @@ export async function computarVeredito30d(campanhaIds, perfil) {
   const iniAnt = inicioDiaBRT(60);
 
   if (!objetivos.length) {
-    for (const candidato of AUTO_DETECT_ORDEM) {
-      const total = await agregarResultadoPeriodo(campanhaIds, candidato.metricaResultado, ini, fim);
-      if (total > 0) {
-        objetivos = [{ ordem: 1, chave: 'auto', ...candidato, peso: 1 }];
-        break;
-      }
-    }
+    objetivos = await autoDetectarObjetivo(campanhaIds);
     if (!objetivos.length) return null;
   }
 
@@ -168,10 +180,13 @@ export async function computarVeredito30d(campanhaIds, perfil) {
 
 // Ordem de prioridade para auto-detecção quando não há objetivos declarados.
 // A primeira métrica com valor > 0 no período é usada.
+// Ordem de VALOR DE NEGÓCIO, do fundo do funil para o topo. Antes começava por
+// conversas, então uma conta de e-commerce com um único clique em WhatsApp era
+// avaliada por conversas em vez de por vendas.
 const AUTO_DETECT_ORDEM = [
-  { metricaResultado: 'messaging_conversations_started', rotulo: 'conversas' },
-  { metricaResultado: 'leads',                           rotulo: 'leads' },
   { metricaResultado: 'conversions',                     rotulo: 'conversões' },
+  { metricaResultado: 'leads',                           rotulo: 'leads' },
+  { metricaResultado: 'messaging_conversations_started', rotulo: 'conversas' },
   { metricaResultado: 'video_thruplay_watched_actions',  rotulo: 'ThruPlay' },
   { metricaResultado: 'clicks',                          rotulo: 'cliques' },
   { metricaResultado: 'reach',                           rotulo: 'alcance' },
@@ -193,13 +208,7 @@ export async function computarVeredito(campanhaIds, perfil) {
   // Auto-detecção: conta sem objetivos configurados — usa a primeira métrica
   // com dados reais no período recente para não retornar null sem necessidade.
   if (!objetivos.length) {
-    for (const candidato of AUTO_DETECT_ORDEM) {
-      const total = await agregarResultadoPeriodo(campanhaIds, candidato.metricaResultado, ini, fim);
-      if (total > 0) {
-        objetivos = [{ ordem: 1, chave: 'auto', ...candidato, peso: 1 }];
-        break;
-      }
-    }
+    objetivos = await autoDetectarObjetivo(campanhaIds);
     if (!objetivos.length) return null;
   }
 

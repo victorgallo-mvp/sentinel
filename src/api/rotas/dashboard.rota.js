@@ -649,9 +649,31 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             analise: (() => {
               const a = analisesPorConta.get(conta.identificador);
               if (!a) return null;
+              const c = a.metricas ?? {};
+              // Números absolutos com a cobertura ao lado: o total de um período
+              // com dias faltando parece queda sem que nada tenha acontecido.
+              const linha = (chave, rotulo) => {
+                const s7 = c.seteDias?.[chave], s30 = c.trintaDias?.[chave];
+                if (s7?.atual == null && s30?.atual == null) return null;
+                return {
+                  chave, rotulo,
+                  seteDias:   s7  ? { atual: s7.atual,  anterior: s7.anterior }  : null,
+                  trintaDias: s30 ? { atual: s30.atual, anterior: s30.anterior } : null,
+                };
+              };
               return {
                 situacao: a.situacao, resumo: a.resumo, fatores: a.fatores ?? [],
                 acao: a.acao, metricaResultado: a.metrica_resultado, analisadaEm: a.analisada_em,
+                cobertura: c.cobertura ?? null,
+                comparativo: [
+                  linha('resultado', 'Resultado'),
+                  linha('custoPorResultado', 'Custo por resultado'),
+                  linha('gasto', 'Gasto'),
+                  linha('ctrLink', 'CTR do link'),
+                  linha('cpcLink', 'CPC do link'),
+                  linha('roas', 'ROAS'),
+                ].filter(Boolean),
+                nivelConta: c.nivelConta ?? null,
               };
             })(),
             resultadosPeriodo,

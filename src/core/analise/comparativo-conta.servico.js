@@ -37,16 +37,24 @@ async function agregarJanela(campanhaIds, metricaResultado, desde, ate) {
   );
 
   const resultado = valores[metricaResultado] ?? 0;
+
+  // Razão cujo NUMERADOR é zero no período inteiro vira null, não 0. Zero aqui
+  // quase sempre significa "não medido" e não "aconteceu zero": ROAS só existe
+  // em conta com e-commerce rastreado, e os cliques no link passaram a ser
+  // coletados em 21/09 — períodos anteriores não têm o dado, e exibir "CTR 0%"
+  // para eles seria afirmar uma queda que nunca houve.
+  const razaoOuNulo = (num, den, fator = 1) => (num > 0 ? dividir(num, den, fator) : null);
+
   return {
     gasto: Number(valores.spend.toFixed(2)),
     impressoes: valores.impressions,
     resultado,
     custoPorResultado: dividir(valores.spend, resultado),
-    ctrLink: dividir(valores.inline_link_clicks, valores.impressions, 100),
-    cpcLink: dividir(valores.spend, valores.inline_link_clicks),
+    ctrLink: razaoOuNulo(valores.inline_link_clicks, valores.impressions, 100),
+    cpcLink: valores.inline_link_clicks > 0 ? dividir(valores.spend, valores.inline_link_clicks) : null,
     carrinhos: valores.add_to_cart || null,
     receita: valores.purchase_revenue || null,
-    roas: dividir(valores.purchase_revenue, valores.spend),
+    roas: razaoOuNulo(valores.purchase_revenue, valores.spend),
   };
 }
 
