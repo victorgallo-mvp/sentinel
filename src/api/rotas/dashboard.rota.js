@@ -14,6 +14,7 @@ import { Usuario } from '../../dominio/usuario.modelo.js';
 import { Gestor } from '../../dominio/gestor.modelo.js';
 import { rotuloCiclo } from '../../shared/ciclo.js';
 import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
+import { buscarAnalisesRecentes } from '../../core/analise/triagem-performance.servico.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -454,9 +455,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
     }
 
     const idsEntidades = todasEntidades.map((e) => String(e._id));
-    const [metricasPorEntidade, dedupPorEntidade] = await Promise.all([
+    const [metricasPorEntidade, dedupPorEntidade, analisesPorConta] = await Promise.all([
       buscarMetricasIntervaloLote(idsEntidades, dataInicio, dataFim),
       buscarDeduplicadas30dLote(idsEntidades),
+      buscarAnalisesRecentes(contas.map((c) => c.identificador)),
     ]);
 
     const dadosContas = await Promise.all(
@@ -642,6 +644,16 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
             gerenteResponsavel: conta.perfil?.gerenteResponsavel ?? '',
             veredito,
             veredito30d,
+            // Triagem qualitativa, recalculada a cada 3 dias. Carrega a data
+            // porque pode estar defasada em relação ao que a tela mostra agora.
+            analise: (() => {
+              const a = analisesPorConta.get(conta.identificador);
+              if (!a) return null;
+              return {
+                situacao: a.situacao, resumo: a.resumo, fatores: a.fatores ?? [],
+                acao: a.acao, metricaResultado: a.metrica_resultado, analisadaEm: a.analisada_em,
+              };
+            })(),
             resultadosPeriodo,
             status: statusConta,
             alertas,

@@ -23,6 +23,7 @@ import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
 import { enfileirarRelatoriosSemanais, criarWorkerRelatorio } from './relatorio-semanal.job.js';
 import { executarLimpezaDadosAntigos } from './limpeza-dados-antigos.job.js';
 import { executarAlertaFimDeSemana } from '../core/alertas/alerta-fim-semana.servico.js';
+import { executarTriagemPerformance } from '../core/analise/triagem-performance.servico.js';
 import { executarAlertaOrcamento } from './alerta-orcamento.job.js';
 import { executarAlertaEntrega } from './alerta-entrega.job.js';
 import { executarAlertaPerformance } from './alerta-performance.job.js';
@@ -46,6 +47,9 @@ const TAREFAS_CRON = [
   { nome: 'atualizar-baselines', expressao: '0 2 * * *', executar: executarAtualizacaoBaselines },
   { nome: 'resumo-diario', expressao: '0 8 * * 1,4', executar: executarResumoDiario },
   { nome: 'relatorio-semanal', expressao: '0 8 * * 1', executar: enfileirarRelatoriosSemanais, requerIA: true },
+  // Triagem de performance: a cada 3 dias, de manhã. Uma chamada por conta,
+  // modelo barato — a leitura fica no banco e o dashboard lê de lá.
+  { nome: 'triagem-performance', expressao: '0 7 */3 * *', executar: executarTriagemPerformance, timezone: 'America/Sao_Paulo' },
   // Sexta ao meio-dia (BRT): margem para recarregar em horário bancário.
   { nome: 'alerta-fim-semana', expressao: '0 12 * * 5', executar: executarAlertaFimDeSemana, timezone: 'America/Sao_Paulo' },
   { nome: 'limpeza-dados-antigos', expressao: '0 3 * * *', executar: executarLimpezaDadosAntigos },

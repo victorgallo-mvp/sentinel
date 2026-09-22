@@ -9,6 +9,7 @@
  */
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
+import { diasComColeta, diasDaJanela, COBERTURA_MINIMA } from './cobertura.js';
 import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
 import { janelaCicloAtual, JANELA_CICLO_HORAS } from '../../shared/ciclo.js';
 import { resolverObjetivosConta } from '../../config/objetivos.config.js';
@@ -20,47 +21,6 @@ import { inicioDiaBRT, inicioMesBRT } from '../../shared/utils.js';
  * Obs.: reach é deduplicado e não estritamente aditivo entre dias — para tendência
  * (atual vs anterior somados igual) a direção continua válida.
  */
-// Cobertura mínima de dias coletados para que uma comparação entre períodos
-// signifique alguma coisa. Abaixo disso o veredito é omitido em vez de inventado.
-const COBERTURA_MINIMA = 0.5;
-
-// A saúde da coleta é global (ou o sistema gravou naquele dia, ou não gravou),
-// então o resultado serve para todas as contas do mesmo request.
-const cacheCobertura = new Map();
-const TTL_COBERTURA_MS = 5 * 60 * 1000;
-
-/**
- * Quantos dias, dentro da janela, tiveram coleta do sistema.
- *
- * Distingue as duas causas de "dia sem linha", que são indistinguíveis olhando
- * só uma conta: a conta não entregou (pausada — a comparação continua válida,
- * zero é um resultado real) ou o sistema não coletou (a comparação é inválida,
- * porque o zero é ausência de medição). Como a coleta é global, basta perguntar
- * se QUALQUER entidade tem linha naquele dia.
- */
-async function diasComColeta(desde, ate) {
-  // Em teste o cache atrapalha: os cenários usam as mesmas janelas de data.
-  const semCache = process.env.NODE_ENV === 'test';
-  const chave = `${desde.toISOString()}|${ate.toISOString()}`;
-  const cached = semCache ? null : cacheCobertura.get(chave);
-  if (cached && Date.now() - cached.em < TTL_COBERTURA_MS) return cached.dias;
-
-  const r = await query(
-    `SELECT count(DISTINCT date_trunc('day', coletada_em AT TIME ZONE 'America/Sao_Paulo')) AS dias
-     FROM metricas_serie_temporal
-     WHERE janela_horas = 24 AND coletada_em >= $1 AND coletada_em < $2`,
-    [desde, ate]
-  );
-  const dias = Number(r.rows[0]?.dias ?? 0);
-  if (!semCache) cacheCobertura.set(chave, { dias, em: Date.now() });
-  return dias;
-}
-
-/** Dias corridos de uma janela. */
-function diasDaJanela(desde, ate) {
-  return Math.max(1, Math.round((ate - desde) / 86400000));
-}
-
 /**
  * Compara dois períodos pela MÉDIA DIÁRIA, e não pelo total.
  *

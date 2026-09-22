@@ -24,6 +24,11 @@ const esquemaEnv = z.object({
   // a chamada falhar). Modelo barato por padrão — é só resumir números já calculados.
   IA_RESUMO_DIARIO_ATIVA: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   MODELO_RESUMO_DIARIO: z.string().default('claude-haiku-4-5'),
+  // Triagem de performance (a cada 3 dias, 1 chamada por conta). Começa em
+  // Haiku: a tarefa é classificar sobre números já calculados, não raciocinar
+  // sobre dados crus. Trocar para Sonnet é só mudar esta env.
+  IA_TRIAGEM_PERFORMANCE_ATIVA: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  MODELO_TRIAGEM_PERFORMANCE: z.string().default('claude-haiku-4-5'),
 
   // Meta
   META_APP_ID: z.string().optional().default(''),
@@ -99,6 +104,8 @@ export const config = {
   iaInvestigacaoAtiva: env.IA_INVESTIGACAO_ATIVA,
   iaResumoDiarioAtivo: env.IA_RESUMO_DIARIO_ATIVA,
   modeloResumoDiario: env.MODELO_RESUMO_DIARIO,
+  iaTriagemPerformanceAtiva: env.IA_TRIAGEM_PERFORMANCE_ATIVA,
+  modeloTriagemPerformance: env.MODELO_TRIAGEM_PERFORMANCE,
 
   meta: {
     appId: env.META_APP_ID,
