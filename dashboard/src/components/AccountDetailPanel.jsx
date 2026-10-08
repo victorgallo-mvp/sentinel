@@ -115,7 +115,7 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
 
         {/* ── Leitura da triagem (a cada 3 dias) ── */}
         {conta.resumo?.analise && (
-          <div className="adp-section">
+          <div className="adp-section adp-section--triagem">
             <AnaliseConta analise={conta.resumo.analise} />
           </div>
         )}

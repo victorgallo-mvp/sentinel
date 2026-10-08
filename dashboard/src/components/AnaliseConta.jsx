@@ -1,4 +1,15 @@
+import { useState } from 'react';
 import './AnaliseConta.css';
+
+const CHAVE_RECOLHIDA = 'sentinela.triagem.recolhida';
+
+/** Preferência de recolher a leitura, válida para todas as contas. */
+function lerRecolhida() {
+  try { return localStorage.getItem(CHAVE_RECOLHIDA) === '1'; } catch { return false; }
+}
+function gravarRecolhida(v) {
+  try { localStorage.setItem(CHAVE_RECOLHIDA, v ? '1' : '0'); } catch { /* sem storage */ }
+}
 
 const ROTULO_SITUACAO = { saudavel: 'Saudável', atencao: 'Atenção', critico: 'Crítico' };
 
@@ -28,21 +39,38 @@ function dataCurta(iso) {
  *
  * A cobertura aparece quando algum período tem dias faltando — um total medido
  * em 24 de 30 dias parece queda sem que nada tenha acontecido com as campanhas.
+ *
+ * Recolhível: o bloco é alto e fica acima das campanhas. Recolhido, sobra o selo,
+ * uma linha do resumo e a data — o suficiente para saber se vale abrir.
  */
 export default function AnaliseConta({ analise }) {
+  const [recolhida, setRecolhida] = useState(lerRecolhida);
   if (!analise?.resumo) return null;
 
   const { situacao, resumo, fatores = [], acao, comparativo = [], cobertura, nivelConta, analisadaEm } = analise;
   const faltam7  = cobertura && cobertura.dias7  < 7;
   const faltam30 = cobertura && cobertura.dias30 < 30;
 
-  return (
-    <div className={`anl anl--${situacao}`}>
-      <div className="anl-head">
-        <span className={`anl-selo anl-selo--${situacao}`}>{ROTULO_SITUACAO[situacao] ?? situacao}</span>
-        <span className="anl-data">análise de {dataCurta(analisadaEm)}</span>
-      </div>
+  function alternar() {
+    setRecolhida((v) => { gravarRecolhida(!v); return !v; });
+  }
 
+  return (
+    <div className={`anl anl--${situacao}${recolhida ? ' anl--recolhida' : ''}`}>
+      <button
+        type="button"
+        className="anl-head"
+        onClick={alternar}
+        aria-expanded={!recolhida}
+        title={recolhida ? 'Expandir leitura da triagem' : 'Recolher leitura da triagem'}
+      >
+        <span className="anl-chevron" aria-hidden="true">{recolhida ? '▸' : '▾'}</span>
+        <span className={`anl-selo anl-selo--${situacao}`}>{ROTULO_SITUACAO[situacao] ?? situacao}</span>
+        {recolhida && <span className="anl-resumo-curto">{resumo}</span>}
+        <span className="anl-data">análise de {dataCurta(analisadaEm)}</span>
+      </button>
+
+      {recolhida ? null : (<>
       <p className="anl-resumo">{resumo}</p>
 
       {fatores.length > 0 && (
@@ -90,6 +118,7 @@ export default function AnaliseConta({ analise }) {
           <span className="anl-nota"> — deduplicado no nível da conta</span>
         </p>
       )}
+      </>)}
     </div>
   );
 }

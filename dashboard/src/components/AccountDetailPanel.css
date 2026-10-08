@@ -181,11 +181,13 @@
 }
 .adp-toggle:hover { color: var(--text); background: var(--surface-2); }
 
-/* ── Hierarquia ── */
+/* ── Hierarquia ──
+   Sem scroll próprio: o .adp é o único contêiner que rola. Com flex: 1 e
+   overflow interno, o bloco encolhia a zero quando a triagem e os alertas
+   acima já ocupavam a altura do painel — as métricas sumiam. */
 .adp-hierarquia {
-  flex: 1;
+  flex-shrink: 0;
   padding: 16px 24px;
-  overflow-y: auto;
 }
 
 .adp-filtros {
@@ -215,8 +217,10 @@
 
 .adp-vazio { font-size: var(--fs-sm); color: var(--text-subtle); }
 
-/* ── Seção genérica (Perfil) ── */
+/* ── Seção genérica (Perfil, triagem) ── */
 .adp-section {
   padding: 0 24px 16px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
+.adp-section--triagem { padding-top: 16px; }

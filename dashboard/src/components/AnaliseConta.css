@@ -12,7 +12,45 @@
 .anl--atencao  { border-left-color: var(--warn); }
 .anl--critico  { border-left-color: var(--crit); }
 
-.anl-head { display: flex; align-items: center; gap: var(--sp-2); }
+.anl--recolhida { gap: 0; padding: 10px 16px; }
+
+/* Cabeçalho é o botão de recolher/expandir — ocupa a linha inteira */
+.anl-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.anl-head:hover .anl-chevron { color: var(--text); }
+.anl-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-sm); }
+
+.anl-chevron {
+  font-size: var(--fs-xs);
+  color: var(--text-subtle);
+  width: 10px;
+  flex-shrink: 0;
+  transition: color .13s;
+}
+
+/* Resumo em uma linha quando recolhido */
+.anl-resumo-curto {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .anl-selo {
   font-size: var(--fs-xs);
@@ -26,7 +64,7 @@
 .anl-selo--atencao  { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn-border); }
 .anl-selo--critico  { color: var(--crit); background: var(--crit-soft); border: 1px solid var(--crit-border); }
 
-.anl-data { font-size: var(--fs-xs); color: var(--text-subtle); margin-left: auto; }
+.anl-data { font-size: var(--fs-xs); color: var(--text-subtle); margin-left: auto; white-space: nowrap; flex-shrink: 0; }
 
 .anl-resumo { font-size: var(--fs-md); line-height: 1.45; color: var(--text); }
 
