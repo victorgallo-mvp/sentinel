@@ -230,6 +230,53 @@ export async function obterInsights(tipo, metaId, opcoes = {}) {
   );
 }
 
+// Campo que identifica a entidade em cada linha de uma consulta por nível.
+export const CAMPO_ID_POR_NIVEL = { campaign: 'campaign_id', adset: 'adset_id', ad: 'ad_id' };
+
+/**
+ * Insights de TODAS as entidades de um nível (campanha, conjunto ou anúncio) de
+ * uma conta de anúncio, numa única consulta paginada — uma linha por entidade
+ * e por incremento de tempo, com o id da entidade em `campaign_id`/`adset_id`/
+ * `ad_id`.
+ *
+ * É a forma barata de refazer vários dias de várias entidades: três chamadas
+ * por conta de anúncio em vez de uma por entidade. A Meta pagina a resposta,
+ * e o cursor do SDK só carrega a primeira página — daí o laço com `next()`.
+ *
+ * @param {string} contaAnuncioId - formato `act_<id>`
+ * @param {'campaign'|'adset'|'ad'} nivel
+ * @param {{ timeRange: {since: string, until: string}, timeIncrement?: number|string, campos?: string[], token?: string }} opcoes
+ */
+export async function obterInsightsNivel(contaAnuncioId, nivel, { timeRange, timeIncrement = 1, campos = CAMPOS_INSIGHTS_BASE, token } = {}) {
+  const campoId = CAMPO_ID_POR_NIVEL[nivel];
+  if (!campoId) throw new ErroMetaApi(`Nível inválido para insights: ${nivel}`);
+  if (!timeRange?.since || !timeRange?.until) throw new ErroMetaApi('timeRange {since, until} é obrigatório');
+
+  obterApiMeta(token);
+
+  return comRetry(
+    async () => {
+      const conta = new AdAccount(contaAnuncioId);
+      const params = {
+        level: nivel,
+        time_range: { since: timeRange.since, until: timeRange.until },
+        time_increment: timeIncrement,
+        limit: 500,
+      };
+      const cursor = await conta.getInsights([campoId, ...campos], params);
+      verificarRateLimit(cursor);
+
+      const linhas = paraArrayPlano(cursor);
+      while (cursor.hasNext()) {
+        await cursor.next();
+        linhas.push(...paraArrayPlano(cursor));
+      }
+      return linhas;
+    },
+    { tentativas: 4, esperaBaseMs: 1000, fatorBackoff: 2 }
+  );
+}
+
 /**
  * @param {'campaign'|'adset'|'ad'} tipo
  * @param {string} metaId

@@ -100,6 +100,7 @@
   white-space: nowrap;
 }
 .anl-tabela thead tr:first-child th { text-align: center; color: var(--text-muted); }
+.anl-janela { font-weight: 400; color: var(--text-subtle); }
 .anl-tabela thead tr:first-child th:first-child { border-bottom: none; }
 .anl-sub th { font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
 .anl-tabela td { padding: 5px 8px; border-bottom: 1px solid var(--border); }

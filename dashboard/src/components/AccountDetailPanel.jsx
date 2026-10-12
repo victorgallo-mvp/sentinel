@@ -66,6 +66,20 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
     : null;
   const dataReferencia = conta.entidades?.find((e) => e.dataReferencia)?.dataReferencia ?? null;
 
+  // Quando o período inclui hoje, os números são o acumulado até a última coleta
+  // horária — e a Meta ainda está contando. A hora diz quanto falta.
+  const hojeBRT = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const incluiHoje = conta.entidades?.some((e) => e.tsAtual === hojeBRT) ?? false;
+  const ultimaColeta = incluiHoje
+    ? conta.entidades.reduce((max, e) => {
+        const t = e.ultimaSincronizacao ? new Date(e.ultimaSincronizacao).getTime() : 0;
+        return t > max ? t : max;
+      }, 0)
+    : 0;
+  const horaColeta = ultimaColeta
+    ? new Date(ultimaColeta).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+    : null;
+
   return (
     <>
       {mostrarSelector && createPortal(
@@ -89,7 +103,10 @@ export default function AccountDetailPanel({ conta, customName, onMetricasSalvas
               </span>
             )}
             {dataReferencia && (
-              <span className="adp-data-ref">métricas de {dataReferencia}</span>
+              <span className="adp-data-ref">
+                métricas de {dataReferencia}
+                {horaColeta ? ` · atualizadas às ${horaColeta}` : ''}
+              </span>
             )}
           </div>
           <div className="adp-header-right">

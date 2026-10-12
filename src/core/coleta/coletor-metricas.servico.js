@@ -4,10 +4,17 @@
  * e persiste em `metricas_serie_temporal` (Postgres) nas janelas 1h, 6h e 24h.
  *
  * Falha em uma entidade NÃO interrompe a coleta das demais.
+ *
+ * A janela de 24h tem dois produtores. O job horário grava o acumulado do dia
+ * a cada tick; o último tick cai entre 23:05 e 23:35 BRT, então o dia nunca
+ * fecha inteiro — e a atribuição de compras/leads que a Meta ainda vai creditar
+ * fica de fora para sempre. O fechamento diário (`coletarFechamentoDiasConta`)
+ * regrava os últimos dias com o valor final da Meta, carimbado às 23:59 do dia,
+ * que é o que toda leitura de "último snapshot do dia" passa a enxergar.
  */
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
-import { obterInsights, obterInsightsHorarios } from './meta-api.cliente.js';
+import { obterInsights, obterInsightsHorarios, obterInsightsNivel, CAMPO_ID_POR_NIVEL } from './meta-api.cliente.js';
 import { normalizarLinhaInsight, agregarLinhasHorarias } from './normalizador.js';
 import { metricasNumericas } from '../../config/metricas.config.js';
 import { query } from '../../infra/postgres.js';
@@ -165,6 +172,72 @@ export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new 
   await Entidade.findByIdAndUpdate(entidade._id, { ultimaSincronizacaoEm: coletadaEm });
 }
 
+// Níveis refeitos pelo fechamento diário — os mesmos que o dashboard exibe.
+const NIVEIS_FECHAMENTO = ['campaign', 'adset', 'ad'];
+
+/**
+ * Carimbo do snapshot de fechamento de um dia: 23:59 BRT daquele dia, em UTC.
+ *
+ * É mais tarde que qualquer tick horário (23:35 no máximo) e ainda cai dentro do
+ * dia BRT nas consultas (`< dia seguinte 03:00Z`), então vence como "último
+ * snapshot do dia". Fixo, para que refazer o mesmo dia atualize a mesma linha
+ * (`ON CONFLICT` em entidade+métrica+janela+coletada_em) em vez de acumular.
+ *
+ * @param {string} dataIso - 'YYYY-MM-DD' no fuso do anunciante (BRT)
+ */
+export function carimboFechamentoDia(dataIso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataIso)) throw new Error(`Data inválida para fechamento: ${dataIso}`);
+  return new Date(`${dataIso}T23:59:00-03:00`);
+}
+
+/**
+ * Regrava, para uma conta, o snapshot de 24h de cada dia do intervalo com o
+ * valor final que a Meta reporta agora. Três consultas por conta de anúncio
+ * (campanhas, conjuntos, anúncios), uma linha por entidade e dia.
+ *
+ * Serve tanto ao job diário (últimos 7 dias, para cobrir a janela de
+ * atribuição) quanto ao backfill de períodos sem coleta. Linhas de entidades
+ * que não estão monitoradas são ignoradas — o dashboard não as lê.
+ *
+ * @param {string} contaId - ObjectId da Conta
+ * @param {{ since: string, until: string }} intervalo - datas 'YYYY-MM-DD', inclusivas
+ */
+export async function coletarFechamentoDiasConta(contaId, { since, until }) {
+  const conta = await Conta.findById(contaId);
+  if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
+  const token = conta.metaConfig?.systemUserToken || undefined;
+
+  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true })
+    .select('_id metaId tipo').lean();
+  const porMetaId = new Map(entidades.map((e) => [e.metaId, e]));
+
+  let linhas = 0;
+  let ignoradas = 0;
+  let falhas = 0;
+
+  for (const contaAnuncioId of conta.metaConfig?.contasAnuncioIds ?? []) {
+    for (const nivel of NIVEIS_FECHAMENTO) {
+      try {
+        const insights = await obterInsightsNivel(contaAnuncioId, nivel, { timeRange: { since, until }, timeIncrement: 1, token });
+        const itens = [];
+        for (const linha of insights) {
+          const entidade = porMetaId.get(linha[CAMPO_ID_POR_NIVEL[nivel]]);
+          if (!entidade) { ignoradas++; continue; }
+          itens.push({ entidade, metricas: normalizarLinhaInsight(linha), janelaHoras: 24, coletadaEm: carimboFechamentoDia(linha.date_start) });
+        }
+        await persistirLoteMetricas(conta, itens);
+        linhas += itens.length;
+      } catch (erro) {
+        falhas++;
+        logger.error({ msg: 'Falha no fechamento de dias — pulando nível', contaId: String(contaId), contaAnuncioId, nivel, since, until, erro: erro.message });
+      }
+    }
+  }
+
+  logger.info({ msg: 'Fechamento de dias concluído', contaId: String(contaId), since, until, linhas, ignoradas, falhas });
+  return { linhas, ignoradas, falhas };
+}
+
 /**
  * Coleta um período no nível CONTA DE ANÚNCIO e persiste com
  * `entidade_id = act_...` e `entidade_tipo = 'account'`.
@@ -200,26 +273,48 @@ export async function coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, 
  * pra garantir idempotência — re-execução do mesmo tick não duplica linhas.
  */
 export async function persistirMetricas(conta, entidade, metricasNormalizadas, janelaHoras, coletadaEm) {
-  const linhasValidas = metricasNormalizadas.filter((m) => m.numerica && CONJUNTO_METRICAS_NUMERICAS.has(m.metrica));
-  if (linhasValidas.length === 0) return;
+  await persistirLoteMetricas(conta, [{ entidade, metricas: metricasNormalizadas, janelaHoras, coletadaEm }]);
+}
 
-  const valoresPorLinha = [];
-  const placeholders = [];
-  let i = 1;
+// Linhas por INSERT. O Postgres aceita 65.535 parâmetros por comando; com 7 por
+// linha, 5.000 linhas ficam bem abaixo disso e ainda cortam a ida e volta ao
+// banco em centenas de vezes no fechamento de dias.
+const LINHAS_POR_INSERT = 5000;
 
-  for (const { metrica, valor } of linhasValidas) {
-    placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
-    valoresPorLinha.push(conta.identificador, String(entidade._id), entidade.tipo, metrica, valor, janelaHoras, coletadaEm);
+/**
+ * Persiste as métricas de VÁRIAS entidades/instantes em poucos INSERTs.
+ * Mesma chave de idempotência de `persistirMetricas`.
+ *
+ * @param {Object} conta
+ * @param {Array<{ entidade: {_id: any, tipo: string}, metricas: Array, janelaHoras: number, coletadaEm: Date }>} itens
+ */
+export async function persistirLoteMetricas(conta, itens) {
+  const linhas = [];
+  for (const { entidade, metricas, janelaHoras, coletadaEm } of itens) {
+    for (const { metrica, valor, numerica } of metricas) {
+      if (!numerica || !CONJUNTO_METRICAS_NUMERICAS.has(metrica)) continue;
+      linhas.push([conta.identificador, String(entidade._id), entidade.tipo, metrica, valor, janelaHoras, coletadaEm]);
+    }
   }
 
-  await query(
-    `
-    INSERT INTO metricas_serie_temporal
-      (conta_id, entidade_id, entidade_tipo, metrica, valor, janela_horas, coletada_em)
-    VALUES ${placeholders.join(', ')}
-    ON CONFLICT (entidade_id, metrica, janela_horas, coletada_em)
-    DO UPDATE SET valor = EXCLUDED.valor
-    `,
-    valoresPorLinha
-  );
+  for (let inicio = 0; inicio < linhas.length; inicio += LINHAS_POR_INSERT) {
+    const lote = linhas.slice(inicio, inicio + LINHAS_POR_INSERT);
+    const placeholders = [];
+    const valores = [];
+    let i = 1;
+    for (const linha of lote) {
+      placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+      valores.push(...linha);
+    }
+    await query(
+      `
+      INSERT INTO metricas_serie_temporal
+        (conta_id, entidade_id, entidade_tipo, metrica, valor, janela_horas, coletada_em)
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (entidade_id, metrica, janela_horas, coletada_em)
+      DO UPDATE SET valor = EXCLUDED.valor
+      `,
+      valores
+    );
+  }
 }

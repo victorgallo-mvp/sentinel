@@ -31,6 +31,18 @@ function dataCurta(iso) {
 }
 
 /**
+ * Janela que a triagem mediu: os N dias anteriores à data da análise, sem o
+ * dia da análise. "7 dias" sozinho engana quando a análise tem três dias —
+ * a janela real é 02/10 a 08/10, não os últimos sete dias de hoje.
+ */
+function janelaCurta(analisadaEm, dias) {
+  if (!analisadaEm) return '';
+  const ate = new Date(analisadaEm); ate.setDate(ate.getDate() - 1);
+  const de = new Date(ate); de.setDate(de.getDate() - (dias - 1));
+  return `${dataCurta(de)} a ${dataCurta(ate)}`;
+}
+
+/**
  * Leitura da triagem + comparativo em NÚMEROS ABSOLUTOS.
  *
  * Sem percentual: o valor anterior fica ao lado, então a variação é visível sem
@@ -87,8 +99,14 @@ export default function AnaliseConta({ analise }) {
             <thead>
               <tr>
                 <th></th>
-                <th colSpan="2">7 dias{faltam7 ? ` · ${cobertura.dias7} de 7 medidos` : ''}</th>
-                <th colSpan="2">30 dias{faltam30 ? ` · ${cobertura.dias30} de 30 medidos` : ''}</th>
+                <th colSpan="2">
+                  7 dias <span className="anl-janela">{janelaCurta(analisadaEm, 7)}</span>
+                  {faltam7 ? ` · ${cobertura.dias7} de 7 medidos` : ''}
+                </th>
+                <th colSpan="2">
+                  30 dias <span className="anl-janela">{janelaCurta(analisadaEm, 30)}</span>
+                  {faltam30 ? ` · ${cobertura.dias30} de 30 medidos` : ''}
+                </th>
               </tr>
               <tr className="anl-sub">
                 <th></th>
