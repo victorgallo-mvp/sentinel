@@ -16,6 +16,7 @@
     "configurar-conta": "node scripts/configurar-conta.js",
     "popular-historico": "node scripts/popular-historico.js",
     "fechar-dias": "node scripts/fechar-dias.js",
+    "listar-alteracoes": "node scripts/listar-alteracoes.js",
     "simular-anomalia": "node scripts/simular-anomalia.js",
     "testar-agente": "node scripts/testar-agente.js",
     "enviar-relatorio-manual": "node scripts/enviar-relatorio-manual.js",
