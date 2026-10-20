@@ -213,6 +213,8 @@ Todos em `scripts/`, executados com `npm run <nome>`. Operam sobre a conta padr�
 | `npm run descobrir-recursos` | Lista as contas de anúncio e a hierarquia (campanhas/adsets/ads) acessíveis pelo token Meta configurado — não grava nada |
 | `npm run configurar-conta` | Cria/atualiza o documento `Conta` no Mongo e sincroniza as `Entidade`s (campanhas/adsets/ads) a partir da Meta API |
 | `npm run popular-historico` | Faz backfill de métricas históricas (janela de 24h) via `time_range`/`time_increment`, para acelerar o primeiro cálculo de baseline |
+| `npm run coletar-alteracoes` | Backfill do registro de alterações (`-- --dias=30 [--conta=identificador]`): lê o histórico da Meta e grava em `alteracoes_conta`. Idempotente |
+| `npm run listar-alteracoes` | Imprime a linha do tempo de alterações de uma conta direto da Meta, sem gravar (`-- --conta=identificador --dias=30`) |
 | `npm run fechar-dias` | Regrava o snapshot diário de um intervalo (`-- --desde=AAAA-MM-DD --ate=AAAA-MM-DD [--conta=identificador]`) para todas as contas ativas com o valor final da Meta — preenche dias sem coleta e corrige o corte das 23h. Idempotente |
 | `npm run simular-anomalia` | Cria uma anomalia sintética e a enfileira para triagem (requer os workers rodando) |
 | `npm run testar-agente` | Roda triagem + investigação de ponta a ponta de forma síncrona (sem depender dos workers), imprimindo diagnóstico, recomendação, tools chamadas e custo. Use `--notificar` para também enviar via WhatsApp |
@@ -292,6 +294,7 @@ Agendados em `src/jobs/orquestrador.js` (node-cron, horário do servidor):
 | Job | Frequência | O que faz |
 |---|---|---|
 | `coleta-metricas` | `5 * * * *` (a cada hora, minuto 5) | Coleta métricas de todas as entidades monitoradas de todas as contas ativas |
+| `coleta-alteracoes` | `0 5 * * *` (05:00 BRT) | Lê o histórico de alterações (`act_<id>/activities`) dos últimos 3 dias de cada conta, traduz, classifica, vincula autor a gestor e grava em `alteracoes_conta`. Alimenta a aba "Alterações" do dashboard |
 | `fechamento-dia` | `30 1 * * *` (01:30 BRT) | Regrava o snapshot de 24h dos últimos 7 dias com o valor final da Meta (fecha o dia inteiro e captura a atribuição tardia de compras/leads). Três consultas por conta de anúncio |
 | `deteccao-anomalias` | `20 * * * *` (minuto 20, após a coleta) | Compara métricas recém-coletadas com baselines e cria `Anomalia`s, enfileirando-as para triagem |
 | `sincronizar-entidades` | `0 1 * * *` (diariamente às 01:00) | Redescobre campanhas/adsets/ads ativos na Meta API e sincroniza com o Mongo, criando `Entidade`s para campanhas novas ou reativadas (`monitorada: true` por padrão) |

@@ -73,6 +73,10 @@ async function tratarRequisicaoDemo(url, init) {
     return jsonResponse(montarRespostaDashboardData(dataInicio, dataFim, overlayStore));
   }
 
+  if (path === '/dashboard/alteracoes' && method === 'GET') {
+    return jsonResponse({ periodo: {}, categorias: {}, contas: [], gestores: [], autores: [], eventos: [] });
+  }
+
   if (path === '/dashboard/metricas/catalogo' && method === 'GET') {
     return jsonResponse(catalogoMetricasResposta());
   }

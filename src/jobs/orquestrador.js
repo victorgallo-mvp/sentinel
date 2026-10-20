@@ -6,6 +6,7 @@
  * - Health check Evolution API: a cada 5 minutos
  * - Coleta de métricas: a cada hora, no minuto 5
  * - Fechamento de dias: diariamente à 01:30 BRT (regrava os últimos 7 dias com o valor final da Meta)
+ * - Coleta de alterações: diariamente às 05:00 BRT (histórico de alterações das contas, últimos 3 dias)
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
  * - Detecção de anomalias: a cada 2 horas, no minuto 20 (após a coleta)
@@ -19,6 +20,7 @@ import cron from 'node-cron';
 import { executarColetaMetricas } from './coleta-metricas.job.js';
 import { executarColetaPeriodos } from './coleta-periodos.job.js';
 import { executarFechamentoDia } from './fechamento-dia.job.js';
+import { executarColetaAlteracoes } from './coleta-alteracoes.job.js';
 import { executarDeteccaoAnomalias } from './deteccao-anomalias.job.js';
 import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
 import { executarAtualizacaoBaselines } from './atualizar-baselines.job.js';
@@ -45,6 +47,8 @@ const TAREFAS_CRON = [
   // o dia que fecha é o do anunciante, e a Meta ainda ajusta a atribuição
   // por alguns dias — por isso relê sete e não só ontem.
   { nome: 'fechamento-dia', expressao: '30 1 * * *', executar: executarFechamentoDia, timezone: 'America/Sao_Paulo' },
+  // Registro de alterações: quem fez o quê nas contas. Relê 3 dias por folga.
+  { nome: 'coleta-alteracoes', expressao: '0 5 * * *', executar: executarColetaAlteracoes, timezone: 'America/Sao_Paulo' },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
   { nome: 'alerta-entrega', expressao: '15 * * * *', executar: executarAlertaEntrega },
   { nome: 'deteccao-anomalias', expressao: '20 */2 * * *', executar: executarDeteccaoAnomalias, requerIA: true },

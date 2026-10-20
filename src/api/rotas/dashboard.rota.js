@@ -15,6 +15,9 @@ import { Gestor } from '../../dominio/gestor.modelo.js';
 import { rotuloCiclo } from '../../shared/ciclo.js';
 import { filtroSnapshotVigente } from '../../shared/snapshot-nativo.js';
 import { buscarAnalisesRecentes } from '../../core/analise/triagem-performance.servico.js';
+import { listarAlteracoes, ultimaAcaoHumanaPorConta, listarAutores } from '../../core/alteracoes/consulta-alteracoes.servico.js';
+import { vincularAutorAoGestor } from '../../core/alteracoes/coletor-alteracoes.servico.js';
+import { CATEGORIAS as CATEGORIAS_ALTERACAO } from '../../core/alteracoes/dicionario-meta.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -928,6 +931,86 @@ const METRICAS_ALERTAVEIS_META = [
   { chave: 'conversions',           nome: 'Conversões',           unidade: 'integer',    operadorPadrao: 'acima_de',  janelas: ['1d', '7d']  },
   { chave: 'messaging_conversations_started', nome: 'Conversas WPP', unidade: 'integer', operadorPadrao: 'acima_de', janelas: ['1d', '7d'] },
 ];
+
+// ── Registro de alterações ───────────────────────────────────────────────────
+
+/** Contas ativas visíveis para o usuário da sessão. */
+async function contasVisiveis(usuario) {
+  const todas = await Conta.find({ ativo: true }).select('identificador nome perfil.gestorId perfil.gerenteResponsavel').lean();
+  return usuario.superAdmin ? todas : todas.filter((c) => usuario.contaIds.includes(String(c._id)));
+}
+
+const DIAS_PADRAO_ALTERACOES = 14;
+const DIAS_MAXIMO_ALTERACOES = 90;
+
+/**
+ * GET /dashboard/alteracoes?desde=YYYY-MM-DD&ate=YYYY-MM-DD
+ * Eventos do período (inclusivo, dias BRT) de todas as contas visíveis, mais o
+ * que o painel precisa para agregar: contas, gestores, autores e a última ação
+ * humana de cada conta (fora do período, para contar dias parados).
+ */
+rotaDashboard.get('/alteracoes', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const isoHoje = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const valida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+    const ate = valida(req.query.ate) ? req.query.ate : isoHoje;
+    const desdePadrao = new Date(new Date(ate + 'T12:00:00Z').getTime() - (DIAS_PADRAO_ALTERACOES - 1) * 86400000).toISOString().slice(0, 10);
+    let desde = valida(req.query.desde) ? req.query.desde : desdePadrao;
+    const minimo = new Date(new Date(ate + 'T12:00:00Z').getTime() - (DIAS_MAXIMO_ALTERACOES - 1) * 86400000).toISOString().slice(0, 10);
+    if (desde < minimo) desde = minimo;
+    if (desde > ate) desde = ate;
+
+    const ini = new Date(desde + 'T03:00:00Z');
+    const fimEx = new Date(new Date(ate + 'T03:00:00Z').getTime() + 86400000);
+
+    const contas = await contasVisiveis(req.usuario);
+    const identificadores = contas.map((c) => c.identificador);
+
+    const [eventos, ultimaAcao, autores, gestores] = await Promise.all([
+      listarAlteracoes(identificadores, ini, fimEx),
+      ultimaAcaoHumanaPorConta(identificadores),
+      listarAutores(identificadores),
+      Gestor.find({ ativo: true }).sort({ nome: 1 }).select('nome metaAtores').lean(),
+    ]);
+
+    res.json({
+      periodo: { desde, ate },
+      categorias: CATEGORIAS_ALTERACAO,
+      contas: contas.map((c) => ({
+        id: String(c._id),
+        identificador: c.identificador,
+        nome: c.nome,
+        gestorId: c.perfil?.gestorId ? String(c.perfil.gestorId) : null,
+        gerenteResponsavel: c.perfil?.gerenteResponsavel ?? '',
+        ultimaAcao: ultimaAcao.get(c.identificador) ?? null,
+      })),
+      gestores: gestores.map((g) => ({ id: String(g._id), nome: g.nome, metaAtores: g.metaAtores ?? [] })),
+      autores,
+      eventos,
+    });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/**
+ * PATCH /dashboard/alteracoes/autores — body { autorId, autorNome, gestorId }
+ * Vincula um usuário da Meta a um gestor e reatribui o histórico já gravado.
+ */
+rotaDashboard.patch('/alteracoes/autores', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const { autorId, autorNome, gestorId } = req.body ?? {};
+    if (!autorId || String(autorId) === '0') return res.status(400).json({ erro: 'autorId inválido' });
+    if (!gestorId) return res.status(400).json({ erro: 'gestorId é obrigatório' });
+    const reatribuidas = await vincularAutorAoGestor(String(gestorId), String(autorId), String(autorNome ?? '').slice(0, 120));
+    logger.info({ msg: 'Autor da Meta vinculado a gestor', usuarioId: req.usuario.id, autorId: String(autorId), gestorId: String(gestorId), reatribuidas });
+    res.json({ ok: true, reatribuidas });
+  } catch (erro) {
+    next(erro);
+  }
+});
 
 /** GET /dashboard/gestores — lista para o seletor de gestor responsável */
 rotaDashboard.get('/gestores', autenticarDashboard, async (req, res, next) => {

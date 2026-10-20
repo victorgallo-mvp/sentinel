@@ -5,6 +5,7 @@ import AccountList from './components/AccountList.jsx';
 import AccountDetailPanel from './components/AccountDetailPanel.jsx';
 import AlertsPanel from './components/AlertsPanel.jsx';
 import DashboardView from './components/DashboardView.jsx';
+import AlteracoesView from './components/AlteracoesView.jsx';
 import Login from './components/Login.jsx';
 import { isDemo } from './demo/mockApi.js';
 import { apiFetch, lerSessao, encerrarSessao } from './api.js';
@@ -140,7 +141,10 @@ export default function App() {
 
   const contas = dados.contas ?? [];
   const contaSelecionada = contaSelecionadaId ? contas.find((c) => c.id === contaSelecionadaId) ?? null : null;
-  const painelAberto = contaSelecionada !== null;
+  // No painel de alterações a conta escolhida na barra lateral vira filtro,
+  // não abre o detalhe.
+  const emAlteracoes = modo === 'alteracoes';
+  const painelAberto = contaSelecionada !== null && !emAlteracoes;
   const periodo = calcPeriodo(dataInicio, dataFim);
 
   const BANNER_H = 26;
@@ -168,7 +172,7 @@ export default function App() {
       <div className="app-main">
         <CockpitBar
           contas={contas}
-          contaSelecionada={contaSelecionada}
+          contaSelecionada={emAlteracoes ? null : contaSelecionada}
           dataInicio={dataInicio}
           dataFim={dataFim}
           onPeriodoChange={({ dataInicio: ini, dataFim: fim }) => { setDataInicio(ini); setDataFim(fim); }}
@@ -183,7 +187,13 @@ export default function App() {
         <div className={`app-body${painelAberto ? ' app-body--split' : ''}`}>
           {/* ── Conteúdo principal ── */}
           <div className="app-list">
-            {modo === 'dashboard' ? (
+            {emAlteracoes ? (
+              <AlteracoesView
+                contaFiltroId={contaSelecionadaId}
+                gestorFiltroNome={gestorFiltro}
+                customNames={customNames}
+              />
+            ) : modo === 'dashboard' ? (
               <DashboardView
                 contas={contas}
                 notificacoes={dados.notificacoes}

@@ -62,6 +62,10 @@ export default function CockpitBar({ contas = [], contaSelecionada, dataInicio, 
           className={`cb-tab${modo === 'dashboard' ? ' cb-tab--ativo' : ''}`}
           onClick={() => onModo?.('dashboard')}
         >Dashboard</button>
+        <button
+          className={`cb-tab${modo === 'alteracoes' ? ' cb-tab--ativo' : ''}`}
+          onClick={() => onModo?.('alteracoes')}
+        >Alterações</button>
       </nav>
 
       <span className="cb-sep" />

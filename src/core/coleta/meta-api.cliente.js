@@ -277,6 +277,42 @@ export async function obterInsightsNivel(contaAnuncioId, nivel, { timeRange, tim
   );
 }
 
+export const CAMPOS_ATIVIDADES = [
+  'event_time', 'event_type', 'translated_event_type',
+  'actor_id', 'actor_name', 'application_id', 'application_name',
+  'object_id', 'object_name', 'object_type', 'extra_data',
+];
+
+/**
+ * Histórico de alterações de uma conta de anúncio (`act_<id>/activities`):
+ * o mesmo "Histórico de alterações" do Gerenciador — quem fez o quê, quando,
+ * em qual objeto, com os valores antes e depois em `extra_data`.
+ *
+ * Paginado como os insights por nível: o cursor do SDK só traz a 1ª página.
+ *
+ * @param {string} contaAnuncioId - formato `act_<id>`
+ * @param {{ since: string, until: string, token?: string }} opcoes - datas 'YYYY-MM-DD'
+ */
+export async function listarAtividadesConta(contaAnuncioId, { since, until, token } = {}) {
+  if (!since || !until) throw new ErroMetaApi('since e until são obrigatórios');
+  obterApiMeta(token);
+
+  return comRetry(
+    async () => {
+      const conta = new AdAccount(contaAnuncioId);
+      const cursor = await conta.getActivities(CAMPOS_ATIVIDADES, { since, until, limit: 500 });
+      verificarRateLimit(cursor);
+      const linhas = paraArrayPlano(cursor);
+      while (cursor.hasNext()) {
+        await cursor.next();
+        linhas.push(...paraArrayPlano(cursor));
+      }
+      return linhas;
+    },
+    { tentativas: 4, esperaBaseMs: 1000, fatorBackoff: 2 }
+  );
+}
+
 /**
  * @param {'campaign'|'adset'|'ad'} tipo
  * @param {string} metaId
