@@ -64,8 +64,11 @@ export function normalizarLinhaInsight(linha, { eventoConversao = EVENTO_CONVERS
   const conversoes = extrairValorAction(linha.actions, eventoConversao);
   push('conversions', conversoes);
 
-  // Conversas iniciadas por mensagem (campanhas de mensagens/WhatsApp)
+  // Conversas iniciadas por mensagem (campanhas de mensagens/WhatsApp) e
+  // quantas delas receberam a primeira resposta da empresa.
   push('messaging_conversations_started', extrairValorAction(linha.actions, 'onsite_conversion.messaging_conversation_started_7d'));
+  push('messaging_first_reply', extrairValorAction(linha.actions, 'onsite_conversion.messaging_first_reply'));
+  push('landing_page_views', extrairValorAction(linha.actions, 'landing_page_view'));
 
   // Leads (campanhas de formulário/lead) — 'lead' agrega; fallback p/ lead_grouped (forms nativos)
   push('leads', Math.max(

@@ -176,6 +176,31 @@ export const CATALOGO_METRICAS = {
     campoApi: 'actions', // onsite_conversion.messaging_conversation_started_7d
   },
 
+  // Primeira resposta da empresa numa conversa iniciada pelo anúncio. Conversa
+  // sem resposta é gasto jogado fora — e é o problema mais comum nas contas de
+  // WhatsApp, invisível olhando só "conversas iniciadas".
+  messaging_first_reply: {
+    nome: 'Conversas respondidas',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'alta',
+    campoApi: 'actions', // onsite_conversion.messaging_first_reply
+  },
+
+  // Visualização da página de destino: o clique que chegou. Entre o clique no
+  // link e a página há perda por lentidão e por link quebrado.
+  landing_page_views: {
+    nome: 'Visualizações da página',
+    tipo: 'counter',
+    unidade: 'integer',
+    direcaoBoa: 'maior',
+    nivel: ['campaign', 'adset', 'ad'],
+    relevancia: 'media',
+    campoApi: 'actions', // landing_page_view
+  },
+
   conversion_rate: {
     nome: 'Taxa de conversão',
     tipo: 'gauge',
@@ -415,8 +440,11 @@ const RESULTADO_POR_OPTIMIZATION_GOAL = {
   APP_INSTALLS:          'conversions',
   QUALITY_CALL:          'conversions',
   OFFER_CLAIMS:          'conversions',
-  LINK_CLICKS:           'clicks',
-  LANDING_PAGE_VIEWS:    'clicks',
+  // Cliques no LINK, não "clicks" (que inclui curtida, comentário, perfil): é o
+  // que o Gerenciador mostra como resultado dessas otimizações.
+  LINK_CLICKS:           'inline_link_clicks',
+  LANDING_PAGE_VIEWS:    'landing_page_views',
+  PROFILE_VISIT:         'inline_link_clicks',
   REACH:                 'reach',
   IMPRESSIONS:           'impressions',
   BRAND_AWARENESS:       'impressions',

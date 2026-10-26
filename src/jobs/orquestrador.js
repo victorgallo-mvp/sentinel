@@ -5,6 +5,7 @@
  * Cron (horário do servidor):
  * - Health check Evolution API: a cada 5 minutos
  * - Coleta diária: 03:00 BRT — única coleta de métricas (fechamento de 7 dias + agregados de período)
+ * - Sinais diários: 04:00 BRT — motor de desperdício e risco por conta, em cima da coleta
  * - Coleta de alterações: diariamente às 05:00 BRT (histórico de alterações das contas, últimos 3 dias)
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
@@ -17,6 +18,7 @@
  */
 import cron from 'node-cron';
 import { executarColetaDiaria } from './coleta-diaria.job.js';
+import { executarSinaisDiarios } from './sinais-diarios.job.js';
 import { executarColetaAlteracoes } from './coleta-alteracoes.job.js';
 import { executarDeteccaoAnomalias } from './deteccao-anomalias.job.js';
 import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
@@ -42,6 +44,8 @@ const TAREFAS_CRON = [
   // Meta (a atribuição ainda muda por alguns dias) e os agregados de período.
   // 03:00 BRT dá tempo de a Meta fechar o dia anterior.
   { nome: 'coleta-diaria', expressao: '0 3 * * *', executar: executarColetaDiaria, timezone: 'America/Sao_Paulo' },
+  // Motor de sinais: determinístico, lê a coleta de hoje e grava os achados do dia.
+  { nome: 'sinais-diarios', expressao: '0 4 * * *', executar: executarSinaisDiarios, timezone: 'America/Sao_Paulo' },
   // Registro de alterações: quem fez o quê nas contas. Relê 3 dias por folga.
   { nome: 'coleta-alteracoes', expressao: '0 5 * * *', executar: executarColetaAlteracoes, timezone: 'America/Sao_Paulo' },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },

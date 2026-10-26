@@ -215,6 +215,7 @@ Todos em `scripts/`, executados com `npm run <nome>`. Operam sobre a conta padr�
 | `npm run popular-historico` | Faz backfill de métricas históricas (janela de 24h) via `time_range`/`time_increment`, para acelerar o primeiro cálculo de baseline |
 | `npm run coletar-alteracoes` | Backfill do registro de alterações (`-- --dias=30 [--conta=identificador]`): lê o histórico da Meta e grava em `alteracoes_conta`. Idempotente |
 | `npm run listar-alteracoes` | Imprime a linha do tempo de alterações de uma conta direto da Meta, sem gravar (`-- --conta=identificador --dias=30`) |
+| `npm run sinais` | Roda o motor de sinais agora e imprime os achados (`-- --conta=identificador`, `--gravar` para persistir). Para calibrar limiares com dados reais |
 | `npm run limpar-dados` | Roda a limpeza de dados antigos agora; com `-- --vacuum-full` também compacta a tabela de métricas em disco (trava a tabela por alguns minutos) |
 | `npm run fechar-dias` | Regrava o snapshot diário de um intervalo (`-- --desde=AAAA-MM-DD --ate=AAAA-MM-DD [--conta=identificador]`) para todas as contas ativas com o valor final da Meta — preenche dias sem coleta e corrige o corte das 23h. Idempotente |
 | `npm run simular-anomalia` | Cria uma anomalia sintética e a enfileira para triagem (requer os workers rodando) |
@@ -294,6 +295,7 @@ Agendados em `src/jobs/orquestrador.js` (node-cron, horário do servidor):
 
 | Job | Frequência | O que faz |
 |---|---|---|
+| `sinais-diarios` | `0 4 * * *` (04:00 BRT) | Motor de sinais: para cada conta, detecta gasto sem resultado, custo por resultado subindo, fadiga de criativo, conversas sem resposta, rastreamento ausente, edição excessiva e ritmo contra o planejado. Grava em `sinais_conta` com evidência e R$/dia estimado |
 | `coleta-diaria` | `0 3 * * *` (03:00 BRT) | A única coleta de métricas: relê os últimos 7 dias com o valor final da Meta (campanhas, conjuntos e anúncios, três consultas por conta de anúncio) e os agregados de período (7d, 30d, mês, ciclo). O dashboard mostra até ontem |
 | `coleta-alteracoes` | `0 5 * * *` (05:00 BRT) | Lê o histórico de alterações (`act_<id>/activities`) dos últimos 3 dias de cada conta, traduz, classifica, vincula autor a gestor e grava em `alteracoes_conta`. Alimenta a aba "Alterações" do dashboard |
 | `deteccao-anomalias` | `20 * * * *` (minuto 20, após a coleta) | Compara métricas recém-coletadas com baselines e cria `Anomalia`s, enfileirando-as para triagem |
