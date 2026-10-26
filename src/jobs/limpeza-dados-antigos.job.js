@@ -23,10 +23,15 @@ const RETENCAO_REGISTROS_DIAS = 180;
 // margem para falha de coleta e descartamos o resto.
 const RETENCAO_JANELAS_AGREGADAS_DIAS = 7;
 
-// Snapshots horários da janela de 24h: depois desta idade, guarda só o último de
-// cada dia — exatamente o que o dashboard lê. Precisa cobrir com folga os
-// DIAS_HISTORICO_BASELINE_PADRAO (21) que a detecção de anomalias consome.
-const CONSOLIDAR_24H_APOS_DIAS = 30;
+// Snapshots intradiários da janela de 24h: depois desta idade, guarda só o
+// último de cada dia — o que o dashboard, os baselines e os relatórios leem.
+// Dois dias cobrem o que os alertas de ritmo olham (48h). Era 30: com a coleta
+// horária eram 3 milhões de linhas que ninguém lia.
+const CONSOLIDAR_24H_APOS_DIAS = 2;
+
+// Janelas de 1h e 6h: escritas pela coleta horária até 26/10/2026 e lidas por
+// nada (baselines e detecção usam só 24h). Apagar o que restou.
+const JANELAS_DESCONTINUADAS = [1, 6];
 
 // Apaga em lotes para não segurar lock nem montar uma transação gigante.
 const TAMANHO_LOTE_EXCLUSAO = 20000;
@@ -42,6 +47,13 @@ export async function executarLimpezaDadosAntigos() {
     const resultado = await query('DELETE FROM metricas_serie_temporal WHERE coletada_em < $1', [limiteMetricas]);
     return resultado.rowCount;
   });
+
+  await limparComLog('metricas_serie_temporal — janelas 1h/6h descontinuadas', () =>
+    apagarEmLotes(
+      `SELECT id FROM metricas_serie_temporal WHERE janela_horas = ANY($1)`,
+      [JANELAS_DESCONTINUADAS]
+    )
+  );
 
   await limparComLog('metricas_serie_temporal — histórico das janelas 7d/30d/mês', () =>
     apagarEmLotes(

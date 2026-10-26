@@ -3,8 +3,8 @@
  * horário do dia e ainda cair dentro do dia BRT que as consultas usam.
  */
 import { describe, it, expect } from 'vitest';
-import { carimboFechamentoDia } from '../src/core/coleta/coletor-metricas.servico.js';
-import { dataBRT, DIAS_FECHAMENTO } from '../src/jobs/fechamento-dia.job.js';
+import { carimboFechamentoDia, DIAS_FECHAMENTO } from '../src/core/coleta/coletor-metricas.servico.js';
+import { dataBRT } from '../src/shared/utils.js';
 
 describe('carimboFechamentoDia', () => {
   it('é 23:59 BRT do dia, ou seja, 02:59Z do dia seguinte', () => {

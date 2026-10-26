@@ -14,7 +14,7 @@ import { Relatorio } from '../../dominio/relatorio.modelo.js';
 import { Usuario } from '../../dominio/usuario.modelo.js';
 import { Gestor } from '../../dominio/gestor.modelo.js';
 import { gerarHashSenha, SENHA_TAMANHO_MINIMO } from '../../core/auth/senha.js';
-import { coletarMetricasConta } from '../../core/coleta/coletor-metricas.servico.js';
+import { coletarDiariaConta } from '../../core/coleta/coletor-metricas.servico.js';
 import { sincronizarEntidades } from '../../core/coleta/descobridor-entidades.servico.js';
 import { calcularBaselinesConta } from '../../core/deteccao/calculador-baseline.servico.js';
 import { gerarRelatorioSemanal, enviarRelatorioWhatsapp } from '../../core/relatorio/gerador-semanal.servico.js';
@@ -429,7 +429,7 @@ rotaAdmin.post('/disparar/coleta', async (req, res, next) => {
 
     res.status(202).json({ disparado: true, job: 'coleta', contaId });
 
-    coletarMetricasConta(contaId).catch((erro) => {
+    coletarDiariaConta(contaId).catch((erro) => {
       logger.error({ msg: 'Erro ao disparar coleta manualmente via API admin', contaId, erro: erro.message });
     });
   } catch (erro) {

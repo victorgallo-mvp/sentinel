@@ -7,7 +7,7 @@
  */
 import { Conta } from '../dominio/conta.modelo.js';
 import { coletarAlteracoesConta } from '../core/alteracoes/coletor-alteracoes.servico.js';
-import { dataBRT } from './fechamento-dia.job.js';
+import { dataBRT } from '../shared/utils.js';
 import { logger } from '../infra/logger.js';
 
 export const DIAS_RELEITURA = 3;

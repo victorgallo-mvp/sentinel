@@ -6,7 +6,7 @@
  *
  * Limitação conhecida: popula apenas a janela 24h (granularidade diária).
  * As janelas 1h/6h vão sendo preenchidas naturalmente pela coleta horária
- * (`coleta-metricas.job.js`) a partir de agora.
+ * (`coleta-diaria.job.js`) a partir de agora.
  *
  * Uso: npm run popular-historico -- --dias=21
  */

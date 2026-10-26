@@ -136,7 +136,7 @@ calcular um baseline confiável **sem esperar 3 semanas de coleta em tempo real*
 
 ### Passo 4 — Observar a coleta em tempo real por alguns dias
 
-Com `npm start` rodando (ou via cron no Railway), o job `coleta-metricas` roda a cada hora
+Com `npm start` rodando (ou via cron no Railway), o job `coleta-diaria` roda às 03:00 BRT
 (`5 * * * *`). Você pode também disparar manualmente:
 
 ```bash

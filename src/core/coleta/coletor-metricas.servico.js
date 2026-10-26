@@ -1,187 +1,54 @@
 /**
- * Serviço de coleta de métricas — roda periodicamente (job de coleta) e,
- * para cada entidade monitorada de uma conta, busca insights na Meta API
- * e persiste em `metricas_serie_temporal` (Postgres) nas janelas 1h, 6h e 24h.
+ * Coleta de métricas — UMA passagem completa por dia (job `coleta-diaria`).
  *
- * Falha em uma entidade NÃO interrompe a coleta das demais.
+ * Duas partes, ambas em poucas chamadas por conta de anúncio:
  *
- * A janela de 24h tem dois produtores. O job horário grava o acumulado do dia
- * a cada tick; o último tick cai entre 23:05 e 23:35 BRT, então o dia nunca
- * fecha inteiro — e a atribuição de compras/leads que a Meta ainda vai creditar
- * fica de fora para sempre. O fechamento diário (`coletarFechamentoDiasConta`)
- * regrava os últimos dias com o valor final da Meta, carimbado às 23:59 do dia,
- * que é o que toda leitura de "último snapshot do dia" passa a enxergar.
+ * 1. Fechamento dos últimos 7 dias: o valor final que a Meta reporta para
+ *    cada dia, por campanha, conjunto e anúncio, gravado na janela de 24h com
+ *    carimbo fixo às 23:59 BRT do dia. Sete dias porque a atribuição de
+ *    compras e leads ainda muda por alguns dias depois do clique.
+ *
+ * 2. Agregados nativos de período (7d, 30d, mês e ciclo do cliente): a Meta
+ *    deduplica alcance e frequência entre dias, o que não se reconstrói dos
+ *    diários. Uma linha por entidade e período, janela_horas = horas do período.
+ *
+ * Até 26/10/2026 havia também uma coleta HORÁRIA por entidade (janelas 1h, 6h
+ * e acumulado do dia), 2 chamadas por entidade por hora — 118 mil chamadas e
+ * 180 mil linhas por dia, das quais dois terços ninguém lia. Saiu por custo.
+ * Consequência: o dashboard mostra até ontem, não "hoje".
  */
 import { Conta } from '../../dominio/conta.modelo.js';
 import { Entidade } from '../../dominio/entidade.modelo.js';
-import { obterInsights, obterInsightsHorarios, obterInsightsNivel, CAMPO_ID_POR_NIVEL } from './meta-api.cliente.js';
-import { normalizarLinhaInsight, agregarLinhasHorarias } from './normalizador.js';
+import { obterInsights, obterInsightsNivel, CAMPO_ID_POR_NIVEL } from './meta-api.cliente.js';
+import { normalizarLinhaInsight } from './normalizador.js';
 import { metricasNumericas } from '../../config/metricas.config.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { ErroNaoEncontrado } from '../../shared/erros.js';
-import { arredondarParaIntervalo } from '../../shared/utils.js';
+import { arredondarParaIntervalo, dataBRT } from '../../shared/utils.js';
 import { janelaCicloAtual, JANELA_CICLO_HORAS } from '../../shared/ciclo.js';
 
 const JANELA_ARREDONDAMENTO_MINUTOS = 5;
 const CONJUNTO_METRICAS_NUMERICAS = new Set(metricasNumericas());
 
-// Períodos agregados coletados 1×/dia (agregado real da Meta, uma linha por período).
-// 30d é usado pelas métricas deduplicadas (freq/alcance/únicos) e pelo gasto de 30d;
-// 7d é usado pelo gasto de 7d no dashboard.
-// this_month (janelaHoras=744) é usado para o gasto do mês corrente — mais preciso do
-// que somar snapshots diários (que herdam drift de UTC vs. fuso do anunciante).
+/** Dias relidos no fechamento: a janela de atribuição por clique da Meta. */
+export const DIAS_FECHAMENTO = 7;
+
+// Níveis coletados — os mesmos que o dashboard exibe.
+const NIVEIS = ['campaign', 'adset', 'ad'];
+
+// Períodos agregados. 30d alimenta as métricas deduplicadas e o gasto de 30d;
+// 7d o gasto de 7d; this_month (744) o gasto do mês-calendário.
 const PERIODOS_AGREGADOS = [
   { datePreset: 'last_7d',    janelaHoras: 168 },
   { datePreset: 'last_30d',   janelaHoras: 720 },
   { datePreset: 'this_month', janelaHoras: 744 },
 ];
 
-
-/**
- * Coleta métricas de todas as entidades monitoradas de uma conta.
- * @param {string} contaId - ObjectId da Conta no MongoDB
- */
-export async function coletarMetricasConta(contaId) {
-  const conta = await Conta.findById(contaId);
-  if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
-
-  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true });
-  logger.info({ msg: 'Iniciando coleta de métricas', contaId: String(contaId), totalEntidades: entidades.length });
-
-  const agora = arredondarParaIntervalo(new Date(), JANELA_ARREDONDAMENTO_MINUTOS);
-  let sucesso = 0;
-  let falhas = 0;
-
-  for (const entidade of entidades) {
-    try {
-      await coletarMetricasEntidade(conta, entidade, agora);
-      sucesso++;
-    } catch (erro) {
-      falhas++;
-      logger.error({
-        msg: 'Falha ao coletar métricas de entidade — pulando',
-        entidadeId: String(entidade._id),
-        metaId: entidade.metaId,
-        tipo: entidade.tipo,
-        erro: erro.message,
-      });
-    }
-  }
-
-  logger.info({ msg: 'Coleta de métricas concluída', contaId: String(contaId), sucesso, falhas, total: entidades.length });
-  return { sucesso, falhas, total: entidades.length };
-}
-
-/**
- * Coleta o agregado REAL de um período (linha única) de uma entidade e persiste
- * em `metricas_serie_temporal` com a `janelaHoras` do período. A Meta deduplica
- * alcance/frequência entre dias — algo impossível de reconstruir dos snapshots
- * diários. Usado pelas métricas deduplicadas e pelo gasto 7d/30d/mês. Roda 1×/dia.
- *
- * Aceita `datePreset` (períodos fixos) ou `timeRange` (`{since, until}`), usado
- * pelo ciclo de faturamento do cliente, que não tem preset equivalente.
- */
-export async function coletarMetricasPeriodoEntidade(conta, entidade, { datePreset, timeRange, janelaHoras }, coletadaEm = new Date()) {
-  const token = conta.metaConfig?.systemUserToken || undefined;
-  const linhas = await obterInsights(entidade.tipo, entidade.metaId, {
-    ...(timeRange ? { timeRange: { since: timeRange.since, until: timeRange.until } } : { datePreset }),
-    timeIncrement: 'all_days', // uma única linha agregada do período inteiro
-    token,
-  });
-  if (linhas.length > 0) {
-    await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas[0]), janelaHoras, coletadaEm);
-  }
-}
-
-/** Coleta os agregados de período (7d e 30d) de todas as entidades monitoradas de uma conta. */
-export async function coletarMetricasPeriodosConta(contaId) {
-  const conta = await Conta.findById(contaId);
-  if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
-
-  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true });
-  const agora = arredondarParaIntervalo(new Date(), JANELA_ARREDONDAMENTO_MINUTOS);
-  let sucesso = 0;
-  let falhas = 0;
-
-  // Ciclo do cliente: só faz sentido quando difere do mês-calendário, que o
-  // preset `this_month` já cobre.
-  const diaInicioCiclo = conta.configuracoes?.diaInicioCiclo ?? 1;
-  const periodos = diaInicioCiclo === 1
-    ? PERIODOS_AGREGADOS
-    : [...PERIODOS_AGREGADOS, { timeRange: janelaCicloAtual(diaInicioCiclo), janelaHoras: JANELA_CICLO_HORAS }];
-
-  for (const entidade of entidades) {
-    for (const periodo of periodos) {
-      try {
-        await coletarMetricasPeriodoEntidade(conta, entidade, periodo, agora);
-        sucesso++;
-      } catch (erro) {
-        falhas++;
-        logger.error({ msg: 'Falha ao coletar período de entidade — pulando', entidadeId: String(entidade._id), metaId: entidade.metaId, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
-      }
-    }
-  }
-
-  // Nível conta: alcance e frequência deduplicados entre TODAS as campanhas.
-  // Não dá para reconstruir somando campanhas — a mesma pessoa é alcançada por
-  // várias, e a Meta só deduplica de verdade quando perguntada neste nível.
-  for (const contaAnuncioId of conta.metaConfig?.contasAnuncioIds ?? []) {
-    for (const periodo of periodos) {
-      try {
-        await coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, periodo, agora);
-        sucesso++;
-      } catch (erro) {
-        falhas++;
-        logger.error({ msg: 'Falha ao coletar período no nível conta — pulando', contaAnuncioId, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
-      }
-    }
-  }
-
-  logger.info({ msg: 'Coleta de períodos (7d/30d) concluída', contaId: String(contaId), sucesso, falhas, entidades: entidades.length });
-  return { sucesso, falhas, total: entidades.length };
-}
-
-/** Coleta e persiste as três janelas (1h, 6h, 24h) de uma única entidade. */
-export async function coletarMetricasEntidade(conta, entidade, coletadaEm = new Date()) {
-  const token = conta.metaConfig?.systemUserToken || undefined;
-
-  const linhasHorarias = await obterInsightsHorarios(entidade.tipo, entidade.metaId, token);
-
-  // Janela 1h: última linha horária disponível (hora corrente ou anterior)
-  if (linhasHorarias.length > 0) {
-    const ultimaHora = linhasHorarias[linhasHorarias.length - 1];
-    await persistirMetricas(conta, entidade, normalizarLinhaInsight(ultimaHora), 1, coletadaEm);
-  }
-
-  // Janela 6h: agrega as últimas 6 linhas horárias
-  const ultimas6 = linhasHorarias.slice(-6);
-  if (ultimas6.length > 0) {
-    const agregado6h = agregarLinhasHorarias(ultimas6);
-    await persistirMetricas(conta, entidade, normalizarLinhaInsight(agregado6h), 6, coletadaEm);
-  }
-
-  // Janela 24h: agregação correta (com dedup de reach) vem direto da Meta.
-  // `last_24h` não existe como date_preset na Graph API — `today` é o
-  // equivalente válido mais próximo (acumulado desde 00h no fuso do anunciante).
-  const linhas24h = await obterInsights(entidade.tipo, entidade.metaId, { datePreset: 'today', timeIncrement: 1, token });
-  if (linhas24h.length > 0) {
-    await persistirMetricas(conta, entidade, normalizarLinhaInsight(linhas24h[0]), 24, coletadaEm);
-  }
-
-  await Entidade.findByIdAndUpdate(entidade._id, { ultimaSincronizacaoEm: coletadaEm });
-}
-
-// Níveis refeitos pelo fechamento diário — os mesmos que o dashboard exibe.
-const NIVEIS_FECHAMENTO = ['campaign', 'adset', 'ad'];
-
 /**
  * Carimbo do snapshot de fechamento de um dia: 23:59 BRT daquele dia, em UTC.
- *
- * É mais tarde que qualquer tick horário (23:35 no máximo) e ainda cai dentro do
- * dia BRT nas consultas (`< dia seguinte 03:00Z`), então vence como "último
- * snapshot do dia". Fixo, para que refazer o mesmo dia atualize a mesma linha
- * (`ON CONFLICT` em entidade+métrica+janela+coletada_em) em vez de acumular.
+ * Fixo, para que refazer o mesmo dia atualize a mesma linha (`ON CONFLICT`
+ * em entidade+métrica+janela+coletada_em) em vez de acumular.
  *
  * @param {string} dataIso - 'YYYY-MM-DD' no fuso do anunciante (BRT)
  */
@@ -190,39 +57,40 @@ export function carimboFechamentoDia(dataIso) {
   return new Date(`${dataIso}T23:59:00-03:00`);
 }
 
+/** Entidades monitoradas da conta, indexadas pelo id da Meta. */
+async function mapaEntidades(contaId) {
+  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true }).select('_id metaId tipo').lean();
+  return new Map(entidades.map((e) => [e.metaId, e]));
+}
+
 /**
- * Regrava, para uma conta, o snapshot de 24h de cada dia do intervalo com o
- * valor final que a Meta reporta agora. Três consultas por conta de anúncio
- * (campanhas, conjuntos, anúncios), uma linha por entidade e dia.
- *
- * Serve tanto ao job diário (últimos 7 dias, para cobrir a janela de
- * atribuição) quanto ao backfill de períodos sem coleta. Linhas de entidades
- * que não estão monitoradas são ignoradas — o dashboard não as lê.
+ * Regrava o snapshot de 24h de cada dia do intervalo com o valor final que a
+ * Meta reporta agora. Três consultas por conta de anúncio, uma linha por
+ * entidade e dia. Serve ao job diário e ao backfill de períodos sem coleta.
  *
  * @param {string} contaId - ObjectId da Conta
- * @param {{ since: string, until: string }} intervalo - datas 'YYYY-MM-DD', inclusivas
+ * @param {{ since: string, until: string }} intervalo - 'YYYY-MM-DD', inclusivo
  */
 export async function coletarFechamentoDiasConta(contaId, { since, until }) {
   const conta = await Conta.findById(contaId);
   if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
   const token = conta.metaConfig?.systemUserToken || undefined;
+  const porMetaId = await mapaEntidades(contaId);
 
-  const entidades = await Entidade.find({ contaId, 'configuracoes.monitorada': true })
-    .select('_id metaId tipo').lean();
-  const porMetaId = new Map(entidades.map((e) => [e.metaId, e]));
-
+  const tocadas = new Set();
   let linhas = 0;
   let ignoradas = 0;
   let falhas = 0;
 
   for (const contaAnuncioId of conta.metaConfig?.contasAnuncioIds ?? []) {
-    for (const nivel of NIVEIS_FECHAMENTO) {
+    for (const nivel of NIVEIS) {
       try {
         const insights = await obterInsightsNivel(contaAnuncioId, nivel, { timeRange: { since, until }, timeIncrement: 1, token });
         const itens = [];
         for (const linha of insights) {
           const entidade = porMetaId.get(linha[CAMPO_ID_POR_NIVEL[nivel]]);
           if (!entidade) { ignoradas++; continue; }
+          tocadas.add(entidade._id);
           itens.push({ entidade, metricas: normalizarLinhaInsight(linha), janelaHoras: 24, coletadaEm: carimboFechamentoDia(linha.date_start) });
         }
         await persistirLoteMetricas(conta, itens);
@@ -234,8 +102,78 @@ export async function coletarFechamentoDiasConta(contaId, { since, until }) {
     }
   }
 
+  if (tocadas.size) {
+    await Entidade.updateMany({ _id: { $in: [...tocadas] } }, { $set: { ultimaSincronizacaoEm: new Date() } });
+  }
+
   logger.info({ msg: 'Fechamento de dias concluído', contaId: String(contaId), since, until, linhas, ignoradas, falhas });
   return { linhas, ignoradas, falhas };
+}
+
+/**
+ * Agregados nativos de período (7d, 30d, mês, ciclo) de todas as entidades
+ * monitoradas da conta — três consultas por conta de anúncio e período, mais
+ * uma no nível conta para alcance/frequência deduplicados entre campanhas.
+ */
+export async function coletarPeriodosConta(contaId) {
+  const conta = await Conta.findById(contaId);
+  if (!conta) throw new ErroNaoEncontrado(`Conta ${contaId} não encontrada`);
+  const token = conta.metaConfig?.systemUserToken || undefined;
+  const porMetaId = await mapaEntidades(contaId);
+  const agora = arredondarParaIntervalo(new Date(), JANELA_ARREDONDAMENTO_MINUTOS);
+
+  // Ciclo do cliente: só faz sentido quando difere do mês-calendário, que o
+  // preset `this_month` já cobre.
+  const diaInicioCiclo = conta.configuracoes?.diaInicioCiclo ?? 1;
+  const periodos = diaInicioCiclo === 1
+    ? PERIODOS_AGREGADOS
+    : [...PERIODOS_AGREGADOS, { timeRange: janelaCicloAtual(diaInicioCiclo), janelaHoras: JANELA_CICLO_HORAS }];
+
+  let linhas = 0;
+  let falhas = 0;
+
+  for (const contaAnuncioId of conta.metaConfig?.contasAnuncioIds ?? []) {
+    for (const periodo of periodos) {
+      const intervalo = periodo.timeRange
+        ? { timeRange: { since: periodo.timeRange.since, until: periodo.timeRange.until } }
+        : { datePreset: periodo.datePreset };
+
+      for (const nivel of NIVEIS) {
+        try {
+          const insights = await obterInsightsNivel(contaAnuncioId, nivel, { ...intervalo, timeIncrement: 'all_days', token });
+          const itens = insights
+            .map((linha) => ({ entidade: porMetaId.get(linha[CAMPO_ID_POR_NIVEL[nivel]]), linha }))
+            .filter(({ entidade }) => entidade)
+            .map(({ entidade, linha }) => ({ entidade, metricas: normalizarLinhaInsight(linha), janelaHoras: periodo.janelaHoras, coletadaEm: agora }));
+          await persistirLoteMetricas(conta, itens);
+          linhas += itens.length;
+        } catch (erro) {
+          falhas++;
+          logger.error({ msg: 'Falha ao coletar período por nível — pulando', contaId: String(contaId), contaAnuncioId, nivel, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
+        }
+      }
+
+      try {
+        await coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, periodo, agora);
+      } catch (erro) {
+        falhas++;
+        logger.error({ msg: 'Falha ao coletar período no nível conta — pulando', contaAnuncioId, periodo: periodo.datePreset ?? 'ciclo', erro: erro.message });
+      }
+    }
+  }
+
+  logger.info({ msg: 'Coleta de períodos concluída', contaId: String(contaId), linhas, falhas });
+  return { linhas, falhas };
+}
+
+/**
+ * A passagem diária completa de uma conta: fechamento dos últimos 7 dias
+ * (ontem inclusive) e agregados de período.
+ */
+export async function coletarDiariaConta(contaId) {
+  const fechamento = await coletarFechamentoDiasConta(contaId, { since: dataBRT(DIAS_FECHAMENTO), until: dataBRT(1) });
+  const periodos = await coletarPeriodosConta(contaId);
+  return { fechamento, periodos };
 }
 
 /**
@@ -243,11 +181,10 @@ export async function coletarFechamentoDiasConta(contaId, { since, until }) {
  * `entidade_id = act_...` e `entidade_tipo = 'account'`.
  *
  * Essas linhas ficam FORA da coleção `entidades` do MongoDB de propósito: o
- * dashboard, os alertas e a detecção de anomalias consultam por entidade
- * monitorada, então nada disso passa a enxergar o nível conta por acidente —
- * e, principalmente, nenhum somatório de gasto passa a contar o mesmo dinheiro
- * duas vezes. Quem quiser o alcance deduplicado da conta lê explicitamente
- * `entidade_tipo = 'account'`.
+ * dashboard e os alertas consultam por entidade monitorada, então nada disso
+ * passa a enxergar o nível conta por acidente — e nenhum somatório de gasto
+ * conta o mesmo dinheiro duas vezes. Quem quiser o alcance deduplicado da
+ * conta lê explicitamente `entidade_tipo = 'account'`.
  */
 export async function coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, { datePreset, timeRange, janelaHoras }, coletadaEm = new Date()) {
   const token = conta.metaConfig?.systemUserToken || undefined;
@@ -258,27 +195,20 @@ export async function coletarMetricasPeriodoContaAnuncio(conta, contaAnuncioId, 
   });
   if (!linhas.length) return;
 
-  await persistirMetricas(
-    conta,
-    { _id: contaAnuncioId, tipo: 'account' },
-    normalizarLinhaInsight(linhas[0]),
-    janelaHoras,
-    coletadaEm
-  );
+  await persistirMetricas(conta, { _id: contaAnuncioId, tipo: 'account' }, normalizarLinhaInsight(linhas[0]), janelaHoras, coletadaEm);
 }
 
 /**
  * Persiste métricas normalizadas no Postgres.
  * Usa `ON CONFLICT DO UPDATE` em (entidade_id, metrica, janela_horas, coletada_em)
- * pra garantir idempotência — re-execução do mesmo tick não duplica linhas.
+ * pra garantir idempotência — re-execução não duplica linhas.
  */
 export async function persistirMetricas(conta, entidade, metricasNormalizadas, janelaHoras, coletadaEm) {
   await persistirLoteMetricas(conta, [{ entidade, metricas: metricasNormalizadas, janelaHoras, coletadaEm }]);
 }
 
 // Linhas por INSERT. O Postgres aceita 65.535 parâmetros por comando; com 7 por
-// linha, 5.000 linhas ficam bem abaixo disso e ainda cortam a ida e volta ao
-// banco em centenas de vezes no fechamento de dias.
+// linha, 5.000 linhas ficam bem abaixo disso.
 const LINHAS_POR_INSERT = 5000;
 
 /**

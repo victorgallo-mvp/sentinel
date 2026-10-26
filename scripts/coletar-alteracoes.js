@@ -9,7 +9,7 @@ import { conectarMongo } from '../src/infra/mongo.js';
 import { executarScript } from './_contexto.js';
 import { Conta } from '../src/dominio/conta.modelo.js';
 import { coletarAlteracoesConta } from '../src/core/alteracoes/coletor-alteracoes.servico.js';
-import { dataBRT } from '../src/jobs/fechamento-dia.job.js';
+import { dataBRT } from '../src/shared/utils.js';
 
 function argumento(nome, padrao = null) {
   const arg = process.argv.find((a) => a.startsWith(`--${nome}=`));

@@ -31,16 +31,20 @@ export default function App() {
   const [segundos, setSegundos] = useState(0);
   const [modo, setModo] = useState(() => lerStorage(LS_MODO, 'monitoramento'));
 
+  // A coleta é uma por dia, de madrugada: o último dia completo é ontem.
   const isoHoje = new Date().toISOString().slice(0, 10);
-  const [dataInicio, setDataInicio] = useState(isoHoje);
-  const [dataFim,    setDataFim]    = useState(isoHoje);
+  const isoOntem = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const [dataInicio, setDataInicio] = useState(isoOntem);
+  const [dataFim,    setDataFim]    = useState(isoOntem);
 
   function calcPeriodo(ini, fim) {
     const dias = Math.max(1, Math.round(
       (new Date(fim + 'T00:00:00Z') - new Date(ini + 'T00:00:00Z')) / 86400000
     ) + 1);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const ontem = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const label = ini === fim
-      ? (ini === new Date().toISOString().slice(0, 10) ? 'hoje' : '1d')
+      ? (ini === hoje ? 'hoje' : ini === ontem ? 'ontem' : '1d')
       : `${dias}d`;
     return { label, dias };
   }

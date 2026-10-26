@@ -440,9 +440,10 @@ rotaDashboard.get('/data', autenticarDashboard, async (req, res, next) => {
       ? todasContas
       : todasContas.filter((c) => req.usuario.contaIds.includes(String(c._id)));
     const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const isoHoje    = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10); // data BRT
-    const dataInicio = req.query.dataInicio ?? isoHoje;
-    const dataFim    = req.query.dataFim    ?? isoHoje;
+    // Padrão é ONTEM: a coleta é uma por dia, de madrugada, então hoje não tem dado.
+    const isoOntem   = new Date(Date.now() - 27 * 60 * 60 * 1000).toISOString().slice(0, 10); // data BRT - 1
+    const dataInicio = req.query.dataInicio ?? isoOntem;
+    const dataFim    = req.query.dataFim    ?? isoOntem;
 
     // Uma leitura de métricas para TODAS as entidades visíveis, e não uma por
     // entidade: com milhares de entidades monitoradas, o formato por entidade

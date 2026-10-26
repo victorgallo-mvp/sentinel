@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extrairValorAction, normalizarLinhaInsight, agregarLinhasHorarias } from '../src/core/coleta/normalizador.js';
+import { extrairValorAction, normalizarLinhaInsight } from '../src/core/coleta/normalizador.js';
 
 describe('extrairValorAction', () => {
   it('extrai o valor de um action_type específico', () => {
@@ -48,23 +48,3 @@ describe('normalizarLinhaInsight', () => {
   });
 });
 
-describe('agregarLinhasHorarias', () => {
-  it('soma contadores e recalcula razões agregadas', () => {
-    const linhas = [
-      { impressions: '500', reach: '400', clicks: '10', unique_clicks: '8', spend: '20' },
-      { impressions: '500', reach: '400', clicks: '10', unique_clicks: '8', spend: '20' },
-    ];
-
-    const agregado = agregarLinhasHorarias(linhas);
-
-    expect(agregado.impressions).toBe(1000);
-    expect(agregado.spend).toBe(40);
-    expect(agregado.ctr).toBeCloseTo(2, 5);
-    expect(agregado.cpm).toBeCloseTo(40, 5);
-  });
-
-  it('retorna null para lista vazia', () => {
-    expect(agregarLinhasHorarias([])).toBe(null);
-    expect(agregarLinhasHorarias(null)).toBe(null);
-  });
-});

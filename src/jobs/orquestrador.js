@@ -4,8 +4,7 @@
  *
  * Cron (horário do servidor):
  * - Health check Evolution API: a cada 5 minutos
- * - Coleta de métricas: a cada hora, no minuto 5
- * - Fechamento de dias: diariamente à 01:30 BRT (regrava os últimos 7 dias com o valor final da Meta)
+ * - Coleta diária: 03:00 BRT — única coleta de métricas (fechamento de 7 dias + agregados de período)
  * - Coleta de alterações: diariamente às 05:00 BRT (histórico de alterações das contas, últimos 3 dias)
  * - Alerta de saldo de orçamento: a cada hora, no minuto 10 (após coleta)
  * - Alerta de erros de entrega (issues_info): a cada hora, no minuto 15
@@ -17,9 +16,7 @@
  * - Limpeza de dados antigos: diariamente às 03:00
  */
 import cron from 'node-cron';
-import { executarColetaMetricas } from './coleta-metricas.job.js';
-import { executarColetaPeriodos } from './coleta-periodos.job.js';
-import { executarFechamentoDia } from './fechamento-dia.job.js';
+import { executarColetaDiaria } from './coleta-diaria.job.js';
 import { executarColetaAlteracoes } from './coleta-alteracoes.job.js';
 import { executarDeteccaoAnomalias } from './deteccao-anomalias.job.js';
 import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
@@ -41,12 +38,10 @@ import { logger } from '../infra/logger.js';
 // agendadas quando IA_INVESTIGACAO_ATIVA está ligado.
 const TAREFAS_CRON = [
   { nome: 'health-check-evolution', expressao: '*/5 * * * *', executar: verificarSaudeEvolution },
-  { nome: 'coleta-metricas', expressao: '5 * * * *', executar: executarColetaMetricas },
-  { nome: 'coleta-periodos', expressao: '40 4 * * *', executar: executarColetaPeriodos },
-  // Fechamento dos últimos 7 dias com o valor final da Meta. Fuso explícito:
-  // o dia que fecha é o do anunciante, e a Meta ainda ajusta a atribuição
-  // por alguns dias — por isso relê sete e não só ontem.
-  { nome: 'fechamento-dia', expressao: '30 1 * * *', executar: executarFechamentoDia, timezone: 'America/Sao_Paulo' },
+  // A única coleta de métricas: relê os últimos 7 dias com o valor final da
+  // Meta (a atribuição ainda muda por alguns dias) e os agregados de período.
+  // 03:00 BRT dá tempo de a Meta fechar o dia anterior.
+  { nome: 'coleta-diaria', expressao: '0 3 * * *', executar: executarColetaDiaria, timezone: 'America/Sao_Paulo' },
   // Registro de alterações: quem fez o quê nas contas. Relê 3 dias por folga.
   { nome: 'coleta-alteracoes', expressao: '0 5 * * *', executar: executarColetaAlteracoes, timezone: 'America/Sao_Paulo' },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },
@@ -98,12 +93,6 @@ export function iniciarOrquestrador() {
     logger.warn({ msg: 'Pipeline de IA desativado (IA_INVESTIGACAO_ATIVA=false) — rodando só alertas por regra' });
   }
   logger.info({ msg: 'Orquestrador iniciado', iaAtiva, totalWorkers: workers.length, totalTarefasCron: tarefasCron.length });
-
-  // Dispara a coleta de períodos (7d/30d) uma vez no startup (não-bloqueante) para o
-  // dashboard já ter os agregados sem esperar o cron diário (ex.: após um deploy).
-  executarColetaPeriodos().catch((erro) =>
-    logger.error({ msg: 'Coleta de períodos inicial falhou', erro: erro.message })
-  );
 
   return { workers, tarefasCron };
 }

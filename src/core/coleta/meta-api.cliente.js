@@ -245,24 +245,21 @@ export const CAMPO_ID_POR_NIVEL = { campaign: 'campaign_id', adset: 'adset_id', 
  *
  * @param {string} contaAnuncioId - formato `act_<id>`
  * @param {'campaign'|'adset'|'ad'} nivel
- * @param {{ timeRange: {since: string, until: string}, timeIncrement?: number|string, campos?: string[], token?: string }} opcoes
+ * @param {{ timeRange?: {since: string, until: string}, datePreset?: string, timeIncrement?: number|string, campos?: string[], token?: string }} opcoes
  */
-export async function obterInsightsNivel(contaAnuncioId, nivel, { timeRange, timeIncrement = 1, campos = CAMPOS_INSIGHTS_BASE, token } = {}) {
+export async function obterInsightsNivel(contaAnuncioId, nivel, { timeRange, datePreset, timeIncrement = 1, campos = CAMPOS_INSIGHTS_BASE, token } = {}) {
   const campoId = CAMPO_ID_POR_NIVEL[nivel];
   if (!campoId) throw new ErroMetaApi(`Nível inválido para insights: ${nivel}`);
-  if (!timeRange?.since || !timeRange?.until) throw new ErroMetaApi('timeRange {since, until} é obrigatório');
+  if (!datePreset && !(timeRange?.since && timeRange?.until)) throw new ErroMetaApi('Informe datePreset ou timeRange {since, until}');
 
   obterApiMeta(token);
 
   return comRetry(
     async () => {
       const conta = new AdAccount(contaAnuncioId);
-      const params = {
-        level: nivel,
-        time_range: { since: timeRange.since, until: timeRange.until },
-        time_increment: timeIncrement,
-        limit: 500,
-      };
+      const params = { level: nivel, time_increment: timeIncrement, limit: 500 };
+      if (timeRange?.since) params.time_range = { since: timeRange.since, until: timeRange.until };
+      else params.date_preset = datePreset;
       const cursor = await conta.getInsights([campoId, ...campos], params);
       verificarRateLimit(cursor);
 
@@ -311,20 +308,6 @@ export async function listarAtividadesConta(contaAnuncioId, { since, until, toke
     },
     { tentativas: 4, esperaBaseMs: 1000, fatorBackoff: 2 }
   );
-}
-
-/**
- * @param {'campaign'|'adset'|'ad'} tipo
- * @param {string} metaId
- * @param {string} [token]
- */
-export async function obterInsightsHorarios(tipo, metaId, token) {
-  return obterInsights(tipo, metaId, {
-    datePreset: 'today',
-    timeIncrement: 1,
-    breakdowns: ['hourly_stats_aggregated_by_advertiser_time_zone'],
-    token,
-  });
 }
 
 /**

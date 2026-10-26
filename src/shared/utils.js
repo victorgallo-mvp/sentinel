@@ -18,6 +18,12 @@ export function inicioDiaBRT(diasAtras = 0) {
   return new Date(brt.getTime() + BRT_MS);   // de volta para UTC
 }
 
+/** Data BRT ('YYYY-MM-DD') de N dias atrás. */
+export function dataBRT(diasAtras = 0) {
+  // inicioDiaBRT devolve 03:00Z do dia; a data UTC desse instante é a data BRT.
+  return inicioDiaBRT(diasAtras).toISOString().slice(0, 10);
+}
+
 /**
  * Retorna o início do mês corrente (dia 1) no fuso BRT, como Date UTC.
  */
