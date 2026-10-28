@@ -18,6 +18,7 @@ import { buscarAnalisesRecentes } from '../../core/analise/triagem-performance.s
 import { listarAlteracoes, ultimaAcaoHumanaPorConta, listarAutores } from '../../core/alteracoes/consulta-alteracoes.servico.js';
 import { vincularAutorAoGestor } from '../../core/alteracoes/coletor-alteracoes.servico.js';
 import { CATEGORIAS as CATEGORIAS_ALTERACAO } from '../../core/alteracoes/dicionario-meta.js';
+import { listarSinais, ultimoDiaSinais, serieDesperdicio, ROTULO_TIPO, ROTULO_CATEGORIA } from '../../core/sinais/consulta-sinais.servico.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -989,6 +990,40 @@ rotaDashboard.get('/alteracoes', autenticarDashboard, async (req, res, next) => 
       gestores: gestores.map((g) => ({ id: String(g._id), nome: g.nome, metaAtores: g.metaAtores ?? [] })),
       autores,
       eventos,
+    });
+  } catch (erro) {
+    next(erro);
+  }
+});
+
+/**
+ * GET /dashboard/sinais?dia=YYYY-MM-DD
+ * Sinais da última rodada do motor (ou do dia pedido) para as contas
+ * visíveis, com a série de desperdício dos últimos 14 dias por conta.
+ */
+rotaDashboard.get('/sinais', autenticarDashboard, async (req, res, next) => {
+  corsHeaders(res);
+  try {
+    const contas = await contasVisiveis(req.usuario);
+    const identificadores = contas.map((c) => c.identificador);
+    const valida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+    const dia = valida(req.query.dia) ? req.query.dia : await ultimoDiaSinais(identificadores);
+    const [sinais, serie] = await Promise.all([
+      listarSinais(identificadores, dia),
+      serieDesperdicio(identificadores, 14),
+    ]);
+    res.json({
+      dia,
+      rotulos: { tipos: ROTULO_TIPO, categorias: ROTULO_CATEGORIA },
+      contas: contas.map((c) => ({
+        id: String(c._id),
+        identificador: c.identificador,
+        nome: c.nome,
+        gestorId: c.perfil?.gestorId ? String(c.perfil.gestorId) : null,
+        gerenteResponsavel: c.perfil?.gerenteResponsavel ?? '',
+      })),
+      sinais,
+      serie,
     });
   } catch (erro) {
     next(erro);
