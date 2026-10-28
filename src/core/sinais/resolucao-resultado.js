@@ -26,6 +26,22 @@ export const ORDEM_VALOR = [
   'landing_page_views', 'video_thruplay_watched_actions', 'inline_link_clicks',
 ];
 
+export const ROTULO_SINGULAR = {
+  conversions: 'compra',
+  leads: 'lead',
+  messaging_conversations_started: 'conversa',
+  landing_page_views: 'visualização da página',
+  video_thruplay_watched_actions: 'ThruPlay',
+  inline_link_clicks: 'clique no link',
+  clicks: 'clique',
+};
+
+/** Gênero gramatical do singular, para "nenhuma compra" / "nenhum lead". */
+export const GENERO_RESULTADO = {
+  conversions: 'f', leads: 'm', messaging_conversations_started: 'f', landing_page_views: 'f',
+  video_thruplay_watched_actions: 'm', inline_link_clicks: 'm', clicks: 'm',
+};
+
 export const ROTULO_RESULTADO = {
   conversions: 'compras',
   leads: 'leads',
@@ -84,17 +100,24 @@ export function mapaObjetivoOtimizacao(entidades) {
  * @param {string|null} opcoes.optimizationGoal - objetivo de otimização herdado/próprio
  * @param {Object} opcoes.perfil - perfil da conta (objetivos declarados)
  * @param {Set<string>} opcoes.metricasComDado - métricas com valor > 0 nos últimos 30 dias, nesta entidade
- * @returns {{ metrica: string, origem: 'meta'|'onboarding'|'dados'|'proxy', rotulo: string }}
+ * @returns {{ metrica: string, origem: 'meta'|'onboarding'|'dados'|'proxy', rotulo: string, rotuloSingular: string, genero: 'f'|'m' }}
  */
 export function resolverResultado({ optimizationGoal, perfil, metricasComDado = new Set() }) {
+  const monta = (metrica, origem) => ({
+    metrica, origem,
+    rotulo: ROTULO_RESULTADO[metrica] ?? metrica,
+    rotuloSingular: ROTULO_SINGULAR[metrica] ?? ROTULO_RESULTADO[metrica] ?? metrica,
+    genero: GENERO_RESULTADO[metrica] ?? 'm',
+  });
+
   const porMeta = metricaResultadoPorGoal(optimizationGoal);
-  if (porMeta) return { metrica: porMeta, origem: 'meta', rotulo: ROTULO_RESULTADO[porMeta] ?? porMeta };
+  if (porMeta) return monta(porMeta, 'meta');
 
   const declarado = resolverObjetivosConta(perfil)[0]?.metricaResultado;
-  if (declarado) return { metrica: declarado, origem: 'onboarding', rotulo: ROTULO_RESULTADO[declarado] ?? declarado };
+  if (declarado) return monta(declarado, 'onboarding');
 
   const observado = ORDEM_VALOR.find((m) => metricasComDado.has(m));
-  if (observado) return { metrica: observado, origem: 'dados', rotulo: ROTULO_RESULTADO[observado] ?? observado };
+  if (observado) return monta(observado, 'dados');
 
-  return { metrica: 'inline_link_clicks', origem: 'proxy', rotulo: ROTULO_RESULTADO.inline_link_clicks };
+  return monta('inline_link_clicks', 'proxy');
 }

@@ -73,6 +73,33 @@ export async function carregarFrequencia7d(entidadeIds) {
 }
 
 /**
+ * Histórico da frequência de 7 dias: um ponto por dia (último snapshot da
+ * janela 168h de cada dia BRT), nos últimos `dias`. É o que permite dizer se a
+ * frequência está subindo e em quanto tempo cruza o limite de fadiga.
+ * @returns {Promise<Map<string, Array<{dia: string, frequency: number}>>>}
+ */
+export async function carregarFrequenciaHistorico(entidadeIds, dias = 8) {
+  const mapa = new Map();
+  if (!entidadeIds.length) return mapa;
+  const r = await query(
+    `SELECT DISTINCT ON (entidade_id, dia) entidade_id,
+            to_char((coletada_em AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS dia,
+            valor::float AS frequency
+     FROM metricas_serie_temporal
+     WHERE entidade_id = ANY($1) AND janela_horas = $2 AND metrica = 'frequency'
+       AND coletada_em >= now() - ($3 || ' days')::interval
+     ORDER BY entidade_id, dia, coletada_em DESC`,
+    [entidadeIds, JANELA_7D_HORAS, String(dias)]
+  );
+  for (const row of r.rows) {
+    if (!mapa.has(row.entidade_id)) mapa.set(row.entidade_id, []);
+    mapa.get(row.entidade_id).push({ dia: row.dia, frequency: row.frequency });
+  }
+  for (const lista of mapa.values()) lista.sort((a, b) => (a.dia < b.dia ? -1 : 1));
+  return mapa;
+}
+
+/**
  * Alterações humanas recentes por objeto da Meta (id do conjunto/anúncio),
  * só as categorias que reiniciam o aprendizado da entrega.
  * @returns {Promise<Map<string, Array<{categoria: string, ocorridaEm: Date}>>>}
