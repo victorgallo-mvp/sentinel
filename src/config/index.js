@@ -29,6 +29,10 @@ const esquemaEnv = z.object({
   // sobre dados crus. Trocar para Sonnet é só mudar esta env.
   IA_TRIAGEM_PERFORMANCE_ATIVA: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   MODELO_TRIAGEM_PERFORMANCE: z.string().default('claude-haiku-4-5'),
+  // Leitura diária dos sinais (1 chamada por conta com sinal, após o motor
+  // das 04:00). O modelo só ordena e explica o que o motor já calculou.
+  IA_LEITURA_SINAIS_ATIVA: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  MODELO_LEITURA_SINAIS: z.string().default('claude-haiku-4-5'),
 
   // Meta
   META_APP_ID: z.string().optional().default(''),
@@ -106,6 +110,8 @@ export const config = {
   modeloResumoDiario: env.MODELO_RESUMO_DIARIO,
   iaTriagemPerformanceAtiva: env.IA_TRIAGEM_PERFORMANCE_ATIVA,
   modeloTriagemPerformance: env.MODELO_TRIAGEM_PERFORMANCE,
+  iaLeituraSinaisAtiva: env.IA_LEITURA_SINAIS_ATIVA,
+  modeloLeituraSinais: env.MODELO_LEITURA_SINAIS,
 
   meta: {
     appId: env.META_APP_ID,

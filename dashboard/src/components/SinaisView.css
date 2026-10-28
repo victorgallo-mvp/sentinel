@@ -19,6 +19,46 @@
 .sn-kpi-rotulo { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
 .sn-kpi-sub { font-size: var(--fs-xs); color: var(--text-subtle); }
 
+/* ── Prioridades do dia ── */
+.sn-dia { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.sn-dia-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sn-dia-titulo { font-size: var(--fs-base); font-weight: 700; color: var(--text); }
+.sn-dia-sub { font-size: var(--fs-xs); color: var(--text-subtle); }
+.sn-dia-lista { list-style: none; display: flex; flex-direction: column; gap: 4px; counter-reset: dia; }
+.sn-dia-item { display: grid; grid-template-columns: 180px 1fr auto auto; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+.sn-dia-item:last-child { border-bottom: none; }
+.sn-dia-item::before { counter-increment: dia; content: counter(dia) '.'; position: absolute; margin-left: -18px; color: var(--text-subtle); font-size: var(--fs-xs); font-weight: 700; }
+.sn-dia-lista { padding-left: 18px; }
+.sn-dia-conta { background: none; border: none; padding: 0; text-align: left; font-size: var(--fs-sm); font-weight: 700; color: var(--accent); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sn-dia-conta:hover { text-decoration: underline; }
+.sn-dia-tit { color: var(--text); }
+
+.sn-imp { font-size: var(--fs-xs); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sn-imp--vazando { color: var(--crit); }
+.sn-imp--recuperavel { color: var(--accent); }
+.sn-imp--projetado { color: #7c3aed; }
+.sn-tend { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.sn-tend--melhorando { color: var(--ok); background: var(--ok-soft); border: 1px solid var(--ok-border); }
+.sn-tend--estavel { color: var(--text-muted); background: var(--surface-2); border: 1px solid var(--border); }
+.sn-tend--piorando { color: var(--crit); background: var(--crit-soft); border: 1px solid var(--crit-border); }
+
+/* ── Leitura do dia (por conta) ── */
+.sn-leitura { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: var(--radius); }
+.sn-leitura-head { display: flex; align-items: center; gap: 10px; }
+.sn-leitura-k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.sn-leitura-resumo { font-size: var(--fs-sm); color: var(--text); line-height: 1.5; }
+.sn-prios { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.sn-prio { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.sn-prio-head { display: flex; align-items: baseline; gap: 8px; }
+.sn-prio-n { flex: none; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
+.sn-prio-tit { flex: 1; font-size: var(--fs-sm); font-weight: 700; color: var(--text); line-height: 1.3; }
+.sn-prio-onde { font-size: var(--fs-xs); color: var(--text-muted); padding-left: 28px; }
+.sn-prio-porque { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; padding-left: 28px; }
+.sn-prio-acao { font-size: var(--fs-sm); color: var(--text); line-height: 1.45; padding-left: 28px; }
+.sn-prio-acao .sn-fazer-k { margin-right: 6px; }
+.sn-leitura-obs { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; }
+.sn-leitura-obs strong { color: var(--text); }
+
 /* ── Filtros ── */
 .sn-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
 .sn-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -114,4 +154,6 @@
 @media (max-width: 1000px) {
   .sn-kpis { grid-template-columns: repeat(2, 1fr); }
   .sn-cards { grid-template-columns: 1fr; }
+  .sn-dia-item { grid-template-columns: 1fr; gap: 2px; }
+  .sn-prios { grid-template-columns: 1fr; }
 }

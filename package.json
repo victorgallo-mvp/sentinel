@@ -18,6 +18,7 @@
     "fechar-dias": "node scripts/fechar-dias.js",
     "limpar-dados": "node scripts/limpar-dados.js",
     "sinais": "node scripts/sinais.js",
+    "leitura": "node scripts/leitura.js",
     "listar-alteracoes": "node scripts/listar-alteracoes.js",
     "coletar-alteracoes": "node scripts/coletar-alteracoes.js",
     "simular-anomalia": "node scripts/simular-anomalia.js",

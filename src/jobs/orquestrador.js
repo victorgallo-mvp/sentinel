@@ -19,6 +19,7 @@
 import cron from 'node-cron';
 import { executarColetaDiaria } from './coleta-diaria.job.js';
 import { executarSinaisDiarios } from './sinais-diarios.job.js';
+import { executarLeituraDiaria } from './leitura-diaria.job.js';
 import { executarColetaAlteracoes } from './coleta-alteracoes.job.js';
 import { executarDeteccaoAnomalias } from './deteccao-anomalias.job.js';
 import { executarSincronizacaoEntidades } from './sincronizar-entidades.job.js';
@@ -46,6 +47,7 @@ const TAREFAS_CRON = [
   { nome: 'coleta-diaria', expressao: '0 3 * * *', executar: executarColetaDiaria, timezone: 'America/Sao_Paulo' },
   // Motor de sinais: determinístico, lê a coleta de hoje e grava os achados do dia.
   { nome: 'sinais-diarios', expressao: '0 4 * * *', executar: executarSinaisDiarios, timezone: 'America/Sao_Paulo' },
+  { nome: 'leitura-diaria', expressao: '30 4 * * *', executar: executarLeituraDiaria, timezone: 'America/Sao_Paulo' },
   // Registro de alterações: quem fez o quê nas contas. Relê 3 dias por folga.
   { nome: 'coleta-alteracoes', expressao: '0 5 * * *', executar: executarColetaAlteracoes, timezone: 'America/Sao_Paulo' },
   { nome: 'alerta-orcamento', expressao: '10 * * * *', executar: executarAlertaOrcamento },

@@ -19,6 +19,7 @@ import { listarAlteracoes, ultimaAcaoHumanaPorConta, listarAutores } from '../..
 import { vincularAutorAoGestor } from '../../core/alteracoes/coletor-alteracoes.servico.js';
 import { CATEGORIAS as CATEGORIAS_ALTERACAO } from '../../core/alteracoes/dicionario-meta.js';
 import { listarSinais, ultimoDiaSinais, serieDesperdicio, ROTULO_TIPO, ROTULO_CATEGORIA } from '../../core/sinais/consulta-sinais.servico.js';
+import { listarLeituras } from '../../core/sinais/leitura-diaria.servico.js';
 import { query } from '../../infra/postgres.js';
 import { logger } from '../../infra/logger.js';
 import { config } from '../../config/index.js';
@@ -1008,9 +1009,10 @@ rotaDashboard.get('/sinais', autenticarDashboard, async (req, res, next) => {
     const identificadores = contas.map((c) => c.identificador);
     const valida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
     const dia = valida(req.query.dia) ? req.query.dia : await ultimoDiaSinais(identificadores);
-    const [sinais, serie] = await Promise.all([
+    const [sinais, serie, leituras] = await Promise.all([
       listarSinais(identificadores, dia),
       serieDesperdicio(identificadores, 14),
+      listarLeituras(identificadores, dia),
     ]);
     res.json({
       dia,
@@ -1024,6 +1026,7 @@ rotaDashboard.get('/sinais', autenticarDashboard, async (req, res, next) => {
       })),
       sinais,
       serie,
+      leituras: Object.fromEntries(leituras),
     });
   } catch (erro) {
     next(erro);

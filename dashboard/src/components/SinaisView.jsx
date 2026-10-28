@@ -19,6 +19,14 @@ const ROTULO_METRICA = {
   landing_page_views: 'visualizações da página', video_thruplay_watched_actions: 'ThruPlays', inline_link_clicks: 'cliques no link',
 };
 
+const ROTULO_TENDENCIA = { melhorando: 'melhorando', estavel: 'estável', piorando: 'piorando', sem_base: 'sem base' };
+const ROTULO_NATUREZA = { vazando: 'vazando', recuperavel: 'recuperáveis', projetado: 'projetados' };
+function impactoTexto(p) {
+  if (p.impactoDia == null) return '';
+  const pre = p.natureza === 'recuperavel' ? '+' : p.natureza === 'projetado' ? '~' : '';
+  return `${pre}${brl0(p.impactoDia)}/dia ${ROTULO_NATUREZA[p.natureza] ?? ''}`.trim();
+}
+
 const brl = (v) => `R$ ${Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const brl0 = (v) => `R$ ${Math.round(Number(v ?? 0)).toLocaleString('pt-BR')}`;
 const diaLongo = (iso) => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }) : '');
@@ -51,7 +59,7 @@ export default function SinaisView({ contaFiltroId = null, customNames = {} }) {
   if (erro) return <div className="sn-estado sn-estado--erro">{erro}</div>;
   if (!modelo) return <div className="sn-estado">Carregando sinais…</div>;
 
-  const { dia, kpis, porConta, contas, rotulos } = modelo;
+  const { dia, kpis, porConta, contas, rotulos, prioridadesDia, comLeitura } = modelo;
 
   const blocos = porConta
     .filter((b) => contaSel === 'todas' || b.identificador === contaSel)
@@ -85,6 +93,25 @@ export default function SinaisView({ contaFiltroId = null, customNames = {} }) {
             <Kpi valor={kpis.altos} rotulo="sinais de severidade alta" sub={`${kpis.total} sinais no total`} nivel={kpis.altos > 0 ? 'crit' : 'ok'} />
             <Kpi valor={`${kpis.contasComSinal}/${contas.length}`} rotulo="contas com algum sinal" sub={`${kpis.previsoes} ${kpis.previsoes === 1 ? 'previsão' : 'previsões'} para agir antes`} />
           </section>
+
+          {prioridadesDia.length > 0 && contaSel === 'todas' && (
+            <section className="sn-dia">
+              <div className="sn-dia-head">
+                <h2 className="sn-dia-titulo">Prioridades do dia</h2>
+                <span className="sn-dia-sub">A primeira prioridade de cada conta, pela leitura da IA sobre os sinais. {comLeitura} {comLeitura === 1 ? 'conta lida' : 'contas lidas'}.</span>
+              </div>
+              <ol className="sn-dia-lista">
+                {prioridadesDia.map((p) => (
+                  <li key={p.identificador} className="sn-dia-item">
+                    <button className="sn-dia-conta" onClick={() => setContaSel(p.identificador)}>{p.contaNome}</button>
+                    <span className="sn-dia-tit">{p.titulo}</span>
+                    {p.impactoDia != null && <span className={`sn-imp sn-imp--${p.natureza}`}>{impactoTexto(p)}</span>}
+                    {p.tendencia && p.tendencia !== 'sem_base' && <span className={`sn-tend sn-tend--${p.tendencia}`}>{ROTULO_TENDENCIA[p.tendencia]}</span>}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
           <div className="sn-barra">
             <div className="sn-chips">
@@ -139,6 +166,7 @@ export function montarModelo(dados, customNames) {
     grupos.get(s.contaId).push(s);
   }
 
+  const leituras = dados.leituras ?? {};
   const porConta = [...grupos.entries()].map(([ident, sinais]) => {
     const conta = porIdent.get(ident);
     const desperdicio = sinais.filter((s) => s.categoria === 'desperdicio').reduce((t, s) => t + (s.desperdicioDia ?? 0), 0);
@@ -151,6 +179,7 @@ export function montarModelo(dados, customNames) {
       desperdicioOntem: serieOntem.get(ident) ?? null,
       recuperavel,
       altos: sinais.filter((s) => s.severidade === 'alta').length,
+      leitura: leituras[ident] ?? null,
       sinais: [...sinais].sort((a, b) => (ORDEM_SEV[a.severidade] - ORDEM_SEV[b.severidade]) || ((b.desperdicioDia ?? b.economiaDia ?? 0) - (a.desperdicioDia ?? a.economiaDia ?? 0))),
     };
   }).sort((a, b) => (b.desperdicio - a.desperdicio) || (b.altos - a.altos) || (b.sinais.length - a.sinais.length));
@@ -169,7 +198,15 @@ export function montarModelo(dados, customNames) {
     porCategoria,
   };
 
-  return { dia, kpis, porConta, contas, rotulos: dados.rotulos ?? { tipos: {}, categorias: {} } };
+  // Prioridades do dia: a primeira de cada conta, da de maior impacto para a
+  // menor. Deterministico: nenhuma chamada a mais, só ordenação.
+  const ORDEM_NAT = { vazando: 0, recuperavel: 1, projetado: 2 };
+  const prioridadesDia = porConta
+    .filter((b) => b.leitura?.prioridades?.length)
+    .map((b) => ({ ...b.leitura.prioridades[0], contaNome: b.nome, identificador: b.identificador, tendencia: b.leitura.tendencia }))
+    .sort((a, b) => ((ORDEM_NAT[a.natureza] ?? 3) - (ORDEM_NAT[b.natureza] ?? 3)) || ((b.impactoDia ?? 0) - (a.impactoDia ?? 0)));
+
+  return { dia, kpis, porConta, contas, prioridadesDia, comLeitura: porConta.filter((b) => b.leitura).length, rotulos: dados.rotulos ?? { tipos: {}, categorias: {} } };
 }
 
 function deltaTexto(hoje, ontem) {
@@ -205,10 +242,40 @@ function BlocoConta({ bloco, rotulos }) {
           <span className="sn-tot">{bloco.sinais.length} {bloco.sinais.length === 1 ? 'sinal' : 'sinais'}</span>
         </div>
       </header>
+      {bloco.leitura && <Leitura l={bloco.leitura} />}
       <div className="sn-cards">
         {bloco.sinais.map((s) => <CardSinal key={s.id} s={s} rotulos={rotulos} />)}
       </div>
     </section>
+  );
+}
+
+function Leitura({ l }) {
+  return (
+    <div className="sn-leitura">
+      <div className="sn-leitura-head">
+        <span className="sn-leitura-k">Leitura do dia</span>
+        {l.tendencia && l.tendencia !== 'sem_base' && <span className={`sn-tend sn-tend--${l.tendencia}`}>{ROTULO_TENDENCIA[l.tendencia]}</span>}
+      </div>
+      <p className="sn-leitura-resumo">{l.resumo}</p>
+      {l.prioridades?.length > 0 && (
+        <ol className="sn-prios">
+          {l.prioridades.map((p) => (
+            <li key={p.ordem} className="sn-prio">
+              <div className="sn-prio-head">
+                <span className="sn-prio-n">{p.ordem}</span>
+                <span className="sn-prio-tit">{p.titulo}</span>
+                {p.impactoDia != null && <span className={`sn-imp sn-imp--${p.natureza}`}>{impactoTexto(p)}</span>}
+              </div>
+              {p.onde && <div className="sn-prio-onde">{p.onde}</div>}
+              <p className="sn-prio-porque">{p.porque}</p>
+              <p className="sn-prio-acao"><span className="sn-fazer-k">Ação</span> {p.acao}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {l.observacao && <p className="sn-leitura-obs"><strong>Obs.</strong> {l.observacao}</p>}
+    </div>
   );
 }
 

@@ -74,7 +74,7 @@ async function tratarRequisicaoDemo(url, init) {
   }
 
   if (path === '/dashboard/sinais' && method === 'GET') {
-    return jsonResponse({ dia: null, rotulos: { tipos: {}, categorias: {} }, contas: [], sinais: [], serie: [] });
+    return jsonResponse({ dia: null, rotulos: { tipos: {}, categorias: {} }, contas: [], sinais: [], serie: [], leituras: {} });
   }
 
   if (path === '/dashboard/alteracoes' && method === 'GET') {
