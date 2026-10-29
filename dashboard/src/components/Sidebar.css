@@ -41,11 +41,22 @@
   align-items: center;
 }
 
+.sb-brand-texto { display: flex; flex-direction: column; line-height: 1.05; overflow: hidden; }
 .sb-brand-name {
-  font-size: var(--fs-md);
-  font-weight: 700;
+  font-family: var(--font-titulo);
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .03em;
   color: var(--sb-text);
-  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+.sb-brand-sub {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sb-accent);
   white-space: nowrap;
 }
 

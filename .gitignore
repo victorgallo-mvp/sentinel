@@ -5,3 +5,6 @@ logs/
 .DS_Store
 coverage/
 dist/
+
+# build local de verificação
+dashboard/dist-local/

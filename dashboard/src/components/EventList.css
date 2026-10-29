@@ -1,26 +1,26 @@
 .event-list {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 
 .event-list-titulo {
   font-size: 13px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .event-list-count {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--surface-2);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
@@ -29,4 +29,4 @@
 
 .event-list-body { display: flex; flex-direction: column; }
 
-.event-list-vazia { color: #9ca3af; font-size: 13px; font-style: italic; padding: 6px 0; }
+.event-list-vazia { color: var(--text-subtle); font-size: 13px; font-style: italic; padding: 6px 0; }

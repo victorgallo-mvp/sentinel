@@ -20,8 +20,8 @@
 }
 
 /* Status: borda esquerda colorida */
-.ac-card--critico { border-left-color: var(--crit); background: var(--crit-soft); }
-.ac-card--atencao { border-left-color: var(--warn); background: var(--warn-soft); }
+.ac-card--critico { border-left-color: var(--crit); }
+.ac-card--atencao { border-left-color: var(--warn); }
 .ac-card--pausado { border-left-color: var(--border-strong); }
 .ac-card--normal  { border-left-color: var(--border); }
 

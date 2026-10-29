@@ -1,9 +1,9 @@
 .entity-section {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 22px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 
 .entity-header {
@@ -14,12 +14,12 @@
   flex-wrap: wrap;
 }
 
-.entity-nome { font-weight: 700; font-size: 15px; color: #111827; }
+.entity-nome { font-weight: 700; font-size: 15px; color: var(--text); }
 
 .entity-tipo {
   font-size: 11px;
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--surface-2);
+  color: var(--text-muted);
   padding: 2px 8px;
   border-radius: 8px;
   font-weight: 600;
@@ -27,9 +27,9 @@
   letter-spacing: .05em;
 }
 
-.entity-sinc { font-size: 11px; color: #9ca3af; margin-left: auto; }
+.entity-sinc { font-size: 11px; color: var(--text-subtle); margin-left: auto; }
 
-.entity-vazia { color: #9ca3af; font-size: 13px; font-style: italic; }
+.entity-vazia { color: var(--text-subtle); font-size: 13px; font-style: italic; }
 
 .metricas-grid {
   display: grid;

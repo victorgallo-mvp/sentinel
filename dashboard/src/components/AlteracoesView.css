@@ -98,8 +98,8 @@
 .alt-acao--estrutura   { border-left-color: var(--info); }
 .alt-acao--status      { border-left-color: var(--warn); }
 .alt-acao--orcamento   { border-left-color: var(--accent); }
-.alt-acao--segmentacao { border-left-color: #7c3aed; }
-.alt-acao--criativo    { border-left-color: #db2777; }
+.alt-acao--segmentacao { border-left-color: var(--text-muted); }
+.alt-acao--criativo    { border-left-color: var(--text-subtle); }
 .alt-acao--faturamento { border-left-color: var(--text-subtle); }
 .alt-acao--sistema     { border-left-color: var(--border); }
 .alt-rodape { font-size: var(--fs-xs); color: var(--text-subtle); }

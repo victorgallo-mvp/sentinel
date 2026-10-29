@@ -1,52 +1,64 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Sidebar (dark) ── */
-  --sb-bg:          #0f1623;
-  --sb-bg-section:  #161e2e;
-  --sb-border:      #1e2d42;
-  --sb-text:        #e2e8f0;
-  --sb-muted:       #7c8fa6;
-  --sb-subtle:      #3d5166;
-  --sb-hover:       #1a2740;
-  --sb-active:      #1b3a2a;
-  --sb-accent:      #22c55e;
-  --sb-crit:        #f87171;
-  --sb-warn:        #fbbf24;
+  /* ══════════════════════════════════════════════════════════════
+     Identidade Feeling (manual 2026): três cores com função.
+     Verde #04D81A = destaque e atenção; preto e branco = base.
+     Vermelho e âmbar existem só para estado crítico/alerta, que a
+     marca não cobre e o painel precisa. Tons de cinza são derivados
+     do preto, nunca uma quarta cor.
+     ══════════════════════════════════════════════════════════════ */
 
-  /* ── Conteúdo (light) ── */
-  --bg:             #f4f7f9;
-  --surface:        #ffffff;
-  --surface-2:      #f0f4f8;
-  --surface-hover:  #e8eef4;
-  --border:         #e1e8f0;
-  --border-strong:  #c8d6e4;
+  /* ── Tipografia ── */
+  --font-titulo: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
+  --font-texto:  'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  --text:           #0f1e2d;
-  --text-muted:     #4a6070;
-  --text-subtle:    #8fa4b5;
+  /* ── Sidebar (preto) ── */
+  --sb-bg:          #000000;
+  --sb-bg-section:  #0a0c0b;
+  --sb-border:      #1c201e;
+  --sb-text:        #ffffff;
+  --sb-muted:       #8d9590;
+  --sb-subtle:      #4c544f;
+  --sb-hover:       #111412;
+  --sb-active:      #0c2411;
+  --sb-accent:      #04d81a;
+  --sb-crit:        #ff5c5c;
+  --sb-warn:        #f5b544;
 
-  /* ── Acento ── */
-  --accent:         #16a34a;
-  --accent-hover:   #15803d;
-  --accent-soft:    #f0fdf4;
-  --on-accent:      #ffffff;
+  /* ── Conteúdo (grafite) ── */
+  --bg:             #060807;
+  --surface:        #0e1210;
+  --surface-2:      #151a17;
+  --surface-hover:  #1b211d;
+  --border:         #222825;
+  --border-strong:  #343c37;
+
+  --text:           #ffffff;
+  --text-muted:     #b3bbb6;
+  --text-subtle:    #76807a;
+
+  /* ── Acento: Verde Feeling ── */
+  --accent:         #04d81a;
+  --accent-hover:   #03bf17;
+  --accent-soft:    rgba(4, 216, 26, .10);
+  --on-accent:      #000000;
 
   /* ── Status ── */
-  --ok:             #16a34a;
-  --ok-soft:        #f0fdf4;
-  --ok-border:      #bbf7d0;
+  --ok:             #04d81a;
+  --ok-soft:        rgba(4, 216, 26, .10);
+  --ok-border:      rgba(4, 216, 26, .35);
 
-  --warn:           #d97706;
-  --warn-soft:      #fffbeb;
-  --warn-border:    #fde68a;
+  --warn:           #f5b544;
+  --warn-soft:      rgba(245, 181, 68, .10);
+  --warn-border:    rgba(245, 181, 68, .35);
 
-  --crit:           #dc2626;
-  --crit-soft:      #fef2f2;
-  --crit-border:    #fecaca;
+  --crit:           #ff5c5c;
+  --crit-soft:      rgba(255, 92, 92, .10);
+  --crit-border:    rgba(255, 92, 92, .35);
 
-  --info:           #2563eb;
-  --info-soft:      #eff6ff;
+  --info:           #9fb3c2;
+  --info-soft:      rgba(159, 179, 194, .10);
 
   /* ── Espaçamento ── */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
@@ -56,11 +68,11 @@
   --radius-sm: 6px;
   --radius:    10px;
   --radius-lg: 14px;
-  --shadow-sm: 0 1px 3px rgba(15,30,45,.06), 0 1px 2px rgba(15,30,45,.04);
-  --shadow-md: 0 4px 16px rgba(15,30,45,.08), 0 2px 6px rgba(15,30,45,.05);
-  --shadow-lg: 0 20px 48px rgba(15,30,45,.14);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+  --shadow-md: 0 6px 20px rgba(0,0,0,.45);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.6);
 
-  /* ── Tipografia ── */
+  /* ── Tipografia (tamanhos) ── */
   --fs-xs:   11px;
   --fs-sm:   12px;
   --fs-base: 14px;
@@ -75,7 +87,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-family: var(--font-texto);
+  font-variant-numeric: tabular-nums;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -85,6 +98,22 @@ body {
 }
 
 a { color: inherit; text-decoration: none; }
+
+/* Títulos e números grandes na fonte da marca (Big Shoulders, caixa alta).
+   Texto corrido, tabelas e controles ficam na fonte de apoio. */
+h1, h2, h3,
+.alt-titulo, .sn-titulo, .am-titulo, .ap-panel-titulo, .adp-nome, .dv-col-titulo, .drp-mes-titulo,
+.alt-kpi-valor, .sn-kpi-valor, .ac-gasto-valor, .dc-gasto-valor, .login-marca {
+  font-family: var(--font-titulo);
+  text-transform: uppercase;
+  letter-spacing: .01em;
+  font-weight: 700;
+}
+.alt-kpi-valor, .sn-kpi-valor, .ac-gasto-valor, .dc-gasto-valor { font-weight: 900; letter-spacing: 0; }
+
+button, input, select, textarea { font-family: inherit; }
+input, select, textarea { color-scheme: dark; }
+::selection { background: var(--accent); color: var(--on-accent); }
 
 /* Scrollbar discreta */
 ::-webkit-scrollbar { width: 5px; height: 5px; }

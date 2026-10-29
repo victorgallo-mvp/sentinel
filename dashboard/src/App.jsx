@@ -161,7 +161,7 @@ export default function App() {
       {emDemo && (
         <div style={{
           height: BANNER_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12, fontWeight: 600, letterSpacing: '.02em', color: '#fff', background: '#7c3aed',
+          fontSize: 12, fontWeight: 600, letterSpacing: '.02em', color: 'var(--on-accent)', background: 'var(--accent)',
         }}>
           Ambiente demonstrativo — dados fictícios, apenas para fins de apresentação
         </div>

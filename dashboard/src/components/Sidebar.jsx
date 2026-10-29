@@ -32,11 +32,13 @@ function labelSaldo(s) {
   return null;
 }
 
-function IconShield() {
+/* Seta de crescimento: referência ao símbolo da Feeling, sem reconstruir o logo. */
+function IconMarca() {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 16l6-6 4 4 6-7" />
+      <path d="M15 7h5v5" />
     </svg>
   );
 }
@@ -73,8 +75,11 @@ export default function Sidebar({ contas = [], contaSelecionadaId, onSelectConta
       <div className="sb-brand">
         {!collapsed && (
           <div className="sb-brand-inner">
-            <span className="sb-brand-icon"><IconShield /></span>
-            <span className="sb-brand-name">Sentinela</span>
+            <span className="sb-brand-icon"><IconMarca /></span>
+            <span className="sb-brand-texto">
+              <span className="sb-brand-name">Sentinela</span>
+              <span className="sb-brand-sub">Feeling</span>
+            </span>
           </div>
         )}
         <button className="sb-collapse-btn" onClick={() => setCollapsed((v) => !v)} title={collapsed ? 'Expandir' : 'Recolher'}>
